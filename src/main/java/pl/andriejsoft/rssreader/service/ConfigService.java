@@ -2,7 +2,7 @@ package pl.andriejsoft.rssreader.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import pl.andriejsoft.rssreader.document.Config;
+import pl.andriejsoft.rssreader.entity.ConfigEntity;
 import pl.andriejsoft.rssreader.repository.ConfigRepository;
 
 import java.util.List;
@@ -14,19 +14,19 @@ public class ConfigService {
     @Autowired
     private ConfigRepository configRepository;
 
-    public List<Config> findAll() {
-        return configRepository.findAll();
+    public List<ConfigEntity> findAll() {
+        return (List<ConfigEntity>)configRepository.findAll();
     }
 
-    public Optional<Config> findById(String uuid) {
-        return configRepository.findByUuid(uuid);
+    public Optional<ConfigEntity> findById(Long id) {
+        return configRepository.findById(id);
     }
 
-    public Config save(Config config) {
+    public ConfigEntity save(ConfigEntity config) {
         return configRepository.save(config);
     }
 
-    public Config deleteByUuid(String uuid) {
-        return configRepository.deleteByUuid(uuid);
+    public void deleteById(Long id) {
+        configRepository.deleteById(id);
     }
 }

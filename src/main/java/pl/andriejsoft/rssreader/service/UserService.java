@@ -2,8 +2,7 @@ package pl.andriejsoft.rssreader.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import pl.andriejsoft.rssreader.document.Config;
-import pl.andriejsoft.rssreader.document.User;
+import pl.andriejsoft.rssreader.entity.UserEntity;
 import pl.andriejsoft.rssreader.repository.UserRepository;
 
 import java.util.List;
@@ -15,23 +14,19 @@ public class UserService {
     @Autowired
     private UserRepository userRepository;
 
-    public List<User> findAll() {
-        return userRepository.findAll();
+    public List<UserEntity> findAll() {
+        return (List<UserEntity>) userRepository.findAll();
     }
 
-    public Optional<User> findById(String uuid) {
-        return userRepository.findByUuid(uuid);
+    public Optional<UserEntity> findById(Long id) {
+        return userRepository.findById(id);
     }
 
-    public Optional<User> findByUserName(String userName) {
-        return userRepository.findByUserName(userName);
+    public UserEntity save(UserEntity UserEntity) {
+        return userRepository.save(UserEntity);
     }
 
-    public User save(User user) {
-        return userRepository.save(user);
-    }
-
-    public User deleteByUuid(String uuid) {
-        return userRepository.deleteByUuid(uuid);
+    public void deleteById(Long id) {
+        userRepository.deleteById(id);
     }
 }

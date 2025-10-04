@@ -1,15 +1,7 @@
 package pl.andriejsoft.rssreader.repository;
 
-import org.springframework.data.mongodb.repository.MongoRepository;
-import pl.andriejsoft.rssreader.document.Config;
-import pl.andriejsoft.rssreader.document.User;
+import org.springframework.data.repository.CrudRepository;
+import pl.andriejsoft.rssreader.entity.UserEntity;
 
-import java.util.Optional;
-
-public interface UserRepository extends MongoRepository<User, String> {
-    Optional<User> findByUuid(String uuid);
-
-    Optional<User> findByUserName(String userName);
-
-    User deleteByUuid(String uuid);
+public interface UserRepository extends CrudRepository<UserEntity, Long> {
 }

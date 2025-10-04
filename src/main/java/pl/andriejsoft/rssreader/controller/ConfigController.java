@@ -2,7 +2,7 @@ package pl.andriejsoft.rssreader.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-import pl.andriejsoft.rssreader.document.Config;
+import pl.andriejsoft.rssreader.entity.ConfigEntity;
 import pl.andriejsoft.rssreader.service.ConfigService;
 
 import java.util.List;
@@ -15,20 +15,20 @@ public class ConfigController {
     private ConfigService configService;
 
     @GetMapping("/findAll")
-    public List<Config> getConfigs() {
+    public List<ConfigEntity> getConfigs() {
 
         return configService.findAll();
     }
 
     @PostMapping("/add")
-    public String saveConfig(@RequestBody Config config) {
+    public String saveConfig(@RequestBody ConfigEntity config) {
         configService.save(config);
         return "Added Successfully";
     }
 
-    @DeleteMapping("/delete/{uuid}")
-    public String deleteConfig(@PathVariable String uuid){
-        configService.deleteByUuid(uuid);
+    @DeleteMapping("/delete/{id}")
+    public String deleteConfig(@PathVariable Long id){
+        configService.deleteById(id);
         return "Deleted Successfully";
     }
 }

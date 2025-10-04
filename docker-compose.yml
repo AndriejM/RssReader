@@ -1,9 +1,0 @@
-services:
- mongodb:
-  image: mongo
-  ports:
-   - '27017:27017'
-  volumes:
-   - d:/data/rssreader:/data/db
-  environment:
-   - MONGO_INITDB_DATABASE=rssreader
