@@ -8,5 +8,6 @@
     <include file="scheme/changelog-000.xml" relativeToChangelogFile="true" />
     <include file="scheme/changelog-001.xml" relativeToChangelogFile="true" />
     <include file="scheme/changelog-002.xml" relativeToChangelogFile="true" />
+    <include file="scheme/changelog-003.xml" relativeToChangelogFile="true" />
     <include file="scheme/changelog-010.xml" relativeToChangelogFile="true" />
 </databaseChangeLog>

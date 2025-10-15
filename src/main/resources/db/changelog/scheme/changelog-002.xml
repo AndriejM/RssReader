@@ -3,14 +3,15 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
 		http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.3.xsd"
-    logicalFilePath="db/changelog/scheme/changelog-001.xml">
+    logicalFilePath="db/changelog/scheme/changelog-002.xml">
 
     <changeSet id="changeset-002-1" author="andrzej.mielnik">
-        <createTable tableName="app_user">
+        <createTable tableName="app_config">
             <column name="id" type="number(19,0)">
-                <constraints primaryKey="true" primaryKeyName="PK_User" />
+                <constraints primaryKey="true" primaryKeyName="PK_AppConfig" />
             </column>
-            <column name="user_name" type="varchar2(32)"/>
+            <column name="app_config_payload" type="TEXT" />
         </createTable>
     </changeSet>
+
 </databaseChangeLog>

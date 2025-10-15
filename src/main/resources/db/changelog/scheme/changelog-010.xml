@@ -3,14 +3,14 @@
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
 		http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.3.xsd"
-                   logicalFilePath="db/changelog/scheme/changelog-001.xml">
+                   logicalFilePath="db/changelog/scheme/changelog-010.xml">
 
     <changeSet id="changeset-010-1" author="andzrej.mielnik">
         <sql dbms="h2"
              endDelimiter=";"
              splitStatements="true"
              stripComments="true">
-            INSERT INTO app_user (id, user_name) VALUES (NEXTVAL('global_sequence'), 'DEFAULT');
+            INSERT INTO user_config (id, user_name, user_config_payload)  select NEXTVAL('global_sequence'), 'DEFAULT', '{"defaultCronExpression": "0 */15 * ? * *"}' ;
         </sql>
     </changeSet>
 
@@ -19,7 +19,7 @@
              endDelimiter=";"
              splitStatements="true"
              stripComments="true">
-            INSERT INTO config (id, user_id, config_payload)  select NEXTVAL('global_sequence'), select id from app_user where user_name = 'DEFAULT', '{"cronExpression": "0 */15 * ? * *"}' ;
+            INSERT INTO app_config (id, app_config_payload)  select NEXTVAL('global_sequence'), '{"defaultUserId": ' || (select id from user_config where user_name = 'DEFAULT') ||', "daysForSetRead": 3, "daysForCleanRssItems": 4}' ;
         </sql>
     </changeSet>
 </databaseChangeLog>

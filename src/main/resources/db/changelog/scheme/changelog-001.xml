@@ -6,12 +6,13 @@
     logicalFilePath="db/changelog/scheme/changelog-001.xml">
 
     <changeSet id="changeset-001-1" author="andrzej.mielnik">
-        <createTable tableName="config">
+        <createTable tableName="user_config">
             <column name="id" type="number(19,0)">
-                <constraints primaryKey="true" primaryKeyName="PK_Config" />
+                <constraints primaryKey="true" primaryKeyName="PK_UserConfig" />
             </column>
             <column name="user_id" type="number(19,0)"/>
-            <column name="config_payload" type="TEXT(1024)" />
+            <column name="user_config_payload" type="TEXT" />
+            <column name="user_name" type="varchar2(32)"/>
         </createTable>
     </changeSet>
 

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+		http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.3.xsd"
+  logicalFilePath="db/changelog/scheme/changelog-003.xml">
+
+  <changeSet id="changeset-003-1" author="andrzej.mielnik">
+    <createTable tableName="rss_item">
+      <column name="id" type="number(19,0)">
+        <constraints primaryKey="true" primaryKeyName="PK_RssItem"/>
+      </column>
+      <column name="user_id" type="number(19,0)"/>
+      <column name="group_uuid" type="char(36)"/>
+      <column name="item_uuid" type="char(36)"/>
+      <column name="rss_uuid" type="char(36)"/>
+      <column name="status" type="varchar2(4)"/>
+      <column name="link" type="varchar2(1024)"/>
+      <column name="pub_date" type="timestamp"/>
+      <column name="item_payload" type="text"/>
+    </createTable>
+  </changeSet>
+
+  <changeSet id="changeset-003-2" author="andrzej.mielnik">
+    <createIndex indexName="idx_rss_item_user_group" tableName="rss_item">
+      <column name="user_id" type="number(19,0)"/>
+      <column name="group_uuid" type="char(36)"/>
+      <column name="status" type="varchar2(10)"/>
+      <column name="pub_date" type="timestamp"/>
+      <column name="item_uuid" type="char(36)"/>
+    </createIndex>
+  </changeSet>
+
+  <changeSet id="changeset-003-3" author="andrzej.mielnik">
+    <createIndex indexName="idx_rss_item_link" tableName="rss_item">
+      <column name="link" type="varchar2(1024)"/>
+    </createIndex>
+  </changeSet>
+
+  <changeSet id="changeset-003-4" author="andrzej.mielnik">
+    <createIndex indexName="idx_rss_item_pub_date" tableName="rss_item">
+      <column name="user_id" type="number(19,0)"/>
+      <column name="status" type="varchar2(10)"/>
+      <column name="pub_date" type="timestamp"/>
+    </createIndex>
+  </changeSet>
+
+</databaseChangeLog>

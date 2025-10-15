@@ -1,33 +1,31 @@
 package pl.andriejsoft.rssreader.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-import pl.andriejsoft.rssreader.entity.UserEntity;
-import pl.andriejsoft.rssreader.service.UserService;
-
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import pl.andriejsoft.rssreader.dto.UserConfigDto;
+import pl.andriejsoft.rssreader.dto.UserDto;
+import pl.andriejsoft.rssreader.service.UserConfigService;
 
 @RestController
 @RequestMapping("/user")
 public class UserController {
 
-    @Autowired
-    private UserService userService;
+  @Autowired
+  private UserConfigService userConfigService;
 
-    @GetMapping("/findAll")
-    public List<UserEntity> getUsers() {
-        return userService.findAll();
-    }
+  @GetMapping("/findAll")
+  public List<UserDto> getUsers() {
+    return userConfigService.findUserAll();
+  }
 
-    @PostMapping("/add")
-    public String saveUser(@RequestBody UserEntity user) {
-        userService.save(user);
-        return "Added Successfully";
-    }
+  @PostMapping("/add")
+  public UserDto saveConfig(@RequestBody UserDto userDto) {
+    return userConfigService.createNewUser(userDto);
+  }
 
-    @DeleteMapping("/delete/{id}")
-    public String deleteUser(@PathVariable Long id){
-        userService.deleteById(id);
-        return "Deleted Successfully";
-    }
 }

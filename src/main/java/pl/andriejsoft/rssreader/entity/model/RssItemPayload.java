@@ -1,5 +1,6 @@
 package pl.andriejsoft.rssreader.entity.model;
 
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,6 +10,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ConfigPayload {
-    private String cronExpression;
+public class RssItemPayload {
+  private String title;
+  private String link;
+  private LocalDateTime pubDate;
+  private String description;
 }
