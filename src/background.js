@@ -94,14 +94,14 @@ async function ingestFeed(feed, { notify = false } = {}) {
     }),
   );
 
-  const added = await store.addItems(candidates);
+  const { added, skipped } = await store.addItems(candidates);
   await updateBadge();
 
   if (added > 0 && notify) {
     await playSound();
   }
 
-  return { added, seen: fetched.entries.length };
+  return { added, skipped, seen: fetched.entries.length };
 }
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -123,7 +123,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
 
     const result = await ingestFeed(feed, { notify: true });
-    console.info(`feed "${feed.name}": new ${result.added}, parsed ${result.seen}`);
+    console.info(
+      `feed "${feed.name}": new ${result.added}, parsed ${result.seen}, already read ${result.skipped}`,
+    );
   } catch (error) {
     const reason = error instanceof FeedError ? error.message : error?.message ?? error;
     console.warn(`alarm ${alarm.name} failed:`, reason);

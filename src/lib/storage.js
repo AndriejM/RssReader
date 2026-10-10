@@ -7,14 +7,18 @@ import {
   DEFAULT_CLEAN_TIMEOUT,
   DEFAULT_DELAY_TIMEOUT,
   MAX_ITEMS_PER_FEED,
+  MAX_READ_RECORDS,
   capPreview,
   isExpired,
+  isReadExpired,
   itemTime,
   normalizeUid,
+  readTime,
 } from './util.js';
 
 export const FEEDS_KEY = 'feeds';
 export const ITEMS_KEY = 'items';
+export const READ_KEY = 'read';
 export const SETTINGS_KEY = 'settings';
 export const THEME_KEY = 'theme';
 
@@ -79,9 +83,14 @@ export async function countItems() {
   return (await getItems()).length;
 }
 
-/** Wipe every stored headline (the reader's «Clear all» button); feeds and settings stay. */
+/**
+ * Wipe every stored headline (the reader's «Clear all» button) and remember them as read,
+ * otherwise the next feed read would hand them all back. Feeds and settings stay.
+ */
 export async function clearAllItems() {
+  const items = await getItems();
   await saveItems([]);
+  if (items.length > 0) await markRead(items);
 }
 
 /**
@@ -121,33 +130,117 @@ export function capPerFeed(items) {
 }
 
 /**
- * Store freshly read headlines, skipping duplicates.
- * @returns {number} how many headlines were actually added
+ * Store freshly read headlines, skipping the duplicates already in storage and the headlines the
+ * user has deleted before — a feed server keeps shipping its old items, so without the read list
+ * a deleted news would come back on the next `delay_timeout`.
+ * @returns {{ added: number, skipped: number, seen: number }}
  */
 export async function addItems(candidates) {
   const fresh = candidates.filter((item) => item?.uid && item?.link);
-  if (fresh.length === 0) return 0;
+  if (fresh.length === 0) return { added: 0, skipped: 0, seen: candidates.length };
 
-  const items = await getItems();
+  const [items, read] = await Promise.all([getItems(), getRead()]);
   const known = new Set(items.map((item) => item.uid));
+  const readLinks = new Set(read.map((record) => record.link));
   let added = 0;
+  let skipped = 0;
 
   for (const candidate of fresh) {
     if (known.has(candidate.uid)) continue;
+    if (readLinks.has(candidate.link)) {
+      skipped += 1;
+      continue;
+    }
     known.add(candidate.uid);
     items.push(candidate);
     added += 1;
   }
 
   if (added > 0) await saveItems(capPerFeed(items));
-  return added;
+  return { added, skipped, seen: candidates.length };
 }
 
+/**
+ * Remove one headline from the list and remember it as read, so the same news is not offered
+ * again until its read record expires (see `cleanupRead`).
+ */
 export async function removeItem(uid) {
   const items = await getItems();
   const kept = items.filter((item) => item.uid !== uid);
-  if (kept.length !== items.length) await saveItems(kept);
-  return kept.length !== items.length;
+  if (kept.length === items.length) return false;
+
+  await saveItems(kept);
+  await markRead(items.filter((item) => item.uid === uid));
+  return true;
+}
+
+/* ------------------------------------------------------------------ read list */
+
+export async function getRead() {
+  const stored = await chrome.storage.local.get(READ_KEY);
+  const read = stored[READ_KEY];
+  return Array.isArray(read) ? read : [];
+}
+
+export async function saveRead(read) {
+  await chrome.storage.local.set({ [READ_KEY]: read });
+}
+
+/**
+ * Storage record for a headline the user deleted: `link` is the identity (a feed server reissues
+ * the same link), while `pubDate` and `time` (the moment of deletion) together give the age of the
+ * record — see `util.readTime`.
+ */
+export function makeReadRecord(item, now = Date.now()) {
+  return {
+    link: String(item?.link ?? '').trim(),
+    pubDate: String(item?.pubDate ?? '').trim(),
+    time: now,
+  };
+}
+
+/** Remember headlines as read, newest first, without repeating a link already stored. */
+export async function markRead(items) {
+  const fresh = (items ?? []).filter((item) => item?.link);
+  if (fresh.length === 0) return 0;
+
+  const now = Date.now();
+  const read = await getRead();
+  const known = new Set(read.map((record) => record.link));
+  let added = 0;
+
+  for (const item of fresh) {
+    const record = makeReadRecord(item, now);
+    if (known.has(record.link)) continue;
+    known.add(record.link);
+    read.push(record);
+    added += 1;
+  }
+
+  if (added > 0) await saveRead(capRead(read));
+  return added;
+}
+
+/** Keep the newest `MAX_READ_RECORDS` markers; markers are small, but the list must not grow forever. */
+export function capRead(read) {
+  if (read.length <= MAX_READ_RECORDS) return read;
+  const byAge = [...read].sort((a, b) => readTime(b) - readTime(a));
+  return byAge.slice(0, MAX_READ_RECORDS);
+}
+
+/**
+ * Forget read markers that lived their `READ_TTL_DAYS` (age counted from the later of `pubDate`
+ * and the moment of deletion). Only then a news may be offered again.
+ * @returns {{ removed: number, read: object[] }}
+ */
+export async function cleanupRead(now = Date.now()) {
+  const read = await getRead();
+  if (read.length === 0) return { removed: 0, read };
+
+  const alive = read.filter((record) => !isReadExpired(record, now));
+  const removed = read.length - alive.length;
+  if (removed > 0) await saveRead(alive);
+  return { removed, read: alive };
 }
 
 /**
@@ -157,19 +250,27 @@ export async function removeItem(uid) {
  */
 export async function cleanup(now = Date.now()) {
   const [items, feeds] = await Promise.all([getItems(), getFeeds()]);
-  if (items.length === 0) return { removed: 0, items };
 
-  const feedById = new Map(feeds.map((feed) => [feed.id, feed]));
-  const alive = items.filter((item) => {
-    const feed = feedById.get(item.feedId);
-    // A headline of a feed that no longer exists has nowhere to expire from: drop it.
-    if (!feed) return false;
-    return !isExpired(item, feed, now, DEFAULT_CLEAN_TIMEOUT);
-  });
+  let alive = items;
+  let removed = 0;
 
-  const removed = items.length - alive.length;
-  if (removed > 0) await saveItems(alive);
-  return { removed, items: alive };
+  if (items.length > 0) {
+    const feedById = new Map(feeds.map((feed) => [feed.id, feed]));
+    alive = items.filter((item) => {
+      const feed = feedById.get(item.feedId);
+      // A headline of a feed that no longer exists has nowhere to expire from: drop it.
+      if (!feed) return false;
+      return !isExpired(item, feed, now, DEFAULT_CLEAN_TIMEOUT);
+    });
+
+    removed = items.length - alive.length;
+    if (removed > 0) await saveItems(alive);
+  }
+
+  // Read markers are pruned even when the headline list is empty: it is the only way a marker can
+  // ever lapse, and a list of markers that never ages blocks the same news forever.
+  const { removed: readRemoved } = await cleanupRead(now);
+  return { removed, items: alive, readRemoved };
 }
 
 export async function getSettings() {

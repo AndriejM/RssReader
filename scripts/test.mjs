@@ -14,12 +14,15 @@ const {
   DEFAULT_CLEAN_TIMEOUT,
   DEFAULT_DELAY_TIMEOUT,
   MAX_ITEMS_PER_FEED,
+  MAX_READ_RECORDS,
+  READ_TTL_DAYS,
   alarmPeriodMinutes,
   badgeText,
   cleanTitle,
   formatSince,
   humanDuration,
   isExpired,
+  isReadExpired,
   isValidHttpUrl,
   absoluteUrl,
   newId,
@@ -29,7 +32,8 @@ const {
 } = util;
 
 const MINUTE = 60_000;
-const DAY = 24 * 60 * MINUTE;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 
 const tests = [];
 function test(name, fn) {
@@ -265,6 +269,69 @@ test('capPerFeed keeps the newest headlines of every feed', () => {
   assert.equal(f1[0].uid, `u1-${MAX_ITEMS_PER_FEED + 6}`, 'newest kept first');
   assert.equal(f1.at(-1).uid, 'u1-7', 'the 7 oldest dropped');
   assert.equal(store.capPerFeed([]).length, 0);
+});
+
+/* ---------------------------- read list ---------------------------- */
+
+test('makeReadRecord keeps the link, the publication date and the delete time', () => {
+  const time = 1_700_000_000_000;
+  const record = store.makeReadRecord(
+    { link: '  https://habr.com/ru/news/1/ ', pubDate: 'Tue, 01 Oct 2024 08:00:00 GMT' },
+    time,
+  );
+  assert.deepEqual(record, {
+    link: 'https://habr.com/ru/news/1/',
+    pubDate: 'Tue, 01 Oct 2024 08:00:00 GMT',
+    time,
+  });
+  assert.equal(store.makeReadRecord({ link: '' }).link, '', 'no link, nothing to match on');
+});
+
+test('isReadExpired keeps a news out for READ_TTL_DAYS from its deletion', () => {
+  const now = 1_700_000_000_000;
+  const fresh = new Date(now - 6 * DAY).toUTCString();
+  const old = new Date(now - 8 * DAY).toUTCString();
+
+  assert.equal(READ_TTL_DAYS, 7);
+  assert.equal(isReadExpired({ link: 'a', pubDate: fresh, time: now }, now), false);
+  assert.equal(
+    isReadExpired({ link: 'a', pubDate: old, time: now }, now),
+    false,
+    'a news published 8 days ago and deleted only now is still kept out',
+  );
+  assert.equal(
+    isReadExpired({ link: 'a', pubDate: old, time: now - 7 * DAY }, now),
+    true,
+    'the marker ages from the deletion',
+  );
+  assert.equal(
+    isReadExpired({ link: 'a', pubDate: fresh, time: now - 2 * DAY }, now, 1),
+    true,
+    'a custom ttl is honoured',
+  );
+  assert.equal(
+    isReadExpired({ link: 'a', pubDate: fresh, time: now }, now, 1),
+    false,
+    'a freshly deleted marker survives even a 1 day ttl',
+  );
+});
+
+test('a read marker with no pubDate expires by its delete time', () => {
+  const now = 1_700_000_000_000;
+  assert.equal(isReadExpired({ link: 'a', pubDate: '', time: now - 6 * DAY }, now), false);
+  assert.equal(isReadExpired({ link: 'a', pubDate: '', time: now - 7 * DAY }, now), true);
+  assert.equal(isReadExpired({ link: 'a' }, now), true, 'no dates at all: the marker is useless');
+});
+
+test('capRead keeps the newest read markers', () => {
+  const read = [];
+  for (let i = 0; i < MAX_READ_RECORDS + 5; i += 1) read.push({ link: `l${i}`, time: i });
+
+  const kept = store.capRead(read);
+  assert.equal(kept.length, MAX_READ_RECORDS);
+  assert.equal(kept[0].link, `l${MAX_READ_RECORDS + 4}`, 'newest first');
+  assert.equal(kept.at(-1).link, 'l5', 'the 5 oldest dropped');
+  assert.equal(store.capRead(read.slice(0, 10)).length, 10, 'a list under the cap is untouched');
 });
 
 /* ---------------------------- runner ---------------------------- */

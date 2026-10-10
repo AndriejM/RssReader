@@ -193,9 +193,10 @@ async function refreshCard(cardRecord) {
       feedId: cardRecord.feed.id,
     });
     if (response?.ok) {
+      const read = response.skipped > 0 ? `, уже прочитано: ${response.skipped}` : '';
       setStatus(
         cardRecord,
-        `Новых: ${response.added}, считано: ${response.seen}`,
+        `Новых: ${response.added}, считано: ${response.seen}${read}`,
         response.added > 0 ? 'ok' : '',
       );
     } else {

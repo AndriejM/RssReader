@@ -18,6 +18,15 @@ export const MAX_ITEMS_PER_FEED = 100;
 export const MAX_PREVIEW_CHARS = 8000;
 
 /**
+ * Storage guard: how long a «read» marker keeps a news out of the list. Feed servers do not
+ * delete their own items, so without a horizon the same news would be offered forever.
+ */
+export const READ_TTL_DAYS = 7;
+
+/** Storage guard: how many read markers are kept; the oldest fall out first. */
+export const MAX_READ_RECORDS = 1000;
+
+/**
  * Normalize a timeout value coming from the UI (always minutes).
  */
 export function toMinutes(value, fallback, { min = 1, max = 60 * 24 * 365 } = {}) {
@@ -81,6 +90,17 @@ export function itemTime(item) {
 }
 
 /**
+ * The age of a «read» marker: the later of `pubDate` and the moment the headline was deleted.
+ * Delete time is never earlier than publication, so a marker always lives its whole `ttlDays`
+ * from the deletion instead of being born already expired.
+ */
+export function readTime(record) {
+  const published = itemTime(record);
+  const deleted = Number(record?.time ?? 0);
+  return Math.max(published, Number.isFinite(deleted) && deleted > 0 ? deleted : 0);
+}
+
+/**
  * A headline is expired when it has been published for at least the feed's clean_timeout
  * (see `itemTime`): `expiry is counted from pubDate when the record has pubDate, then
  * the stored `time` acts as a fallback.
@@ -91,6 +111,19 @@ export function isExpired(item, feed, now = Date.now(), fallbackClean = DEFAULT_
   const published = itemTime(item);
   if (!published) return true;
   return now - published >= clean * 60000;
+}
+
+/**
+ * A «read» marker stops keeping its news out of the list after `ttlDays`. Age is counted from the
+ * later of `pubDate` and the moment the headline was deleted: counting from `pubDate` alone would
+ * make a marker for an already old news useless from the start, and the news the user just deleted
+ * would come back on the very next `delay_timeout`.
+ */
+export function isReadExpired(record, now = Date.now(), ttlDays = READ_TTL_DAYS) {
+  const when = readTime(record);
+  if (!when) return true;
+  const ttl = Math.max(1, Number(ttlDays) || READ_TTL_DAYS);
+  return now - when >= ttl * 24 * 60 * 60000;
 }
 
 /**
