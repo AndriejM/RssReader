@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <title>Глобальные настройки</title>
+  <script src="theme-boot.js"></script>
+  <link rel="stylesheet" href="styles/theme.css" />
+  <link rel="stylesheet" href="styles/settings.css" />
+  <script type="module" src="settings.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>Глобальные настройки</h1>
+      <div class="actions">
+        <button id="btn-feeds" type="button">Настройки лент</button>
+        <button id="btn-reader" type="button">Открыть читалку</button>
+        <button id="btn-theme" type="button">Светлая тема</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="row">
+        <div class="field">
+          <label for="read-ttl-days">read_ttl_days — через сколько дней забыть прочитанные</label>
+          <div class="unit">
+            <input id="read-ttl-days" type="number" min="1" max="3650" step="1" />
+            <span class="muted">дней</span>
+          </div>
+          <div class="error" id="read-ttl-error"></div>
+        </div>
+        <button id="btn-clear-read" class="danger" type="button">Забыть прочитанные</button>
+      </div>
+
+      <p class="hint">
+        Заголовок, удалённый из читалки, помечается прочитанным, чтобы лента не вернула его при
+        следующей загрузке. Через read_ttl_days метка сгорает, и новость может появиться снова.
+        «Забыть прочитанные» удаляет все метки сразу — удалённые новости вернутся в ленты.
+      </p>
+
+      <div class="card-foot">
+        <span class="stats" id="read-stats"></span>
+        <span class="status" id="read-status"></span>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

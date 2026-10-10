@@ -8,12 +8,14 @@ import {
   DEFAULT_DELAY_TIMEOUT,
   MAX_ITEMS_PER_FEED,
   MAX_READ_RECORDS,
+  READ_TTL_DAYS,
   capPreview,
   isExpired,
   isReadExpired,
   itemTime,
   normalizeUid,
   readTime,
+  toDays,
 } from './util.js';
 
 export const FEEDS_KEY = 'feeds';
@@ -21,6 +23,7 @@ export const ITEMS_KEY = 'items';
 export const READ_KEY = 'read';
 export const SETTINGS_KEY = 'settings';
 export const THEME_KEY = 'theme';
+export const READ_TTL_KEY = 'read_ttl_days';
 
 export async function getFeeds() {
   const stored = await chrome.storage.local.get(FEEDS_KEY);
@@ -229,18 +232,27 @@ export function capRead(read) {
 }
 
 /**
- * Forget read markers that lived their `READ_TTL_DAYS` (age counted from the later of `pubDate`
- * and the moment of deletion). Only then a news may be offered again.
+ * Forget read markers that lived their `read_ttl_days` (age counted from the later of `pubDate`
+ * and the moment of deletion). Only then a news may be offered again. The horizon itself is the
+ * global setting from the settings screen, so changing it takes effect on the very next sweep.
  * @returns {{ removed: number, read: object[] }}
  */
 export async function cleanupRead(now = Date.now()) {
   const read = await getRead();
   if (read.length === 0) return { removed: 0, read };
 
-  const alive = read.filter((record) => !isReadExpired(record, now));
+  const ttlDays = await getReadTtlDays();
+  const alive = read.filter((record) => !isReadExpired(record, now, ttlDays));
   const removed = read.length - alive.length;
   if (removed > 0) await saveRead(alive);
   return { removed, read: alive };
+}
+
+/** Wipe every «read» marker at once: the headlines they held back may be offered again. */
+export async function clearRead() {
+  const read = await getRead();
+  if (read.length > 0) await saveRead([]);
+  return read.length;
 }
 
 /**
@@ -294,6 +306,18 @@ export async function getTheme() {
 export async function setTheme(theme) {
   const next = theme === 'light' ? 'light' : 'dark';
   await updateSettings({ [THEME_KEY]: next });
+  return next;
+}
+
+/** How long a «read» marker keeps its news out of the list, in days. */
+export async function getReadTtlDays() {
+  const settings = await getSettings();
+  return toDays(settings[READ_TTL_KEY], READ_TTL_DAYS);
+}
+
+export async function setReadTtlDays(days) {
+  const next = toDays(days, READ_TTL_DAYS);
+  await updateSettings({ [READ_TTL_KEY]: next });
   return next;
 }
 

@@ -3,13 +3,14 @@
 import { sanitizePreview } from './lib/extract.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import * as store from './lib/storage.js';
-import { SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
+import { GLOBAL_SETTINGS_PAGE, SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
 import { formatSince, humanDuration, itemTime } from './lib/util.js';
 
 const els = {
   totalCount: document.getElementById('total-count'),
   settings: document.getElementById('btn-settings'),
+  globalSettings: document.getElementById('btn-global-settings'),
   theme: document.getElementById('btn-theme'),
   refresh: document.getElementById('btn-refresh'),
   clearAll: document.getElementById('btn-clear-all'),
@@ -310,6 +311,10 @@ els.settings.addEventListener('click', () => {
   // The settings screen takes over this tab instead of adding a third one: «Открыть читалку»
   // on that screen brings the reader back to the same place.
   window.location.assign(pageUrl(SETTINGS_PAGE));
+});
+els.globalSettings.addEventListener('click', () => {
+  // Global settings live on their own screen, in the same tab, for the same reason as above.
+  window.location.assign(pageUrl(GLOBAL_SETTINGS_PAGE));
 });
 els.refresh.addEventListener('click', () => void refreshSelectedFeed());
 els.clearAll.addEventListener('click', () => void clearAllHeadlines());

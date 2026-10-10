@@ -10,6 +10,7 @@
 /** The extension's own screens, relative to the extension root. */
 export const READER_PAGE = 'src/index.html';
 export const SETTINGS_PAGE = 'src/feeds.html';
+export const GLOBAL_SETTINGS_PAGE = 'src/settings.html';
 
 /** Absolute URL of one of the extension's screens. */
 export function pageUrl(page) {

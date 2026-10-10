@@ -15,6 +15,8 @@ const {
   DEFAULT_DELAY_TIMEOUT,
   MAX_ITEMS_PER_FEED,
   MAX_READ_RECORDS,
+  MAX_READ_TTL_DAYS,
+  MIN_READ_TTL_DAYS,
   READ_TTL_DAYS,
   alarmPeriodMinutes,
   badgeText,
@@ -28,6 +30,7 @@ const {
   newId,
   normalizeFeed,
   normalizeUid,
+  toDays,
   toMinutes,
 } = util;
 
@@ -54,6 +57,18 @@ test('toMinutes rounds, clamps and falls back', () => {
   assert.equal(toMinutes(null, 30), 1, 'Number(null) is 0, so it clamps to the 1 minute floor');
   assert.equal(toMinutes('', 30), 1, 'an empty input field is 0, so it clamps too');
   assert.equal(toMinutes(30, 30, { min: 10, max: 20 }), 20, 'custom bounds are honoured');
+});
+
+test('toDays rounds, clamps and falls back like the read horizon it feeds', () => {
+  assert.equal(toDays(30), 30);
+  assert.equal(toDays('14', 30), 14);
+  assert.equal(toDays(6.4, 30), 6);
+  assert.equal(toDays(0, 30), MIN_READ_TTL_DAYS, 'never below the 1 day floor');
+  assert.equal(toDays(-5, 30), MIN_READ_TTL_DAYS);
+  assert.equal(toDays(1e9, 30), MAX_READ_TTL_DAYS, 'clamped to the ceiling');
+  assert.equal(toDays('', 30), MIN_READ_TTL_DAYS, 'an empty field is 0, so it clamps too');
+  assert.equal(toDays(undefined), READ_TTL_DAYS, 'missing setting keeps the default horizon');
+  assert.equal(toDays('bogus', 30), 30);
 });
 
 test('alarmPeriodMinutes never asks Chrome for less than a minute', () => {

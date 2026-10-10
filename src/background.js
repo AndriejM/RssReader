@@ -40,6 +40,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     return;
   }
   if (changes[store.ITEMS_KEY]) void updateBadge();
+  // The read horizon is a global setting: shortening it should prune the markers it governs on
+  // the next sweep rather than wait for a headline to expire.
+  if (changes[store.SETTINGS_KEY]) {
+    void store.cleanup().then(({ removed }) => {
+      if (removed > 0) void updateBadge();
+    });
+  }
 });
 
 async function bootstrap(reason) {

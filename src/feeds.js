@@ -2,7 +2,7 @@
 
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import * as store from './lib/storage.js';
-import { READER_PAGE, pageUrl } from './lib/tabs.js';
+import { GLOBAL_SETTINGS_PAGE, READER_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
 import { humanDuration, newId, normalizeFeed } from './lib/util.js';
 
@@ -10,6 +10,7 @@ const els = {
   cards: document.getElementById('feed-cards'),
   empty: document.getElementById('feeds-empty'),
   add: document.getElementById('btn-add'),
+  settings: document.getElementById('btn-settings'),
   reader: document.getElementById('btn-reader'),
   theme: document.getElementById('btn-theme'),
 };
@@ -263,6 +264,10 @@ els.reader.addEventListener('click', () => {
   // Back to the reader in the same tab: this screen is reached from the reader, and the reader
   // restores the feed and the headline that were open before the jump.
   window.location.assign(pageUrl(READER_PAGE));
+});
+
+els.settings.addEventListener('click', () => {
+  window.location.assign(pageUrl(GLOBAL_SETTINGS_PAGE));
 });
 
 void wireThemeButton(els.theme);

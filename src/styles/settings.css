@@ -1,0 +1,124 @@
+.page {
+  margin: 0 auto;
+  max-width: 760px;
+  padding: 18px 20px 48px;
+}
+
+.page-header {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+}
+
+.page-header h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.page-header .actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+/* The horizon field and the button that overrides it by hand belong to one decision. */
+.row {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.row .field {
+  flex: 1 1 260px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field .unit {
+  align-items: baseline;
+  display: flex;
+  gap: 6px;
+}
+
+.field .unit input {
+  max-width: 120px;
+}
+
+.field .unit span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.field .error {
+  color: var(--danger);
+  font-size: 12px;
+  min-height: 16px;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 14px 0 0;
+}
+
+.card-foot {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 10px;
+}
+
+.card-foot .stats {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.status {
+  font-size: 13px;
+  margin-left: auto;
+}
+
+.status.ok {
+  color: var(--accent);
+}
+
+.status.error {
+  color: var(--danger);
+}
+
+@media (max-width: 560px) {
+  .row {
+    align-items: stretch;
+  }
+
+  .card-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

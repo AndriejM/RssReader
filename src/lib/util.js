@@ -23,6 +23,10 @@ export const MAX_PREVIEW_CHARS = 8000;
  */
 export const READ_TTL_DAYS = 7;
 
+/** Bounds the user can pick for that horizon on the global settings screen. */
+export const MIN_READ_TTL_DAYS = 1;
+export const MAX_READ_TTL_DAYS = 3650;
+
 /** Storage guard: how many read markers are kept; the oldest fall out first. */
 export const MAX_READ_RECORDS = 1000;
 
@@ -33,6 +37,15 @@ export function toMinutes(value, fallback, { min = 1, max = 60 * 24 * 365 } = {}
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * Normalize the «forget read after N days» value coming from the settings screen.
+ */
+export function toDays(value, fallback = READ_TTL_DAYS) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(MAX_READ_TTL_DAYS, Math.max(MIN_READ_TTL_DAYS, n));
 }
 
 export function alarmPeriodMinutes(delayTimeout) {

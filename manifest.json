@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "RSS Reader",
-  "version": "1.0.0",
-  "description": "Чтение RSS-новостей: экран настройки лент, трёхпанельный интерфейс, автоматическая загрузка заголовков и их автоочистка.",
+  "version": "1.1.0",
+  "description": "Чтение RSS-новостей: настройка лент, глобальные настройки, трёхпанельный интерфейс, автозагрузка и автоочистка заголовков.",
 
   "permissions": [
     "storage",
@@ -34,7 +34,7 @@
     "128": "icons/icon128.png"
   },
   "options_ui": {
-    "page": "src/feeds.html",
+    "page": "src/settings.html",
     "open_in_tab": true
   }
 }
