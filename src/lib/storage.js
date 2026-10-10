@@ -79,6 +79,11 @@ export async function countItems() {
   return (await getItems()).length;
 }
 
+/** Wipe every stored headline (the reader's «Clear all» button); feeds and settings stay. */
+export async function clearAllItems() {
+  await saveItems([]);
+}
+
 /**
  * Build the storage record for one news item from a feed `<item>`:
  * the field `title`, `description`, `pubDate`, `link` taken straight from the feed XML record —

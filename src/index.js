@@ -11,6 +11,7 @@ const els = {
   settings: document.getElementById('btn-settings'),
   theme: document.getElementById('btn-theme'),
   refresh: document.getElementById('btn-refresh'),
+  clearAll: document.getElementById('btn-clear-all'),
 
   feedList: document.getElementById('feed-list'),
   feedsEmpty: document.getElementById('feeds-empty'),
@@ -208,6 +209,23 @@ async function deleteItem() {
   openItem(next);
 }
 
+/**
+ * The «Clear all» icon next to the header badge: it empties the headline storage in one click.
+ * The storage write also makes the background worker refresh the toolbar badge, and the reader's
+ * own storage.onChanged listener repaints the panels, so no extra bookkeeping is needed here.
+ */
+async function clearAllHeadlines() {
+  if (state.items.length === 0) return;
+
+  els.clearAll.disabled = true;
+  try {
+    await store.clearAllItems();
+    await renderAll();
+  } finally {
+    els.clearAll.disabled = false;
+  }
+}
+
 async function refreshSelectedFeed() {
   const feed = selectedFeed();
   if (!feed) {
@@ -260,6 +278,7 @@ els.settings.addEventListener('click', () => {
   window.open(chrome.runtime.getURL('src/feeds.html'), '_blank', 'noopener');
 });
 els.refresh.addEventListener('click', () => void refreshSelectedFeed());
+els.clearAll.addEventListener('click', () => void clearAllHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
 void wireThemeButton(els.theme);
 

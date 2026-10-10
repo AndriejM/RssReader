@@ -53,7 +53,12 @@ async function bootstrap(reason) {
 async function updateBadge() {
   const count = await store.countItems();
   await chrome.action.setBadgeText({ text: badgeText(count) });
-  await chrome.action.setBadgeBackgroundColor({ color: '#1e88e5' });
+  // Chrome picks the label colour itself (the action API only exposes the pill background), so
+  // the fix is a pill bright enough that its own label stays legible in Chrome's light and dark
+  // toolbar themes — the old accent blue (#1e88e5) buried the digits. The darker tone keeps the
+  // pill's edge visible on a light toolbar.
+  const theme = await store.getTheme();
+  await chrome.action.setBadgeBackgroundColor({ color: theme === 'light' ? '#e6a817' : '#ffd54f' });
 }
 
 /**
