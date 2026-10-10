@@ -62,6 +62,12 @@ function countForFeed(feedId) {
   return state.items.filter((item) => item.feedId === feedId).length;
 }
 
+/** Заголовки выбранной ленты — в том же порядке, что в средней панели (свежие сверху). */
+function itemsOfSelectedFeed() {
+  if (!state.feedId) return [];
+  return state.items.filter((item) => item.feedId === state.feedId);
+}
+
 function renderTotal() {
   els.totalCount.textContent = String(state.items.length);
 }
@@ -212,9 +218,7 @@ async function deleteItem() {
   if (!state.uid) return;
 
   const feedId = state.feedId;
-  const position = state.items
-    .filter((item) => item.feedId === feedId)
-    .findIndex((item) => item.uid === state.uid);
+  const position = itemsOfSelectedFeed().findIndex((item) => item.uid === state.uid);
 
   const uid = state.uid;
   await store.removeItem(uid);
@@ -283,14 +287,17 @@ async function renderAll() {
   if (!state.feeds.some((feed) => feed.id === state.feedId)) state.feedId = null;
 
   // The open headline may have expired (clean_timeout) or been deleted elsewhere.
+  let message = null;
   if (state.uid && !state.items.some((item) => item.uid === state.uid)) {
     state.uid = null;
-    showPlaceholder('Открытый заголовок удалён из хранилища: истёк clean_timeout.');
+    message = 'Открытый заголовок удалён из хранилища: истёк clean_timeout.';
   }
 
   renderTotal();
   renderFeeds();
   renderHeadlines();
+  if (message) showPlaceholder(message);
+  return message;
 }
 
 /* Storage is written by the background worker while this page is open, so react to it. */
@@ -320,12 +327,29 @@ async function init() {
     // The worker might be asleep; its own alarm sweep covers it.
   }
   if (removed > 0) renderTotal();
-  await renderAll();
+  const lostHeadline = await renderAll();
 
-  // renderAll() has already dropped a feed or a headline that no longer exists; when the
-  // headline survived, its text belongs in the right panel, not just a highlighted row.
-  const restored = state.uid ? state.items.find((item) => item.uid === state.uid) : null;
-  if (restored) openItem(restored);
+  // renderAll() has already dropped a feed or a headline that no longer exists. With nothing
+  // left selected the reader would open on empty panels, so the cursor goes to the top: the
+  // first feed in the list and the first headline of that feed.
+  if (!selectedFeed() && state.feeds.length > 0) selectFeed(state.feeds[0].id);
+
+  // A headline that survived the cleanup keeps its place; otherwise the top of the list opens.
+  const item =
+    (state.uid
+      ? state.items.find(
+          (candidate) => candidate.uid === state.uid && candidate.feedId === state.feedId,
+        )
+      : null) ??
+    itemsOfSelectedFeed()[0] ??
+    null;
+
+  if (item) {
+    openItem(item);
+  } else if (state.feedId && !lostHeadline) {
+    // Nothing to open at all: the feed is selected, its panel says so.
+    showPlaceholder('Заголовки этой ленты — в средней панели.');
+  }
 }
 
 void init();
