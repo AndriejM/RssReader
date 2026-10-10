@@ -3,6 +3,7 @@
 import { sanitizePreview } from './lib/extract.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import * as store from './lib/storage.js';
+import { SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
 import { formatSince, humanDuration, itemTime } from './lib/util.js';
 
@@ -31,6 +32,27 @@ const state = {
   feedId: null,
   uid: null,
 };
+
+/*
+ * The settings screen opens in this same tab, so coming back to the reader has to land on the
+ * same feed and headline. `sessionStorage` lives exactly as long as the tab does: a reader tab
+ * opened elsewhere still starts with nothing selected.
+ */
+const SELECTION_KEY = 'rss-reader:selection';
+
+function saveSelection() {
+  sessionStorage.setItem(SELECTION_KEY, JSON.stringify({ feedId: state.feedId, uid: state.uid }));
+}
+
+function restoreSelection() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SELECTION_KEY) ?? '');
+    state.feedId = typeof saved?.feedId === 'string' ? saved.feedId : null;
+    state.uid = typeof saved?.uid === 'string' ? saved.uid : null;
+  } catch {
+    // Nothing usable stored — start with nothing selected.
+  }
+}
 
 function selectedFeed() {
   return state.feeds.find((feed) => feed.id === state.feedId) ?? null;
@@ -108,6 +130,7 @@ function selectFeed(feedId) {
   renderFeeds();
   renderHeadlines();
   showPlaceholder('Заголовки этой ленты — в средней панели.');
+  saveSelection();
 }
 
 function showPlaceholder(message) {
@@ -150,6 +173,7 @@ function titleHeading(text, link) {
 /** Requirement: clicking a title shows the stored `<description>` in the right panel. */
 function openItem(item) {
   state.uid = item.uid;
+  saveSelection();
   renderHeadlines();
 
   els.contentDelete.hidden = false;
@@ -195,6 +219,7 @@ async function deleteItem() {
   const uid = state.uid;
   await store.removeItem(uid);
   state.uid = null;
+  saveSelection();
   await renderAll();
 
   const remaining = state.items.filter((item) => item.feedId === feedId);
@@ -275,7 +300,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 els.settings.addEventListener('click', () => {
-  window.open(chrome.runtime.getURL('src/feeds.html'), '_blank', 'noopener');
+  // The settings screen takes over this tab instead of adding a third one: «Открыть читалку»
+  // on that screen brings the reader back to the same place.
+  window.location.assign(pageUrl(SETTINGS_PAGE));
 });
 els.refresh.addEventListener('click', () => void refreshSelectedFeed());
 els.clearAll.addEventListener('click', () => void clearAllHeadlines());
@@ -283,6 +310,7 @@ els.contentDelete.addEventListener('click', () => void deleteItem());
 void wireThemeButton(els.theme);
 
 async function init() {
+  restoreSelection();
   // Expired headlines should not linger in an open reader.
   const { removed } = await store.cleanup();
   // Ask the worker to re-sync the per-feed timers and the badge count after this read.
@@ -293,6 +321,11 @@ async function init() {
   }
   if (removed > 0) renderTotal();
   await renderAll();
+
+  // renderAll() has already dropped a feed or a headline that no longer exists; when the
+  // headline survived, its text belongs in the right panel, not just a highlighted row.
+  const restored = state.uid ? state.items.find((item) => item.uid === state.uid) : null;
+  if (restored) openItem(restored);
 }
 
 void init();

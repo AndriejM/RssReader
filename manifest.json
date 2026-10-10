@@ -8,7 +8,8 @@
     "storage",
     "unlimitedStorage",
     "alarms",
-    "offscreen"
+    "offscreen",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"

@@ -7,6 +7,7 @@ import { requestOffscreen } from './lib/offscreen.js';
 import { FeedError } from './lib/rss.js';
 import { playSound } from './lib/sound.js';
 import * as store from './lib/storage.js';
+import { READER_PAGE, focusOrCreateTab } from './lib/tabs.js';
 import { CLEANUP_ALARM_NAME, badgeText } from './lib/util.js';
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -20,10 +21,11 @@ chrome.runtime.onStartup.addListener(() => {
 // The worker can be torn down at any time; make sure alarms exist whenever it wakes up.
 void bootstrap('wake');
 
-// Requirement: clicking the toolbar icon opens the reader screen in a new tab.
-// The manifest declares no default_popup, so this event fires on every icon click.
-chrome.action.onClicked.addListener(() => {
-  void chrome.tabs.create({ url: chrome.runtime.getURL('src/index.html') });
+// Requirement: clicking the toolbar icon opens the reader screen in a new tab — but only when it
+// is not open yet: a reader that is already in the tab strip is activated instead, together with
+// its window. The manifest declares no default_popup, so this event fires on every icon click.
+chrome.action.onClicked.addListener((clickedTab) => {
+  void focusOrCreateTab(READER_PAGE, clickedTab?.windowId);
 });
 
 // Pages write feeds/items directly, so the worker watches the storage to keep the alarms and

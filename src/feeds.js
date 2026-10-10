@@ -2,6 +2,7 @@
 
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import * as store from './lib/storage.js';
+import { READER_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
 import { humanDuration, newId, normalizeFeed } from './lib/util.js';
 
@@ -258,7 +259,9 @@ els.add.addEventListener('click', () => {
 });
 
 els.reader.addEventListener('click', () => {
-  window.open(chrome.runtime.getURL('src/index.html'), '_blank', 'noopener');
+  // Back to the reader in the same tab: this screen is reached from the reader, and the reader
+  // restores the feed and the headline that were open before the jump.
+  window.location.assign(pageUrl(READER_PAGE));
 });
 
 void wireThemeButton(els.theme);
