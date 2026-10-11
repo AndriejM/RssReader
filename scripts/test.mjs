@@ -338,6 +338,21 @@ test('a read marker with no pubDate expires by its delete time', () => {
   assert.equal(isReadExpired({ link: 'a' }, now), true, 'no dates at all: the marker is useless');
 });
 
+test('normalizeSoundChoice keeps only bundled signals or «Без звука»', () => {
+  assert.equal(store.normalizeSoundChoice(store.SOUND_NONE), store.SOUND_NONE);
+  assert.equal(store.normalizeSoundChoice('src/media/titan.mp3'), 'src/media/titan.mp3');
+  assert.equal(
+    store.normalizeSoundChoice(store.DEFAULT_SOUND_FILE),
+    store.DEFAULT_SOUND_FILE,
+    'the default signal stays the default',
+  );
+  assert.ok(store.SOUND_FILES.includes('src/media/ceres.mp3'), 'ceres is one of the bundled options');
+  assert.equal(store.normalizeSoundChoice('src/media/evil.mp3'), store.DEFAULT_SOUND_FILE, 'unknown file falls back');
+  assert.equal(store.normalizeSoundChoice('src/elsewhere/x.mp3'), store.DEFAULT_SOUND_FILE, 'not from src/media');
+  assert.equal(store.normalizeSoundChoice(undefined), store.DEFAULT_SOUND_FILE);
+  assert.equal(store.normalizeSoundChoice(null), store.DEFAULT_SOUND_FILE);
+});
+
 test('capRead keeps the newest read markers', () => {
   const read = [];
   for (let i = 0; i < MAX_READ_RECORDS + 5; i += 1) read.push({ link: `l${i}`, time: i });

@@ -24,6 +24,32 @@ export const READ_KEY = 'read';
 export const SETTINGS_KEY = 'settings';
 export const THEME_KEY = 'theme';
 export const READ_TTL_KEY = 'read_ttl_days';
+export const SOUND_KEY = 'sound';
+export const SOUND_FILE_KEY = 'sound_file';
+
+/** «Без звука»: автоматическая загрузка остаётся без сигнала. */
+export const SOUND_NONE = 'none';
+
+/** Файлы-сигналы из `src/media` — то, что разрешено хранить и играть. Порядок = порядок в combobox. */
+export const SOUND_FILES = [
+  'src/media/ariel.mp3',
+  'src/media/beep.mp3',
+  'src/media/carme.mp3',
+  'src/media/ceres.mp3',
+  'src/media/elara.mp3',
+  'src/media/europa.mp3',
+  'src/media/iapetus.mp3',
+  'src/media/io.mp3',
+  'src/media/iphone.mp3',
+  'src/media/iphone2.mp3',
+  'src/media/rhea.mp3',
+  'src/media/salacia.mp3',
+  'src/media/tethys.mp3',
+  'src/media/titan.mp3',
+];
+
+/** Файл-сигнал по умолчанию — как во всех сборках до появления выбора на экране настроек. */
+export const DEFAULT_SOUND_FILE = 'src/media/ceres.mp3';
 
 export async function getFeeds() {
   const stored = await chrome.storage.local.get(FEEDS_KEY);
@@ -306,6 +332,36 @@ export async function getTheme() {
 export async function setTheme(theme) {
   const next = theme === 'light' ? 'light' : 'dark';
   await updateSettings({ [THEME_KEY]: next });
+  return next;
+}
+
+/**
+ * Play only the signals bundled with the extension: an unknown path is replaced by the default.
+ * `SOUND_NONE` is the explicit «Без звука» choice.
+ */
+export function normalizeSoundChoice(value) {
+  if (value === SOUND_NONE) return SOUND_NONE;
+  return SOUND_FILES.includes(value) ? value : DEFAULT_SOUND_FILE;
+}
+
+/**
+ * Файл-сигнал, выбранный на экране глобальных настроек: путь от корня расширения либо
+ * `SOUND_NONE`. Builds without the picker stored only the on/off flag, so an absent
+ * `sound_file` falls back to it: an explicit `false` silences the alert, anything else plays
+ * the default file.
+ */
+export async function getSoundChoice() {
+  const settings = await getSettings();
+  const chosen = settings[SOUND_FILE_KEY];
+
+  if (chosen !== undefined) return normalizeSoundChoice(chosen);
+  if (settings[SOUND_KEY] === false) return SOUND_NONE;
+  return DEFAULT_SOUND_FILE;
+}
+
+export async function setSoundChoice(choice) {
+  const next = normalizeSoundChoice(choice);
+  await updateSettings({ [SOUND_FILE_KEY]: next, [SOUND_KEY]: next !== SOUND_NONE });
   return next;
 }
 

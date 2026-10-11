@@ -33,6 +33,13 @@
         <button id="btn-clear-read" class="danger" type="button">Забыть прочитанные</button>
       </div>
 
+      <div class="row">
+        <div class="field">
+          <label for="sound-file">Звук при скачивании — файл из src/media</label>
+          <select id="sound-file"></select>
+        </div>
+      </div>
+
       <p class="hint">
         Заголовок, удалённый из читалки, помечается прочитанным, чтобы лента не вернула его при
         следующей загрузке. Через read_ttl_days метка сгорает, и новость может появиться снова.
@@ -41,6 +48,7 @@
 
       <div class="card-foot">
         <span class="stats" id="read-stats"></span>
+        <span class="stats" id="sound-stats"></span>
         <span class="status" id="read-status"></span>
       </div>
     </section>
