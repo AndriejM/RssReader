@@ -22,6 +22,7 @@ const els = {
 
   sound: document.getElementById('sound-file'),
   soundStats: document.getElementById('sound-stats'),
+  playSound: document.getElementById('btn-sound-play'),
 
   feeds: document.getElementById('btn-feeds'),
   reader: document.getElementById('btn-reader'),
@@ -209,6 +210,36 @@ function leavePage(url) {
   window.location.assign(url);
 }
 
+/**
+ * Прослушать сигнал, выбранный в combobox, — даже тот, что ещё не записан, — чтобы выбрать его
+ * на слух. У этой страницы есть DOM, поэтому она играет встроенный файл прямо через <audio>, а не
+ * через offscreen-документ, которым пользуется service worker для сигнала автозагрузки.
+ */
+function playPreview() {
+  const choice = els.sound.value;
+  if (choice === store.SOUND_NONE) {
+    setStatus('Без звука — играть нечего', 'pending');
+    return;
+  }
+
+  const audio = new Audio(chrome.runtime.getURL(choice));
+  els.playSound.classList.add('playing');
+
+  const stop = () => {
+    els.playSound.classList.remove('playing');
+    audio.removeEventListener('ended', stop);
+    audio.removeEventListener('error', fail);
+  };
+  const fail = () => {
+    stop();
+    setStatus('Не удалось прослушать сигнал', 'error');
+  };
+
+  audio.addEventListener('ended', stop);
+  audio.addEventListener('error', fail);
+  audio.play().catch(() => fail());
+}
+
 async function clearRead() {
   if (state.readCount === 0) {
     setStatus('Список прочитанных уже пуст', 'ok');
@@ -230,6 +261,7 @@ async function clearRead() {
 
 els.days.addEventListener('input', markPending);
 els.sound.addEventListener('change', markPending);
+els.playSound.addEventListener('click', playPreview);
 els.save.addEventListener('click', () => void saveFields());
 els.clearRead.addEventListener('click', () => void clearRead());
 
