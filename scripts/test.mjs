@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+import * as encoding from '../src/lib/encoding.js';
 import * as i18n from '../src/lib/i18n.js';
 import * as store from '../src/lib/storage.js';
 import * as util from '../src/lib/util.js';
@@ -364,6 +365,165 @@ test('capRead keeps the newest read markers', () => {
   assert.equal(kept[0].link, `l${MAX_READ_RECORDS + 4}`, 'newest first');
   assert.equal(kept.at(-1).link, 'l5', 'the 5 oldest dropped');
   assert.equal(store.capRead(read.slice(0, 10)).length, 10, 'a list under the cap is untouched');
+});
+
+/* ---------------------------- feed encoding ---------------------------- */
+
+/** Bytes of the sample feed the reader actually fails on: RSS served as Windows-1251. */
+const CP1251_FEED = new Uint8Array(
+  fs.readFileSync(new URL('../nnm_example_rss_item.xml', import.meta.url)),
+);
+const CYRILLIC_HEADLINE = 'Коллекция короткометражных мультфильмов (1984-2011) BDRip, HDTVRip [Platinum]';
+
+/** Rewrite the encoding the document claims for itself, without touching the bytes. */
+function reFeed(bytes, declaration) {
+  const source = new TextDecoder('iso-8859-1').decode(bytes);
+  const text = declaration
+    ? source.replace(/<\?xml[^>]*\?>/, declaration)
+    : source.replace(/<\?xml[^>]*\?>/, '<?xml version="1.0"?>');
+  return new Uint8Array(Buffer.from(text, 'latin1'));
+}
+
+/** A feed in an encoding the reader does not guess, declared the way a real one declares it. */
+function feedDeclaredAs(label, bytes) {
+  const head = new Uint8Array(
+    Buffer.from(`<?xml version="1.0" encoding="${label}"?>\n<rss><channel><title>`, 'latin1'),
+  );
+  const tail = new Uint8Array(Buffer.from('</title></channel></rss>', 'latin1'));
+  return new Uint8Array([...head, ...bytes, ...tail]);
+}
+
+test('the encoding is read from the header, the document or the bytes', () => {
+  assert.equal(encoding.charsetFromHeader('text/xml; charset=windows-1251'), 'windows-1251');
+  assert.equal(encoding.charsetFromHeader('application/rss+xml;charset="UTF-8"'), 'UTF-8');
+  assert.equal(encoding.charsetFromHeader('application/rss+xml'), null, 'no claim');
+
+  assert.equal(
+    encoding.charsetFromMarkup('<?xml version="1.0" encoding="windows-1251"?>'),
+    'windows-1251',
+  );
+  assert.equal(encoding.charsetFromMarkup('<meta charset="utf-8">'), 'utf-8');
+  assert.equal(
+    encoding.charsetFromMarkup('<meta http-equiv="Content-Type" content="text/html; charset=cp1251">'),
+    'cp1251',
+  );
+  assert.equal(encoding.charsetFromMarkup('<rss version="2.0">'), null, 'a document says nothing');
+
+  assert.equal(encoding.normalizeCharset('Windows-1251'), 'windows-1251');
+  assert.equal(encoding.normalizeCharset('cp1251'), 'windows-1251', 'the spelling PHP writes');
+  assert.equal(encoding.normalizeCharset('KOI8'), 'koi8-r');
+  assert.equal(encoding.normalizeCharset('  "utf8"  '), 'utf-8');
+  assert.equal(encoding.normalizeCharset('windows-9999'), null, 'no decoder for that name');
+});
+
+test('a Windows-1251 feed is stored as readable text, not as the bytes it arrived in', () => {
+  assert.equal(encoding.encodingFromBom(CP1251_FEED), null, 'the sample feed opens with `<?xml`, not with a mark');
+  assert.equal(encoding.decodeStrict(CP1251_FEED, 'utf-8'), null, 'its bytes are not valid UTF-8');
+
+  const feed = encoding.decodeResponseBytes(CP1251_FEED, 'text/xml; charset=windows-1251');
+
+  assert.equal(feed.encoding, 'windows-1251');
+  assert.equal(feed.declared, 'windows-1251');
+  assert.ok(feed.text.includes(CYRILLIC_HEADLINE), 'the headline of the sample feed reads in Cyrillic');
+  assert.ok(!feed.text.includes('\ufffd'), 'nothing was lost to a replacement character');
+
+  // This is the read the reader used to do: the same bytes taken for UTF-8.
+  const misread = new TextDecoder().decode(CP1251_FEED);
+  assert.ok(!misread.includes(CYRILLIC_HEADLINE), 'the sample feed really is the bug it describes');
+});
+
+test('an undeclared Windows-1251 feed is recognised by what its bytes read as', () => {
+  const bytes = reFeed(CP1251_FEED, null);
+  const feed = encoding.decodeResponseBytes(bytes, 'text/xml');
+
+  assert.equal(feed.declared, null, 'neither the server nor the document says anything');
+  assert.equal(feed.encoding, encoding.GUESSED_ENCODING, 'the Cyrillic in the body settles it');
+  assert.ok(feed.text.includes(CYRILLIC_HEADLINE), 'and the headline is still read');
+});
+
+test('a feed in another Cyrillic encoding keeps the encoding it declared', () => {
+  // Cyrillic letters spelled the way KOI8-R spells them: not UTF-8, not Windows-1251.
+  const koi8 = new Uint8Array([0xF0, 0xF2, 0xC9, 0xE2, 0xA5, 0xD4, 0x20, 0xEC, 0xC9, 0xF2]);
+  const declared = new TextDecoder('koi8-r').decode(koi8);
+  const feed = encoding.decodeResponseBytes(feedDeclaredAs('koi8-r', koi8), 'text/xml; charset=koi8-r');
+
+  assert.ok(declared.length > 0 && !declared.includes('\ufffd'), 'the bytes are read whole by KOI8-R');
+  assert.match(declared, /[Ѐ-ӿ]/, 'and what comes out is Cyrillic');
+  assert.equal(feed.encoding, 'koi8-r', 'the guess is only for a feed that declares nothing');
+  assert.ok(feed.text.includes(declared), 'the title is read in the encoding it names');
+  assert.ok(!feed.text.includes('\ufffd'), 'nothing was lost on the way');
+});
+
+test('what a feed claims is believed only while the bytes agree with it', () => {
+  // A feed that insists on UTF-8 over bytes that are Windows-1251 gets overruled.
+  const lying = reFeed(CP1251_FEED, '<?xml version="1.0" encoding="utf-8"?>');
+  const feed = encoding.decodeResponseBytes(lying, 'text/xml; charset=utf-8');
+
+  assert.equal(feed.declared, 'utf-8', 'the claim it made is still reported');
+  assert.equal(feed.encoding, 'windows-1251', 'the bytes win');
+  assert.ok(feed.text.includes(CYRILLIC_HEADLINE), 'so the headline reads');
+
+  // The other way round: UTF-8 bytes claiming Windows-1251 stay UTF-8.
+  const utf8 = new Uint8Array(Buffer.from(feed.text, 'utf8'));
+  const forCyrillic = encoding.decodeResponseBytes(utf8, 'text/xml; charset=windows-1251');
+
+  assert.equal(forCyrillic.declared, 'windows-1251');
+  assert.equal(forCyrillic.encoding, 'utf-8', 'UTF-8 that reads whole is not a single-byte feed');
+  assert.ok(forCyrillic.text.includes(CYRILLIC_HEADLINE), 'read the way it was written');
+
+  // A byte-order mark outranks a header written wrong over the same bytes.
+  const marked = encoding.decodeResponseBytes(
+    new Uint8Array([...Buffer.from('\ufeff', 'utf8'), ...utf8]),
+    'text/xml; charset=windows-1251',
+  );
+
+  assert.equal(marked.encoding, 'utf-8', 'the mark is the encoding written into the file');
+  assert.ok(!marked.text.startsWith('\ufeff'), 'the mark is not left in the text');
+});
+
+test('bytes that are neither UTF-8 nor Cyrillic are not invented as Windows-1251', () => {
+  const latin1 = new Uint8Array(
+    Buffer.from('Café naïve résumé — année 1881, Straße, Göteborg', 'latin1'),
+  );
+  const read = encoding.decodeResponseBytes(latin1, 'text/plain');
+
+  assert.equal(read.encoding, 'utf-8', 'an accented Latin text is not guessed as Cyrillic');
+  assert.ok(!read.text.includes('Ñ'), 'no Cyrillic was invented out of the accents');
+
+  assert.equal(
+    encoding.decodeResponseBytes(latin1, 'text/plain; charset=windows-1251').encoding,
+    'windows-1251',
+    'a charset the header really declared is honoured',
+  );
+});
+
+test('a body no decoder accounts for is kept as far as UTF-8 carries it', () => {
+  // `<title>` + a byte that begins a UTF-8 sequence but is followed by ASCII: no decoder claims it.
+  const broken = new Uint8Array(Buffer.from('<title>\u00c3(</title>', 'latin1'));
+  const read = encoding.decodeResponseBytes(broken, 'text/xml');
+
+  assert.equal(read.encoding, 'utf-8');
+  assert.ok(read.text.includes('<title>'), 'the markup survives');
+  assert.ok(read.text.includes('\ufffd'), 'and the bytes that cannot be read are shown as such');
+});
+
+test('the XML declaration states the encoding the text really arrived in', () => {
+  const feed = encoding.decodeResponseBytes(CP1251_FEED, 'text/xml');
+  const fixed = encoding.retargetXmlDeclaration(feed.text, 'utf-8');
+
+  assert.match(fixed, /^<\?xml version="1\.0" encoding="utf-8"\?>/, 'the declaration follows the decode');
+  assert.ok(!/^<\?xml[^>]*windows-1251/.test(fixed), 'the encoding the text is no longer in is gone');
+
+  assert.equal(
+    encoding.retargetXmlDeclaration('<?xml version="1.0" encoding=" windows-1251" ?><rss/>', 'utf-8'),
+    '<?xml version="1.0" encoding="utf-8" ?><rss/>',
+    'only the encoding is rewritten, the rest of the document is left alone',
+  );
+  assert.equal(
+    encoding.retargetXmlDeclaration('<rss version="2.0"><channel/></rss>', 'utf-8'),
+    '<rss version="2.0"><channel/></rss>',
+    'a document that declares nothing is returned as it is',
+  );
 });
 
 /* ---------------------------- language ---------------------------- */

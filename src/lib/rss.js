@@ -4,6 +4,7 @@
 // enough for the response to be readable (no CORS problem).
 
 import { absoluteUrl, cleanTitle, isValidHttpUrl } from './util.js';
+import { decodeResponseBytes, retargetXmlDeclaration } from './encoding.js';
 
 const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5';
 const MAX_ENTRIES = 50;
@@ -51,8 +52,16 @@ export async function fetchFeed(url) {
     });
   }
 
-  // Feeds come as UTF-8 here, so `response.text()` can decode the bytes directly.
-  const text = await response.text();
+  // The body is read as bytes and decoded by the encoding the feed actually uses (see
+  // `lib/encoding.js`): `response.text()` reads UTF-8, which turns a Windows-1251 feed into
+  // unreadable headlines before they ever reach storage.
+  const { text, encoding, declared } = decodeResponseBytes(
+    new Uint8Array(await response.arrayBuffer()),
+    response.headers.get('content-type') ?? '',
+  );
+  if (declared && declared !== encoding) {
+    console.warn(`feed declared ${declared}, its bytes read as ${encoding}: ${response.url || url}`);
+  }
   if (!text.trim()) throw new FeedError('feed returned an empty response', { code: 'feedEmpty' });
 
   return parseFeed(text, response.url || url);
@@ -95,7 +104,9 @@ function entryLink(entry) {
  * Fields of entries reflect storage record: { feedTitle: string, entries: Array<{ title, description, pubDate, link }> }.
  */
 export function parseFeed(xml, baseUrl) {
-  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  // The text is already decoded by `lib/encoding.js`; the declaration inside it must not invite an
+  // XML processor to decode the same bytes a second time, in an encoding they are no longer in.
+  const doc = new DOMParser().parseFromString(retargetXmlDeclaration(xml, 'utf-8'), 'application/xml');
 
   if (doc.querySelector('parsererror')) {
     throw new FeedError('not valid feed XML', { code: 'feedNotXml' });
