@@ -112,6 +112,11 @@
   color: var(--danger);
 }
 
+/* The field holds a value the store does not have yet; «Записать» is the way to commit it. */
+.status.pending {
+  color: var(--text-muted);
+}
+
 @media (max-width: 560px) {
   .row {
     align-items: stretch;
