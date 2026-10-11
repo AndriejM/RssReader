@@ -1,10 +1,16 @@
 // Configuration screen: add / edit / delete feeds and their timeouts.
 
+import { describeError } from './lib/errors.js';
+import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import * as store from './lib/storage.js';
 import { GLOBAL_SETTINGS_PAGE, READER_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
 import { humanDuration, newId, normalizeFeed } from './lib/util.js';
+
+/* Synchronous first pass: the cached language (or the browser language) is known before
+ * `chrome.storage` resolves, so the markup below is not left in Russian while we wait. */
+applyI18n();
 
 const els = {
   cards: document.getElementById('feed-cards'),
@@ -69,17 +75,21 @@ function buildCard(feed, { draft }) {
   const grid = document.createElement('div');
   grid.className = 'grid';
 
-  const name = field('name — название ленты', 'text', feed.name, { title: 'Название ленты' });
-  const rssLink = field('rss_link — ссылка для считывания новостей', 'text', feed.rss_link, { wide: true });
-  const delay = field('delay_timeout — период загрузки заголовков', 'number', feed.delay_timeout, {
-    min: '1',
-    step: '1',
-    unit: `мин (сейчас ${humanDuration(feed.delay_timeout)})`,
+  const labels = unitLabels();
+
+  const name = field(t('feeds.field.name'), 'text', feed.name, {
+    title: t('feeds.field.namePlaceholder'),
   });
-  const clean = field('clean_timeout — время хранения новости', 'number', feed.clean_timeout, {
+  const rssLink = field(t('feeds.field.rss'), 'text', feed.rss_link, { wide: true });
+  const delay = field(t('feeds.field.delay'), 'number', feed.delay_timeout, {
     min: '1',
     step: '1',
-    unit: `мин (сейчас ${humanDuration(feed.clean_timeout)})`,
+    unit: t('feeds.field.delayUnit', { duration: humanDuration(feed.delay_timeout, labels) }),
+  });
+  const clean = field(t('feeds.field.clean'), 'number', feed.clean_timeout, {
+    min: '1',
+    step: '1',
+    unit: t('feeds.field.cleanUnit', { duration: humanDuration(feed.clean_timeout, labels) }),
   });
 
   grid.append(name.wrap, rssLink.wrap, delay.wrap, clean.wrap);
@@ -90,22 +100,22 @@ function buildCard(feed, { draft }) {
   const save = document.createElement('button');
   save.type = 'button';
   save.className = 'primary';
-  save.textContent = draft ? 'Добавить ленту' : 'Сохранить';
+  save.textContent = draft ? t('feeds.addCard') : t('feeds.save');
 
   const refresh = document.createElement('button');
   refresh.type = 'button';
-  refresh.textContent = 'Загрузить сейчас';
+  refresh.textContent = t('feeds.loadNow');
   refresh.disabled = draft;
 
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'danger';
-  remove.textContent = draft ? 'Отменить' : 'Удалить';
+  remove.textContent = draft ? t('feeds.cancel') : t('feeds.delete');
 
   if (draft) {
     const note = document.createElement('span');
     note.className = 'muted';
-    note.textContent = 'Новая лента — сохраните её, чтобы включить автоматическую загрузку';
+    note.textContent = t('feeds.draftNote');
     actions.append(save, remove, note);
   } else {
     actions.append(save, refresh, remove);
@@ -152,11 +162,17 @@ function readCard(cardRecord) {
 
 async function saveCard(cardRecord) {
   const values = readCard(cardRecord);
-  const { feed, errors } = normalizeFeed(values);
+  const { feed, errors } = normalizeFeed(values, {
+    name: t('feeds.error.name'),
+    nameTooLong: t('feeds.error.nameTooLong'),
+    rss_link: t('feeds.error.link'),
+    delay_timeout: t('feeds.error.delay'),
+    clean_timeout: t('feeds.error.clean'),
+  });
   showFieldErrors(cardRecord, errors);
 
   if (Object.keys(errors).length > 0) {
-    setStatus(cardRecord, 'Проверьте поля', 'error');
+    setStatus(cardRecord, t('feeds.status.checkFields'), 'error');
     return;
   }
 
@@ -164,7 +180,7 @@ async function saveCard(cardRecord) {
   await store.upsertFeed(feed);
 
   if (cardRecord.draft) state.drafts.delete(cardRecord.feed);
-  setStatus(cardRecord, 'Сохранено', 'ok');
+  setStatus(cardRecord, t('feeds.status.saved'), 'ok');
 
   await notifyBackground();
   await refreshCounts();
@@ -177,7 +193,7 @@ async function saveCard(cardRecord) {
 async function removeCard(cardRecord) {
   if (!cardRecord.draft) {
     const name = cardRecord.feed.name || cardRecord.feed.rss_link;
-    if (!window.confirm(`Удалить ленту «${name}» вместе с её заголовками?`)) return;
+    if (!window.confirm(t('feeds.confirmDelete', { name }))) return;
     await store.deleteFeed(cardRecord.feed.id);
   }
   state.drafts.delete(cardRecord.feed);
@@ -187,24 +203,32 @@ async function removeCard(cardRecord) {
 
 async function refreshCard(cardRecord) {
   if (!cardRecord.feed.id) return;
-  setStatus(cardRecord, 'Загрузка…');
+  setStatus(cardRecord, t('common.loading'));
   try {
     const response = await chrome.runtime.sendMessage({
       type: MSG_REFRESH_FEED,
       feedId: cardRecord.feed.id,
     });
     if (response?.ok) {
-      const read = response.skipped > 0 ? `, уже прочитано: ${response.skipped}` : '';
       setStatus(
         cardRecord,
-        `Новых: ${response.added}, считано: ${response.seen}${read}`,
+        t('feeds.result', {
+          added: response.added,
+          seen: response.seen,
+          read:
+            response.skipped > 0 ? t('feeds.resultRead', { skipped: response.skipped }) : '',
+        }),
         response.added > 0 ? 'ok' : '',
       );
     } else {
-      setStatus(cardRecord, response?.error ?? 'Ошибка загрузки', 'error');
+      setStatus(
+        cardRecord,
+        response?.error ? describeError(response.error) : t('feeds.status.loadError'),
+        'error',
+      );
     }
   } catch (error) {
-    setStatus(cardRecord, String(error?.message ?? error), 'error');
+    setStatus(cardRecord, describeError(error), 'error');
   }
   await refreshCounts();
 }
@@ -214,7 +238,7 @@ async function notifyBackground() {
   try {
     await chrome.runtime.sendMessage({ type: MSG_FEEDS_CHANGED });
   } catch (error) {
-    console.warn('Не удалось сообщить фоновому рабочему об изменениях:', error?.message ?? error);
+    console.warn('could not tell the background worker about the changes:', error?.message ?? error);
   }
 }
 
@@ -228,7 +252,7 @@ async function refreshCounts() {
   for (const cardRecord of currentCards()) {
     if (!cardRecord.feed.id) continue;
     const count = counts.get(cardRecord.feed.id) ?? 0;
-    cardRecord.stats.textContent = `в хранилище: ${count}`;
+    cardRecord.stats.textContent = t('feeds.stats', { count });
   }
 }
 
@@ -275,7 +299,24 @@ void wireThemeButton(els.theme);
 /** Counts change from the background worker; only the stats line is refreshed so that
  *  whatever the user is typing in a card is not thrown away. */
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.items) void refreshCounts();
+  if (area !== 'local') return;
+
+  // A language saved on the settings screen has to reach this page without a reload: adopt it,
+  // re-apply the dictionary to the static markup, then rebuild the cards — their labels, units
+  // and buttons were built from the old language and do not follow `applyI18n()`.
+  const language = changes.settings?.newValue?.language;
+  if (language && language !== currentLanguage()) {
+    adoptLanguage(language);
+    applyI18n();
+    void render();
+    return;
+  }
+
+  if (changes.items) void refreshCounts();
 });
+
+// The stored language wins; on first run there is none and the browser language is used.
+adoptLanguage(await store.getLanguage());
+applyI18n();
 
 await render();

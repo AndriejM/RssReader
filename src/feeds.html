@@ -2,8 +2,9 @@
 <html lang="ru" data-theme="dark">
 <head>
   <meta charset="utf-8" />
-  <title>Настройки RSS лент</title>
+  <title data-i18n="feeds.title"></title>
   <script src="theme-boot.js"></script>
+  <script type="module" src="lib/i18n-boot.js"></script>
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/feeds.css" />
   <script type="module" src="feeds.js"></script>
@@ -11,23 +12,19 @@
 <body>
   <div class="page">
     <header class="page-header">
-      <h1>Настройки RSS лент</h1>
+      <h1 data-i18n="feeds.title"></h1>
       <div class="actions">
-        <button id="btn-add" class="primary" type="button">Добавить ленту</button>
-        <button id="btn-settings" type="button">Глобальные настройки</button>
-        <button id="btn-reader" type="button">Открыть читалку</button>
-        <button id="btn-theme" type="button">Светлая тема</button>
+        <button id="btn-add" class="primary" type="button" data-i18n="feeds.add"></button>
+        <button id="btn-settings" type="button" data-i18n="feeds.global"></button>
+        <button id="btn-reader" type="button" data-i18n="feeds.reader"></button>
+        <button id="btn-theme" type="button"></button>
       </div>
     </header>
 
-    <p class="hint">
-      delay_timeout — период автоматической загрузки заголовков (минуты, Chrome не позволяет реже
-      1 минуты). clean_timeout — сколько новость хранится в localstorage после загрузки
-      (минуты), по истечении этого времени она удаляется автоматически.
-    </p>
+    <p class="hint" data-i18n="feeds.hint"></p>
 
     <section id="feed-cards"></section>
-    <p class="empty muted" id="feeds-empty">Лент нет. Нажмите «Добавить ленту».</p>
+    <p class="empty muted" id="feeds-empty" data-i18n="feeds.empty"></p>
   </div>
 </body>
 </html>

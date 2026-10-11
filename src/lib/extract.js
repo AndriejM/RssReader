@@ -34,10 +34,14 @@ function safeExternalUrl(value) {
 }
 
 export class ArticleError extends Error {
-  constructor(message, { status, cause } = {}) {
+  constructor(message, { status, code, params, cause } = {}) {
     super(message);
     this.name = 'ArticleError';
     this.status = status;
+    // Same shape as `rss.FeedError`: the page renders `errors.<code>` in its own language, while
+    // `message` stays a technical description for the console.
+    this.code = code;
+    this.params = params;
     this.cause = cause;
   }
 }
@@ -53,21 +57,32 @@ export async function fetchArticle(url) {
       headers: { Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' },
     });
   } catch (cause) {
-    throw new ArticleError(`Не удалось загрузить страницу: ${cause?.message ?? cause}`, { cause });
+    const reason = cause?.message ?? String(cause);
+    throw new ArticleError(`failed to load the page: ${reason}`, {
+      code: 'articleFetch',
+      params: { cause: reason },
+      cause,
+    });
   }
 
   if (!response.ok) {
-    throw new ArticleError(`Страница ответила ${response.status} ${response.statusText}`);
+    throw new ArticleError(`page replied ${response.status}`, {
+      code: 'articleStatus',
+      params: { status: response.status, statusText: response.statusText },
+    });
   }
 
   const type = response.headers.get('content-type') ?? '';
   if (type && !/html|xml|text/i.test(type)) {
-    throw new ArticleError(`Неподдерживаемый тип содержимого: ${type}`);
+    throw new ArticleError(`unsupported content type: ${type}`, {
+      code: 'articleType',
+      params: { type },
+    });
   }
 
   const html = await response.text();
   const doc = new DOMParser().parseFromString(html, 'text/html');
-  if (!doc.body) throw new ArticleError('На странице нет содержимого');
+  if (!doc.body) throw new ArticleError('the page has no content', { code: 'articleEmpty' });
 
   return {
     url: response.url || url,

@@ -4,10 +4,23 @@
 
 const OFFSCREEN_URL = 'src/offscreen.html';
 const REASONS = ['AUDIO_PLAYBACK', 'DOM_PARSER'];
+// Chrome shows this justification in its own extensions UI, so it does not follow the interface
+// language of the reader.
 const JUSTIFICATION =
-  'Разбирает XML-ответы лент и проигрывает короткий сигнал: у service worker нет доступа к DOM.';
+  'Parses feed XML responses and plays a short signal: the service worker has no DOM access.';
 
 let creationPromise = null;
+
+/**
+ * Ошибка с i18n-кодом: `code` указывает на ключ `errors.<code>`, `params` заполняет его
+ * placeholders, а `message` остаётся техническим — его показывает только консоль.
+ */
+function codedError(code, message, params) {
+  const error = new Error(message);
+  error.code = code;
+  error.params = params;
+  return error;
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,7 +55,7 @@ export async function ensureOffscreenDocument() {
         justification: JUSTIFICATION,
       })
       .catch((error) => {
-        console.warn('Не удалось создать offscreen документ:', error?.message ?? error);
+        console.warn('could not create the offscreen document:', error?.message ?? error);
         return null;
       })
       .finally(() => {
@@ -63,7 +76,9 @@ export async function ensureOffscreenDocument() {
  */
 export async function requestOffscreen(message, { attempts = 2, retryDelay = 150 } = {}) {
   if (!(await ensureOffscreenDocument())) {
-    throw new Error('не удалось открыть служебную страницу расширения');
+    // `code` points at an `errors.<code>` key so the page that shows the failure renders it in the
+    // reader's language, exactly like `rss.FeedError` does.
+    throw codedError('offscreenUnavailable', 'offscreen document is unavailable');
   }
 
   let lastError = null;
@@ -86,7 +101,11 @@ export async function requestOffscreen(message, { attempts = 2, retryDelay = 150
     if (attempt < attempts) await sleep(retryDelay);
   }
 
-  throw new Error(`служебная страница расширения не ответила${lastError ? `: ${lastError}` : ''}`);
+  throw codedError(
+    'offscreenNoReply',
+    `offscreen page did not answer${lastError ? `: ${lastError}` : ''}`,
+    { cause: lastError ? `: ${lastError}` : '' },
+  );
 }
 
 export async function closeOffscreenDocument() {

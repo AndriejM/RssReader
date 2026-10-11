@@ -2,7 +2,7 @@
 // feed XML is parsed and where audio is allowed to play.
 
 import { MSG_FETCH_FEED, MSG_PLAY_SOUND } from './lib/messages.js';
-import { fetchFeed, FeedError } from './lib/rss.js';
+import { fetchFeed } from './lib/rss.js';
 
 /** Путь от корня расширения к файлу-сигналу (src/media/ceres.mp3). */
 const DEFAULT_SOUND_FILE = 'src/media/ceres.mp3';
@@ -20,7 +20,7 @@ function getAlertAudio(src) {
   player.preload = 'auto';
   player.dataset.src = src;
   player.addEventListener('error', () => {
-    console.warn('Не удалось загрузить файл звука:', src);
+    console.warn('could not load the sound file:', src);
     if (alertAudio === player) alertAudio = null;
   });
   alertAudio = player;
@@ -49,7 +49,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         await playSoundFile(message.src ?? DEFAULT_SOUND_FILE);
         sendResponse({ ok: true });
       } catch (error) {
-        console.warn('Не удалось воспроизвести звук:', error?.message ?? error);
+        console.warn('could not play the sound:', error?.message ?? error);
         sendResponse({ ok: false });
       }
     })();
@@ -62,8 +62,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const result = await fetchFeed(message.url);
         sendResponse({ ok: true, result });
       } catch (error) {
-        const reason = error instanceof FeedError ? error.message : error?.message ?? error;
-        sendResponse({ ok: false, error: reason });
+        // A feed failure carries an i18n `code`/`params`: hand them to the caller so the page can
+        // render the failure in its own language; otherwise fall back to the raw message.
+        const payload = error?.code
+          ? { code: error.code, params: error.params, message: error.message }
+          : error?.message ?? String(error);
+        sendResponse({ ok: false, error: payload });
       }
     })();
     return true; // keep the message channel open for the async reply

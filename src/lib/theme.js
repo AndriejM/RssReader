@@ -2,6 +2,7 @@
 // chrome.storage.local is the source of truth; localStorage only caches the last value so a
 // page can paint the right theme synchronously before the async read resolves.
 
+import { t } from './i18n.js';
 import { getTheme, setTheme } from './storage.js';
 
 const THEME_CACHE_KEY = 'rss-reader:theme';
@@ -50,7 +51,12 @@ export async function wireThemeButton(button) {
   const iconOnly = button.classList.contains('theme-toggle');
 
   const render = (theme) => {
-    const label = theme === 'light' ? 'Тёмная тема' : 'Светлая тема';
+    // Метка зависит от темы, а язык — от словаря: ключ кладём в data-i18n-title, чтобы
+    // `applyI18n()` переклеил и её, когда интерфейс сменит язык.
+    const key = theme === 'light' ? 'common.theme.dark' : 'common.theme.light';
+    const label = t(key);
+    button.dataset.i18nTitle = key;
+    button.dataset.i18nAria = key;
     button.title = label;
     button.setAttribute('aria-label', label);
     button.setAttribute('aria-pressed', String(theme === 'light'));

@@ -1,0 +1,10 @@
+{
+  "extensionName": {
+    "message": "RSS Reader",
+    "description": "Extension name shown in chrome://extensions and in the Web Store"
+  },
+  "extensionDescription": {
+    "message": "Read RSS news: feed settings, global settings (read_ttl_days, the alert signal, the interface language), three-panel reader, automatic loading and cleanup of headlines",
+    "description": "Short description of what the extension does"
+  }
+}

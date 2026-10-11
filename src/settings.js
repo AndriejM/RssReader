@@ -1,12 +1,13 @@
 // Global settings screen. It holds the horizon for «read» markers — how many days a deleted
-// headline stays out of the list — and the mp3 signal played when an automatic fetch brings news.
-// Neither field writes on its own: both go to storage only when «Записать» is pressed, next to a
-// button that wipes the whole read list.
+// headline stays out of the list — the mp3 signal played when an automatic fetch brings news and
+// the interface language. None of the fields writes on its own: all of them go to storage only
+// when «Записать» is pressed, next to a button that wipes the whole read list.
 //
 // The values are persisted in the shared settings store (chrome.storage.local), the same place the
 // theme lives: the background worker reads them when it prunes read markers and when it plays the
 // alert, so a plain per-page window.localStorage could not carry them.
 
+import { LANGUAGE_NAMES, adoptLanguage, applyI18n, currentLanguage, t } from './lib/i18n.js';
 import * as store from './lib/storage.js';
 import { READER_PAGE, SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
@@ -24,31 +25,27 @@ const els = {
   soundStats: document.getElementById('sound-stats'),
   playSound: document.getElementById('btn-sound-play'),
 
+  language: document.getElementById('language-file'),
+
   feeds: document.getElementById('btn-feeds'),
   reader: document.getElementById('btn-reader'),
   theme: document.getElementById('btn-theme'),
 };
 
+// Static captions are drawn before the storage read resolves: the cached (or detected) language
+// already knows which of them this page should show.
+applyI18n();
+
 const state = {
   ttlDays: READ_TTL_DAYS,
   readCount: 0,
   soundChoice: store.DEFAULT_SOUND_FILE,
+  language: currentLanguage(),
   /** A field holds a value the store does not have yet; only «Записать» commits it. */
   ttlPending: false,
   soundPending: false,
+  languagePending: false,
 };
-
-/**
- * Options for the sound combobox: «Без звука» first — it silences the alert — then every signal
- * bundled in `src/media`, named by its file so the choice is recognisable.
- */
-const SOUND_OPTIONS = [
-  { value: store.SOUND_NONE, label: 'Без звука' },
-  ...store.SOUND_FILES.map((file) => ({
-    value: file,
-    label: file.slice('src/media/'.length, -'.mp3'.length),
-  })),
-];
 
 function setStatus(message, kind = '') {
   els.status.textContent = message;
@@ -57,13 +54,14 @@ function setStatus(message, kind = '') {
 
 /** Years are easier to read than a four-digit day count. */
 function describeTtl(days) {
-  if (days < 365) return `${days} дн`;
-  return `${days} дн (${Math.round((days / 365) * 10) / 10} г)`;
+  if (days < 365) return t('settings.ttlDays', { days });
+  return t('settings.ttlYears', { days, years: Math.round((days / 365) * 10) / 10 });
 }
 
 /** How the stored sound choice reads to a person. */
 function describeSound(choice) {
-  return choice === store.SOUND_NONE ? 'без звука' : choice.slice('src/media/'.length);
+  if (choice === store.SOUND_NONE) return t('settings.soundDescNone');
+  return choice.slice('src/media/'.length);
 }
 
 async function renderReadStats() {
@@ -72,8 +70,8 @@ async function renderReadStats() {
   state.readCount = read.length;
 
   els.readStats.textContent = state.readCount
-    ? `прочитанных меток: ${state.readCount} · горят через ${describeTtl(state.ttlDays)}`
-    : 'прочитанных меток нет';
+    ? t('settings.readStats', { count: state.readCount, ttl: describeTtl(state.ttlDays) })
+    : t('settings.readStats.none');
 }
 
 /** Reflect the stored horizon in the field and clear any leftover error. */
@@ -82,8 +80,8 @@ async function renderTtl() {
   els.days.min = String(MIN_READ_TTL_DAYS);
   els.days.max = String(MAX_READ_TTL_DAYS);
 
-  // The settings record changes for other reasons too (the theme and the sound live in it), so an
-  // edit the user has not written yet must survive them.
+  // The settings record changes for other reasons too (the theme, the sound and the language live
+  // in it), so an edit the user has not written yet must survive them.
   if (!state.ttlPending) {
     els.days.value = String(state.ttlDays);
     els.daysError.textContent = '';
@@ -95,23 +93,30 @@ async function renderSound() {
   state.soundChoice = await store.getSoundChoice();
   if (!state.soundPending) els.sound.value = state.soundChoice;
 
-  els.soundStats.textContent = `сейчас играет: ${describeSound(state.soundChoice)}`;
+  els.soundStats.textContent = t('settings.soundStats', { name: describeSound(state.soundChoice) });
+}
+
+/** Show the stored language in the combobox. */
+async function renderLanguage() {
+  state.language = await store.getLanguage();
+  if (!state.languagePending) els.language.value = state.language;
 }
 
 /**
- * Reflect the stored pair in the fields, then judge them together. Pending must not be judged
+ * Reflect the stored fields in the form, then judge them together. Pending must not be judged
  * while a field still shows the value it had before its own render: an empty days field would
  * otherwise look like an unwritten edit and block `renderTtl` from filling it.
  */
 async function refreshFields() {
   await renderTtl();
   await renderSound();
+  await renderLanguage();
   markPending();
 }
 
 /**
- * The field asks for a horizon the store does not have yet. A malformed value counts as pending
- * too, so pressing «Записать» explains the problem inline instead of looking inert.
+ * A field asks for a value the store does not have yet. A malformed value counts as pending too,
+ * so pressing «Записать» explains the problem inline instead of looking inert.
  */
 function ttlIsPending() {
   if (els.days.value.trim() === '' || !els.days.checkValidity()) return true;
@@ -122,22 +127,25 @@ function soundIsPending() {
   return els.sound.value !== state.soundChoice;
 }
 
+function languageIsPending() {
+  return els.language.value !== state.language;
+}
+
 /**
- * Track both fields against the store: «Записать» is enabled only when at least one of them has
+ * Track every field against the store: «Записать» is enabled only when at least one of them has
  * something to write.
  */
 function markPending() {
   state.ttlPending = ttlIsPending();
   state.soundPending = soundIsPending();
-  const dirty = state.ttlPending || state.soundPending;
+  state.languagePending = languageIsPending();
+  const dirty = state.ttlPending || state.soundPending || state.languagePending;
 
   els.save.disabled = !dirty;
-  els.save.title = dirty
-    ? 'Записать read_ttl_days и звук в хранилище'
-    : 'Оба поля уже записаны';
+  els.save.title = dirty ? t('settings.save.tooltipDirty') : t('settings.save.tooltipClean');
 
   if (dirty) {
-    if (!els.daysError.textContent) setStatus('Изменения не записаны', 'pending');
+    if (!els.daysError.textContent) setStatus(t('settings.status.pending'), 'pending');
     return;
   }
   // Only our own hint goes away: a «Записано» confirmation must survive the storage event that
@@ -148,8 +156,8 @@ function markPending() {
 /**
  * A raw days value is either an accepted whole number of days or a rejection we surface inline.
  * Storing clamps to the same bounds the input advertises, so an accepted value round-trips exactly.
- * The sound is written by the same press of «Записать»: only a bundled signal or «Без звука»
- * reach storage, and the worker picks the new file up on its very next alert.
+ * The signal and the language are written by the same press of «Записать»: only a bundled sound or
+ * «Без звука» reach storage, and the worker picks the new file up on its very next alert.
  */
 async function saveFields() {
   const parsed = Number(els.days.value);
@@ -160,9 +168,11 @@ async function saveFields() {
     parsed < MIN_READ_TTL_DAYS ||
     parsed > MAX_READ_TTL_DAYS
   ) {
-    els.daysError.textContent =
-      `Целое число от ${MIN_READ_TTL_DAYS} до ${MAX_READ_TTL_DAYS} дней`;
-    setStatus('Не записано', 'error');
+    els.daysError.textContent = t('settings.ttlError', {
+      min: MIN_READ_TTL_DAYS,
+      max: MAX_READ_TTL_DAYS,
+    });
+    setStatus(t('settings.status.error'), 'error');
     state.ttlPending = true;
     els.save.disabled = false;
     return;
@@ -173,29 +183,42 @@ async function saveFields() {
   if (parsed !== state.ttlDays) {
     const saved = await store.setReadTtlDays(parsed);
     state.ttlDays = saved;
-    parts.push(`горят через ${describeTtl(saved)}`);
+    parts.push(t('settings.savedTtl', { ttl: describeTtl(saved) }));
   }
   if (els.sound.value !== state.soundChoice) {
     const saved = await store.setSoundChoice(els.sound.value);
     state.soundChoice = saved;
     els.sound.value = saved;
-    parts.push(`звук: ${describeSound(saved)}`);
+    parts.push(t('settings.savedSound', { name: describeSound(saved) }));
+  }
+  if (els.language.value !== state.language) {
+    const saved = await store.setLanguage(els.language.value);
+    state.language = saved;
+    els.language.value = saved;
+    parts.push(t('settings.savedLanguage', { name: LANGUAGE_NAMES[saved] }));
+    // The language is the one setting this screen draws with: the whole page follows the write.
+    applyI18n();
+    fillSoundOptions();
+    fillLanguageOptions();
   }
 
   if (parts.length === 0) {
-    setStatus('Нечего записывать', 'ok');
+    setStatus(t('settings.status.nothing'), 'ok');
     return;
   }
 
   state.ttlPending = false;
   state.soundPending = false;
-  els.save.disabled = true;
-  setStatus(`Записано: ${parts.join(' · ')}`, 'ok');
+  state.languagePending = false;
+  markPending();
+  setStatus(t('settings.status.saved', { parts: parts.join(' · ') }), 'ok');
 
   // The worker watches the settings key and prunes the markers the new horizon has already
   // outrun; the storage event also refreshes this screen's own counters.
   await renderReadStats();
-  els.soundStats.textContent = `сейчас играет: ${describeSound(state.soundChoice)}`;
+  els.soundStats.textContent = t('settings.soundStats', {
+    name: describeSound(state.soundChoice),
+  });
 }
 
 /**
@@ -203,8 +226,8 @@ async function saveFields() {
  * value would drop it quietly — ask before doing that.
  */
 function leavePage(url) {
-  const dirty = state.ttlPending || state.soundPending;
-  if (dirty && !window.confirm('Изменения не записаны. Уйти без записи?')) {
+  const dirty = state.ttlPending || state.soundPending || state.languagePending;
+  if (dirty && !window.confirm(t('settings.confirmLeave'))) {
     return;
   }
   window.location.assign(url);
@@ -218,7 +241,7 @@ function leavePage(url) {
 function playPreview() {
   const choice = els.sound.value;
   if (choice === store.SOUND_NONE) {
-    setStatus('Без звука — играть нечего', 'pending');
+    setStatus(t('settings.status.nothingToPlay'), 'pending');
     return;
   }
 
@@ -232,7 +255,7 @@ function playPreview() {
   };
   const fail = () => {
     stop();
-    setStatus('Не удалось прослушать сигнал', 'error');
+    setStatus(t('settings.status.playError'), 'error');
   };
 
   audio.addEventListener('ended', stop);
@@ -242,10 +265,10 @@ function playPreview() {
 
 async function clearRead() {
   if (state.readCount === 0) {
-    setStatus('Список прочитанных уже пуст', 'ok');
+    setStatus(t('settings.status.emptyRead'), 'ok');
     return;
   }
-  if (!window.confirm('Забыть все прочитанные метки? Удалённые новости могут вернуться в ленты.')) {
+  if (!window.confirm(t('settings.confirmClear'))) {
     return;
   }
 
@@ -253,7 +276,7 @@ async function clearRead() {
   try {
     const removed = await store.clearRead();
     await renderReadStats();
-    setStatus(`Забыто прочитанных: ${removed}`, 'ok');
+    setStatus(t('settings.status.cleared', { count: removed }), 'ok');
   } finally {
     els.clearRead.disabled = false;
   }
@@ -261,6 +284,7 @@ async function clearRead() {
 
 els.days.addEventListener('input', markPending);
 els.sound.addEventListener('change', markPending);
+els.language.addEventListener('change', markPending);
 els.playSound.addEventListener('click', playPreview);
 els.save.addEventListener('click', () => void saveFields());
 els.clearRead.addEventListener('click', () => void clearRead());
@@ -274,23 +298,77 @@ void wireThemeButton(els.theme);
 /** Another page wrote read markers or settings; refresh the counters it affects. */
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  // A language written here comes back to us as an event too: `saveFields` has already adopted it,
+  // so only a change made by another page re-draws this screen.
+  const next = normalize(changes[store.SETTINGS_KEY]?.newValue?.language);
+  if (next && next !== currentLanguage()) onLanguageChange(next);
   if (changes[store.READ_KEY]) void renderReadStats();
   if (changes[store.SETTINGS_KEY]) void refreshFields().then(renderReadStats);
 });
 
-/** Fill the combobox once: its options are fixed by the bundled media, its value comes from storage. */
+function normalize(value) {
+  return LANGUAGE_NAMES[value] ? value : null;
+}
+
+/** Redraw every caption this screen draws itself, in the language another page chose. */
+function onLanguageChange(language) {
+  adoptLanguage(language);
+  state.language = language;
+  state.languagePending = false;
+  applyI18n();
+  fillSoundOptions();
+  fillLanguageOptions();
+  els.language.value = language;
+  setStatus('');
+}
+
+/** Fill the comboboxes: the signals come from the bundled media, the languages from the dictionaries. */
 function fillSoundOptions() {
-  for (const option of SOUND_OPTIONS) {
-    const element = document.createElement('option');
-    element.value = option.value;
-    element.textContent = option.label;
-    els.sound.appendChild(element);
-  }
+  const value = els.sound.value;
+  els.sound.replaceChildren();
+  els.sound.append(
+    soundOption(store.SOUND_NONE),
+    ...store.SOUND_FILES.map((file) => soundOption(file)),
+  );
+  if (value) els.sound.value = value;
+}
+
+/** One option per signal: «Без звука» is named by the dictionary, a file by its own name. */
+function soundOption(choice) {
+  const label =
+    choice === store.SOUND_NONE
+      ? t('settings.soundNone')
+      : choice.slice('src/media/'.length, -'.mp3'.length);
+  return option(choice, label);
+}
+
+/**
+ * Languages are named in their own language («Русский», «English») — the usual convention, so the
+ * list keeps its captions readable whichever language is active.
+ */
+function fillLanguageOptions() {
+  const value = els.language.value;
+  els.language.replaceChildren();
+  els.language.append(...Object.entries(LANGUAGE_NAMES).map(([code, name]) => option(code, name)));
+  if (value) els.language.value = value;
+}
+
+function option(value, label) {
+  const element = document.createElement('option');
+  element.value = value;
+  element.textContent = label;
+  return element;
 }
 
 async function init() {
+  // Language of the synchronous first pass, before `chrome.storage` had anything to say.
+  const drawnLanguage = currentLanguage();
+
   fillSoundOptions();
+  fillLanguageOptions();
   await refreshFields();
+  // The stored setting wins over the cached or detected language the captions were drawn with.
+  if (state.language !== drawnLanguage) onLanguageChange(state.language);
   await renderReadStats();
 }
 

@@ -1,0 +1,10 @@
+{
+  "extensionName": {
+    "message": "RSS Reader",
+    "description": "Название расширения: chrome://extensions и Web Store"
+  },
+  "extensionDescription": {
+    "message": "Чтение RSS-новостей: настройка лент, глобальные настройки (read_ttl_days, сигнал автозагрузки, язык интерфейса), трёхпанельный интерфейс, автозагрузка и автоочистка заголовков",
+    "description": "Короткое описание того, что делает расширение"
+  }
+}

@@ -2,8 +2,9 @@
 <html lang="ru" data-theme="dark">
 <head>
   <meta charset="utf-8" />
-  <title>RSS Reader</title>
+  <title data-i18n="app.name"></title>
   <script src="theme-boot.js"></script>
+  <script type="module" src="lib/i18n-boot.js"></script>
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/reader.css" />
   <script type="module" src="index.js"></script>
@@ -64,20 +65,20 @@
 
   <header class="app-header">
     <div class="brand">
-      RSS Reader
-      <span class="badge" id="total-count" title="Заголовков в хранилище">0</span>
-      <button id="btn-clear-all" class="icon-btn danger" type="button" title="Удалить все заголовки из хранилище" aria-label="Удалить все">
+      <span data-i18n="app.name"></span>
+      <span class="badge" id="total-count" data-i18n-title="reader.count.tooltip">0</span>
+      <button id="btn-clear-all" class="icon-btn danger" type="button" data-i18n-title="reader.clearAll.tooltip" data-i18n-aria="reader.clearAll.aria">
         <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
       </button>
     </div>
     <div class="header-actions">
-      <button id="btn-settings" class="icon-btn" type="button" title="Настройки лент" aria-label="Настройки лент">
+      <button id="btn-settings" class="icon-btn" type="button" data-i18n-title="reader.feedsSettings.tooltip" data-i18n-aria="reader.feedsSettings.aria">
         <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
       </button>
-      <button id="btn-global-settings" class="icon-btn" type="button" title="Глобальные настройки" aria-label="Глобальные настройки">
+      <button id="btn-global-settings" class="icon-btn" type="button" data-i18n-title="reader.globalSettings.tooltip" data-i18n-aria="reader.globalSettings.aria">
         <svg class="icon" aria-hidden="true"><use href="#icon-tune"></use></svg>
       </button>
-      <button id="btn-theme" class="icon-btn theme-toggle" type="button" title="Переключить тему" aria-label="Переключить тему">
+      <button id="btn-theme" class="icon-btn theme-toggle" type="button" data-i18n-title="reader.theme.tooltip" data-i18n-aria="reader.theme.tooltip">
         <svg class="icon icon-moon" aria-hidden="true"><use href="#icon-moon"></use></svg>
         <svg class="icon icon-sun" aria-hidden="true"><use href="#icon-sun"></use></svg>
       </button>
@@ -85,39 +86,39 @@
   </header>
 
   <main class="panels">
-    <section class="panel panel-feeds" aria-label="Список RSS лент">
+    <section class="panel panel-feeds" data-i18n-aria="reader.feeds.panelAria">
       <div class="panel-head">
-        <h2>Ленты</h2>
-        <button id="btn-refresh" class="icon-btn" type="button" title="Загрузить заголовки выбранной ленты" aria-label="Обновить">
+        <h2 data-i18n="reader.feeds.title"></h2>
+        <button id="btn-refresh" class="icon-btn" type="button" data-i18n-title="reader.refresh.tooltip" data-i18n-aria="reader.refresh.aria">
           <svg class="icon" aria-hidden="true"><use href="#icon-refresh"></use></svg>
         </button>
       </div>
       <div class="panel-scroll">
         <ul class="list" id="feed-list"></ul>
-        <p class="empty" id="feeds-empty" hidden>Лент нет. Добавьте их на экране «Настройки лент».</p>
+        <p class="empty" id="feeds-empty" hidden data-i18n="reader.feeds.empty"></p>
       </div>
     </section>
 
-    <section class="panel panel-headlines" aria-label="Заголовки новостей">
+    <section class="panel panel-headlines" data-i18n-aria="reader.headlines.panelAria">
       <div class="panel-head">
-        <h2 id="headlines-title">Заголовки</h2>
+        <h2 id="headlines-title" data-i18n="reader.headlines.title"></h2>
         <span class="muted" id="headlines-count"></span>
       </div>
       <div class="panel-scroll">
         <ul class="list" id="headline-list"></ul>
-        <p class="empty" id="headlines-empty" hidden>Выберите ленту слева.</p>
+        <p class="empty" id="headlines-empty" hidden data-i18n="reader.headlines.emptyNoFeed"></p>
       </div>
     </section>
 
-    <section class="panel panel-content" aria-label="Содержание новости">
+    <section class="panel panel-content" data-i18n-aria="reader.content.panelAria">
       <!-- Original link now lives in the article title itself, so the toolbar only holds delete. -->
       <div class="content-toolbar">
-        <button id="content-delete" class="icon-btn danger" type="button" title="Удалить заголовок из списка и из хранилища" aria-label="Удалить" hidden>
+        <button id="content-delete" class="icon-btn danger" type="button" data-i18n-title="reader.content.delete.tooltip" data-i18n-aria="reader.content.delete.aria" hidden>
           <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
         </button>
       </div>
       <article class="content-body" id="content-body">
-        <p class="empty">Выберите заголовок новости в средней панели.</p>
+        <p class="empty" data-i18n="reader.content.empty"></p>
       </article>
     </section>
   </main>

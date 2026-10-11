@@ -1,11 +1,17 @@
 // Three-panel reader: feeds -> stored headlines (title + pubDate) -> stored <description> rendered on click.
 
 import { sanitizePreview } from './lib/extract.js';
+import { describeError } from './lib/errors.js';
+import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import * as store from './lib/storage.js';
 import { GLOBAL_SETTINGS_PAGE, SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
 import { formatSince, humanDuration, itemTime } from './lib/util.js';
+
+/* Synchronous first pass: the cached language (or the browser language) is known before
+ * `chrome.storage` resolves, so nothing here has to wait for the async read below. */
+applyI18n();
 
 const els = {
   totalCount: document.getElementById('total-count'),
@@ -87,8 +93,10 @@ function renderFeeds() {
       '<span class="item-title"></span>' +
       '<span class="item-meta muted"></span>';
     button.querySelector('.item-title').textContent = feed.name || feed.rss_link;
-    button.querySelector('.item-meta').textContent =
-      `${countForFeed(feed.id)} загол. · обновл. каждые ${humanDuration(feed.delay_timeout)}`;
+    button.querySelector('.item-meta').textContent = t('reader.feed.itemMeta', {
+      count: countForFeed(feed.id),
+      duration: humanDuration(feed.delay_timeout, unitLabels()),
+    });
 
     button.addEventListener('click', () => selectFeed(feed.id));
     li.append(button);
@@ -100,14 +108,14 @@ function renderHeadlines() {
   els.headlineList.replaceChildren();
 
   const feed = selectedFeed();
-  els.headlinesTitle.textContent = feed?.name ?? 'Заголовки';
+  els.headlinesTitle.textContent = feed?.name ?? t('reader.headlines.title');
 
   const items = feed ? state.items.filter((item) => item.feedId === feed.id) : [];
   els.headlinesCount.textContent = items.length ? `${items.length}` : '';
   els.headlinesEmpty.hidden = items.length > 0;
   els.headlinesEmpty.textContent = feed
-    ? 'Для этой ленты пока нет заголовков в хранилище.'
-    : 'Выберите ленту слева.';
+    ? t('reader.headlines.emptyForFeed')
+    : t('reader.headlines.emptyNoFeed');
 
   for (const item of items) {
     const li = document.createElement('li');
@@ -118,10 +126,11 @@ function renderHeadlines() {
     button.innerHTML =
       '<span class="item-title"></span>' +
       '<span class="item-meta muted"></span>';
-    button.querySelector('.item-title').textContent = item.title;
+    // A headline the feed gave no title is labelled here, in the reader's language.
+    button.querySelector('.item-title').textContent = item.title || t('common.untitled');
     const when = itemTime(item);
     button.querySelector('.item-meta').textContent =
-      when ? `publ. ${formatSince(when)}` : '';
+      when ? t('reader.published', { since: formatSince(when, Date.now(), unitLabels()) }) : '';
     button.title = item.link;
 
     button.addEventListener('click', () => openItem(item));
@@ -136,7 +145,7 @@ function selectFeed(feedId) {
   state.uid = null;
   renderFeeds();
   renderHeadlines();
-  showPlaceholder('Заголовки этой ленты — в средней панели.');
+  showPlaceholder(t('reader.placeholder.inMiddle'));
   saveSelection();
 }
 
@@ -171,7 +180,7 @@ function titleHeading(text, link) {
   a.href = link;
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
-  a.title = 'Открыть оригинал в новой вкладке';
+  a.title = t('reader.openOriginal.tooltip');
   a.textContent = text;
   h1.append(a, icon('external'));
   return h1;
@@ -185,25 +194,27 @@ function openItem(item) {
 
   els.contentDelete.hidden = false;
 
-  const title = titleHeading(item.title, item.link);
+  const title = titleHeading(item.title || t('common.untitled'), item.link);
   const source = document.createElement('div');
   source.className = 'source';
   const name = item.feedName || item.rss_link;
   const when = itemTime(item);
-  source.textContent = when ? `${name} · publ. ${formatSince(when)}` : name;
+  source.textContent = when
+    ? t('reader.source', { name, since: formatSince(when, Date.now(), unitLabels()) })
+    : name;
 
   const preview = sanitizePreview(item.description);
   if (!preview.node) {
     els.contentBody.replaceChildren(
       title,
       source,
-      note('Нет описание в хранилище for this news.', 'error'),
-      note('Оригинал доступен по ссылк в заголов news.'),
+      note(t('reader.content.noDescription'), 'error'),
+      note(t('reader.content.originalByLink')),
     );
     return;
   }
 
-  const notes = preview.truncated ? [note('Description trunc at len limit.')] : [];
+  const notes = preview.truncated ? [note(t('reader.content.truncated'))] : [];
   els.contentBody.replaceChildren(title, source, preview.node, ...notes);
 }
 
@@ -229,7 +240,7 @@ async function deleteItem() {
 
   const remaining = state.items.filter((item) => item.feedId === feedId);
   if (remaining.length === 0) {
-    showPlaceholder('Заголовок удалён: в этой ленте больше ничего не осталось.');
+    showPlaceholder(t('reader.placeholder.deletedLast'));
     return;
   }
 
@@ -259,18 +270,18 @@ async function clearAllHeadlines() {
 async function refreshSelectedFeed() {
   const feed = selectedFeed();
   if (!feed) {
-    showPlaceholder('Сначала выберите ленту.');
+    showPlaceholder(t('reader.refresh.noFeed'));
     return;
   }
 
   const tip = els.refresh.title;
   els.refresh.disabled = true;
   els.refresh.classList.add('busy');
-  els.refresh.title = 'Загрузка…';
+  els.refresh.title = t('common.loading');
   try {
     const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_FEED, feedId: feed.id });
     if (!response?.ok) {
-      showPlaceholder(`Не удалось обновить ленту: ${response?.error ?? 'неизвестная ошибка'}`);
+      showPlaceholder(t('reader.refresh.failed', { error: describeError(response?.error) }));
     }
     await renderAll();
   } finally {
@@ -291,7 +302,7 @@ async function renderAll() {
   let message = null;
   if (state.uid && !state.items.some((item) => item.uid === state.uid)) {
     state.uid = null;
-    message = 'Открытый заголовок удалён из хранилища: истёк clean_timeout.';
+    message = t('reader.placeholder.expired');
   }
 
   renderTotal();
@@ -301,9 +312,36 @@ async function renderAll() {
   return message;
 }
 
+/**
+ * Repaint everything this page draws itself: `applyI18n()` only reaches the markup declared in
+ * index.html, so the feed rows, the headline rows and the open article are rebuilt from `state`.
+ */
+function redraw() {
+  renderTotal();
+  renderFeeds();
+  renderHeadlines();
+
+  const item = state.uid
+    ? state.items.find(
+        (candidate) => candidate.uid === state.uid && candidate.feedId === state.feedId,
+      )
+    : null;
+  if (item) openItem(item);
+}
+
 /* Storage is written by the background worker while this page is open, so react to it. */
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+
+  // A language saved on the settings screen has to reach this page without a reload: adopt it,
+  // re-apply the dictionary to the markup, then redraw the dynamically rendered panels.
+  const language = changes.settings?.newValue?.language;
+  if (language && language !== currentLanguage()) {
+    adoptLanguage(language);
+    applyI18n();
+    redraw();
+  }
+
   if (changes.items || changes.feeds) void renderAll();
 });
 
@@ -322,6 +360,10 @@ els.contentDelete.addEventListener('click', () => void deleteItem());
 void wireThemeButton(els.theme);
 
 async function init() {
+  // The stored language wins; on first run there is none and the browser language is used.
+  adoptLanguage(await store.getLanguage());
+  applyI18n();
+
   restoreSelection();
   // Expired headlines should not linger in an open reader.
   const { removed } = await store.cleanup();
@@ -353,7 +395,7 @@ async function init() {
     openItem(item);
   } else if (state.feedId && !lostHeadline) {
     // Nothing to open at all: the feed is selected, its panel says so.
-    showPlaceholder('Заголовки этой ленты — в средней панели.');
+    showPlaceholder(t('reader.placeholder.inMiddle'));
   }
 }
 

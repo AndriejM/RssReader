@@ -21,7 +21,7 @@ export async function playSound() {
     await requestOffscreen({ type: MSG_PLAY_SOUND, src });
     return true;
   } catch (error) {
-    console.warn('Звук не сыгран:', error?.message ?? error);
+    console.warn('sound did not play:', error?.message ?? error);
     return false;
   }
 }

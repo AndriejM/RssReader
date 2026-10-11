@@ -9,10 +9,14 @@ const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9
 const MAX_ENTRIES = 50;
 
 export class FeedError extends Error {
-  constructor(message, { status, cause } = {}) {
+  constructor(message, { status, code, params, cause } = {}) {
     super(message);
     this.name = 'FeedError';
     this.status = status;
+    // `code` points at an `errors.<code>` i18n key and `params` fills its placeholders, so the
+    // page that shows the failure renders it in the reader's own language.
+    this.code = code;
+    this.params = params;
     this.cause = cause;
   }
 }
@@ -20,7 +24,7 @@ export class FeedError extends Error {
 export async function fetchFeed(url) {
   // The URL comes from storage, which can also be edited by hand in the console: keep it to http(s).
   if (!isValidHttpUrl(url)) {
-    throw new FeedError('Ссылка ленты должна начинаться с http:// или https://');
+    throw new FeedError('feed link must be http(s)', { code: 'feedUrl' });
   }
 
   let response;
@@ -33,16 +37,23 @@ export async function fetchFeed(url) {
       headers: { Accept: ACCEPT },
     });
   } catch (cause) {
-    throw new FeedError(`Не удалось загрузить ленту: ${cause?.message ?? cause}`, { cause });
+    throw new FeedError(`failed to load feed: ${cause?.message ?? cause}`, {
+      code: 'feedFetch',
+      params: { cause: cause?.message ?? String(cause) },
+      cause,
+    });
   }
 
   if (!response.ok) {
-    throw new FeedError(`Лента ответила ${response.status} ${response.statusText}`);
+    throw new FeedError(`feed replied ${response.status}`, {
+      code: 'feedStatus',
+      params: { status: response.status, statusText: response.statusText },
+    });
   }
 
   // Feeds come as UTF-8 here, so `response.text()` can decode the bytes directly.
   const text = await response.text();
-  if (!text.trim()) throw new FeedError('Лента вернула пустой ответ');
+  if (!text.trim()) throw new FeedError('feed returned an empty response', { code: 'feedEmpty' });
 
   return parseFeed(text, response.url || url);
 }
@@ -87,14 +98,16 @@ export function parseFeed(xml, baseUrl) {
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
 
   if (doc.querySelector('parsererror')) {
-    throw new FeedError('Ответ не похож на корректный XML ленты');
+    throw new FeedError('not valid feed XML', { code: 'feedNotXml' });
   }
 
   const root = doc.documentElement;
-  if (!root) throw new FeedError('Пустой XML ленты');
+  if (!root) throw new FeedError('empty feed XML', { code: 'feedEmptyXml' });
 
   const channel = childNodes(root, 'channel')[0];
-  const feedTitle = cleanTitle(firstText(root, 'title') || firstText(channel, 'title'), 'Лента без названия');
+  // An empty title stays empty in the record: the reader labels it in its own language, so the
+  // stored data does not freeze the language it happened to be parsed in.
+  const feedTitle = cleanTitle(firstText(root, 'title') || firstText(channel, 'title'), '');
 
   // RSS 2.0 / RDF use <item>, Atom uses <entry>.
   const nodes = anyTag(doc, 'item');
@@ -115,7 +128,7 @@ export function parseFeed(xml, baseUrl) {
     seen.add(link);
 
     entries.push({
-      title: cleanTitle(firstText(node, 'title') || node.getAttribute('title')),
+      title: cleanTitle(firstText(node, 'title') || node.getAttribute('title'), ''),
       // Kept verbatim: `<description>` (or an Atom `<summary>`/`<content>` variant) carries
       // short news text in HTML — do not pipe it through cleanTitle, markup must survive.
       description: firstText(node, 'description') || firstText(node, 'summary') || firstText(node, 'content'),

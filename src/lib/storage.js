@@ -17,6 +17,12 @@ import {
   readTime,
   toDays,
 } from './util.js';
+import {
+  FALLBACK_LANGUAGE,
+  detectBrowserLanguage,
+  normalizeLanguage,
+  setLanguageCache,
+} from './i18n.js';
 
 export const FEEDS_KEY = 'feeds';
 export const ITEMS_KEY = 'items';
@@ -26,6 +32,7 @@ export const THEME_KEY = 'theme';
 export const READ_TTL_KEY = 'read_ttl_days';
 export const SOUND_KEY = 'sound';
 export const SOUND_FILE_KEY = 'sound_file';
+export const LANGUAGE_KEY = 'language';
 
 /** «Без звука»: автоматическая загрузка остаётся без сигнала. */
 export const SOUND_NONE = 'none';
@@ -332,6 +339,31 @@ export async function getTheme() {
 export async function setTheme(theme) {
   const next = theme === 'light' ? 'light' : 'dark';
   await updateSettings({ [THEME_KEY]: next });
+  return next;
+}
+
+/**
+ * Язык интерфейса. Записанный — это выбор пользователя. Если записи нет (первый запуск), берём
+ * язык браузера; если он не поддерживается расширением — английский. Определение по браузеру
+ * ничего не пишет: язык сохраняется только когда его выбирают на экране настроек.
+ */
+export async function getLanguage() {
+  const settings = await getSettings();
+  const stored = normalizeLanguage(settings[LANGUAGE_KEY]);
+  if (stored) {
+    setLanguageCache(stored);
+    return stored;
+  }
+
+  const language = detectBrowserLanguage() ?? FALLBACK_LANGUAGE;
+  setLanguageCache(language);
+  return language;
+}
+
+export async function setLanguage(language) {
+  const next = normalizeLanguage(language) ?? FALLBACK_LANGUAGE;
+  await updateSettings({ [LANGUAGE_KEY]: next });
+  setLanguageCache(next);
   return next;
 }
 

@@ -77,9 +77,23 @@ async function updateBadge() {
 async function readFeed(url) {
   const response = await requestOffscreen({ type: MSG_FETCH_FEED, url });
   if (!response?.ok) {
-    throw new FeedError(response?.error ?? 'не удалось прочитать ленту');
+    const err = response?.error;
+    if (err && typeof err === 'object' && err.code) {
+      throw new FeedError(err.code, { code: err.code, params: err.params });
+    }
+    const message = typeof err === 'string' ? err : (err?.message ?? 'feed could not be read');
+    throw new FeedError(message, { code: 'feedUnknown', params: { message } });
   }
   return response.result;
+}
+
+/**
+ * Готовить ответ страницы об ошибке: отказ с i18n-кодом (`rss.js`, `lib/offscreen.js`) уходит как
+ * `{ code, params }`, чтобы страница подписала его на своём языке; всё остальное — как есть.
+ */
+function errorPayload(error) {
+  if (error?.code) return { code: error.code, params: error.params, message: error.message };
+  return error?.message ?? String(error);
 }
 
 /**
@@ -146,14 +160,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const feedId = message.feedId;
         const feed = await store.getFeed(feedId);
         if (!feed) {
-          sendResponse({ ok: false, error: 'Лента не найдена' });
+          sendResponse({ ok: false, error: { code: 'feedNotFound' } });
           return;
         }
         const result = await ingestFeed(feed, { notify: false });
         sendResponse({ ok: true, ...result });
       } catch (error) {
-        const reason = error instanceof FeedError ? error.message : error?.message ?? error;
-        sendResponse({ ok: false, error: reason });
+        sendResponse({ ok: false, error: errorPayload(error) });
       }
     })();
     return true; // keep the message channel open for the async reply

@@ -56,26 +56,37 @@ function round2(value) {
   return String(Math.round(value * 100) / 100);
 }
 
-/** Human readable form of a timeout given in minutes. */
-export function humanDuration(minutes) {
-  const m = Number(minutes);
-  if (!Number.isFinite(m) || m <= 0) return '—';
-  if (m < 60) return `${m} мин`;
-  if (m < 1440) return `${round2(m / 60)} ч`;
-  return `${round2(m / 1440)} дн`;
+/** Подставить число в шаблон единицы измерения вида «{n} мин» (шаблоны приходят из i18n). */
+function unitFormat(template, value) {
+  return String(template).replace('{n}', String(value));
 }
 
-/** "5 мин назад" style label for a timestamp (publication date first, load time fallback). */
-export function formatSince(time, now = Date.now()) {
+/**
+ * Human readable form of a timeout given in minutes. `labels` comes from the active language
+ * (`i18n.unitLabels`); the defaults keep the Russian wording so `util.js` stays testable as is.
+ */
+export function humanDuration(minutes, labels) {
+  const m = Number(minutes);
+  if (!Number.isFinite(m) || m <= 0) return labels?.empty ?? '—';
+  if (m < 60) return unitFormat(labels?.minutes ?? '{n} мин', m);
+  if (m < 1440) return unitFormat(labels?.hours ?? '{n} ч', round2(m / 60));
+  return unitFormat(labels?.days ?? '{n} дн', round2(m / 1440));
+}
+
+/**
+ * "5 мин назад" style label for a timestamp (publication date first, load time fallback).
+ * Without `labels` it reads in Russian; the reader and settings screens pass `i18n.unitLabels()`.
+ */
+export function formatSince(time, now = Date.now(), labels) {
   const diff = Math.max(0, now - Number(time));
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'только что';
-  if (minutes < 60) return `${minutes} мин назад`;
+  if (minutes < 1) return labels?.justNow ?? 'только что';
+  if (minutes < 60) return unitFormat(labels?.minutesAgo ?? '{n} мин назад', minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ч назад`;
+  if (hours < 24) return unitFormat(labels?.hoursAgo ?? '{n} ч назад', hours);
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} дн назад`;
-  return new Date(Number(time)).toLocaleDateString('ru-RU');
+  if (days < 30) return unitFormat(labels?.daysAgo ?? '{n} дн назад', days);
+  return new Date(Number(time)).toLocaleDateString(labels?.locale ?? 'ru-RU');
 }
 
 /**
@@ -192,23 +203,26 @@ export function cleanTitle(value, fallback = 'Без названия') {
 /**
  * Validate and normalize a feed record coming from the configuration screen.
  * Returns { feed, errors }. `errors` is a map of field -> message.
+ * `messages` supplies the field-error texts in the active language (`feeds.error.*`); the
+ * defaults keep the Russian wording so the pure logic stays testable on its own.
  */
-export function normalizeFeed(input) {
+export function normalizeFeed(input, messages = {}) {
   const errors = {};
   const name = String(input?.name ?? '').trim();
   const rssLink = String(input?.rss_link ?? '').trim();
 
-  if (!name) errors.name = 'Укажите название ленты';
-  if (name.length > 120) errors.name = 'Название слишком длинное';
-  if (!isValidHttpUrl(rssLink)) errors.rss_link = 'Ссылка должна начинаться с http:// или https://';
+  if (!name) errors.name = messages.name ?? 'Укажите название ленты';
+  if (name.length > 120) errors.name = messages.nameTooLong ?? 'Название слишком длинное';
+  if (!isValidHttpUrl(rssLink))
+    errors.rss_link = messages.rss_link ?? 'Ссылка должна начинаться с http:// или https://';
 
   const delayRaw = Number(input?.delay_timeout);
   if (!Number.isFinite(delayRaw) || delayRaw < 1) {
-    errors.delay_timeout = 'Период загрузки — не меньше 1 минуты';
+    errors.delay_timeout = messages.delay_timeout ?? 'Период загрузки — не меньше 1 минуты';
   }
   const cleanRaw = Number(input?.clean_timeout);
   if (!Number.isFinite(cleanRaw) || cleanRaw < 1) {
-    errors.clean_timeout = 'Время хранения — не меньше 1 минуты';
+    errors.clean_timeout = messages.clean_timeout ?? 'Время хранения — не меньше 1 минуты';
   }
 
   const feed = {

@@ -2,13 +2,15 @@
 //
 //   node scripts/test.mjs
 //
-// Only the chrome-free logic is covered (src/lib/util.js, src/lib/storage.js). The chrome.*-dependent code is exercised in the
+// Only the chrome-free logic is covered (src/lib/util.js, src/lib/storage.js, src/lib/i18n.js). The chrome.*-dependent code is exercised in the
 // browser.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
-import * as util from '../src/lib/util.js';
+import * as i18n from '../src/lib/i18n.js';
 import * as store from '../src/lib/storage.js';
+import * as util from '../src/lib/util.js';
 
 const {
   DEFAULT_CLEAN_TIMEOUT,
@@ -362,6 +364,89 @@ test('capRead keeps the newest read markers', () => {
   assert.equal(kept[0].link, `l${MAX_READ_RECORDS + 4}`, 'newest first');
   assert.equal(kept.at(-1).link, 'l5', 'the 5 oldest dropped');
   assert.equal(store.capRead(read.slice(0, 10)).length, 10, 'a list under the cap is untouched');
+});
+
+/* ---------------------------- language ---------------------------- */
+
+test('every language dictionary translates every key of the base one', () => {
+  const base = i18n.dictionaryKeys(i18n.LANGUAGES[0]).sort();
+  assert.ok(base.length > 100, 'the reader has a real dictionary, not a handful of strings');
+  for (const lang of i18n.LANGUAGES) {
+    assert.deepEqual(i18n.dictionaryKeys(lang).sort(), base, `${lang} covers the same keys`);
+  }
+});
+
+/**
+ * A failure that reaches a page carries an `errors.<code>` key, never its own text. This guard
+ * keeps that rule: a code thrown in the worker or the parser must have a dictionary entry in
+ * every language, otherwise the page would show text frozen in one language.
+ */
+test('an error thrown for a page names a key every language translates', () => {
+  const files = [
+    'src/background.js',
+    'src/offscreen.js',
+    'src/lib/rss.js',
+    'src/lib/offscreen.js',
+    'src/lib/extract.js',
+  ];
+  const codes = new Set();
+
+  for (const file of files) {
+    const source = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+    for (const match of source.matchAll(/code: '(\w+)'/g)) codes.add(match[1]);
+    for (const match of source.matchAll(/codedError\('(\w+)'/g)) codes.add(match[1]);
+  }
+
+  assert.ok(codes.size > 0, 'the sources do throw coded failures');
+  assert.ok(
+    codes.has('feedUrl') && codes.has('offscreenUnavailable') && codes.has('articleFetch'),
+    'the scan reaches every place that throws a failure a page shows',
+  );
+  for (const lang of i18n.LANGUAGES) {
+    const keys = i18n.dictionaryKeys(lang);
+    for (const code of codes) {
+      assert.ok(keys.includes(`errors.${code}`), `${lang} is missing errors.${code}`);
+    }
+  }
+});
+
+test('t() follows the adopted language and fills placeholders', () => {
+  i18n.adoptLanguage('en');
+  assert.equal(i18n.t('settings.save'), 'Save');
+  assert.equal(
+    i18n.t('feeds.result', { added: 2, seen: 5, read: i18n.t('feeds.resultRead', { skipped: 1 }) }),
+    'New: 2, parsed: 5, already read: 1',
+  );
+  assert.equal(i18n.t('reader.published', { since: 'just now' }), 'pub. just now');
+
+  i18n.adoptLanguage('ru');
+  assert.equal(i18n.t('settings.save'), 'Записать');
+  assert.equal(i18n.t('settings.status.saved', { parts: 'звук: ceres.mp3' }), 'Записано: звук: ceres.mp3');
+
+  assert.equal(i18n.t('no.such.key'), 'no.such.key', 'a missing key shows itself instead of nothing');
+});
+
+test('an unsupported language falls back to English', () => {
+  assert.equal(i18n.FALLBACK_LANGUAGE, 'en');
+  assert.equal(i18n.normalizeLanguage('de'), null);
+  assert.equal(i18n.adoptLanguage('de'), 'en', 'a browser language the reader has no dictionary for');
+  assert.equal(i18n.adoptLanguage(undefined), 'en');
+  assert.equal(i18n.adoptLanguage('ru'), 'ru');
+});
+
+test('units follow the language, but the pure helpers keep their own default', () => {
+  const en = i18n.unitLabels('en');
+  assert.equal(humanDuration(45, en), '45 min');
+  assert.equal(humanDuration(90, en), '1.5 h');
+  assert.equal(humanDuration(1440, en), '1 d');
+  assert.equal(humanDuration(0, en), '—');
+
+  const now = 1_700_000_000_000;
+  assert.equal(formatSince(now, now, en), 'just now');
+  assert.equal(formatSince(now - 5 * MINUTE, now, en), '5 min ago');
+  assert.equal(formatSince(now - 2 * DAY, now, en), '2 d ago');
+
+  assert.equal(humanDuration(90), '1.5 ч', 'no labels: the base language is used');
 });
 
 /* ---------------------------- runner ---------------------------- */
