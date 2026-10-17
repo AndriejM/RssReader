@@ -49,13 +49,14 @@ are on is highlighted and is not clickable.
 Every icon has both a tooltip (`title`) and an `aria-label`, taken from the same dictionary key
 (`nav.reader`, `nav.feeds`, `nav.global`), so the tooltip follows the interface language. The row
 is built by `src/lib/nav.js`: a screen only says which screen it is (`data-nav-active` on its
-`<nav>`) and adds whatever it needs in the strip of its own (for instance “Add feed” on the feed
-settings screen).
+`<nav>`) and keeps its own buttons outside the strip.
 
 ## Quick start
 
-1. Open “Feed settings” (the icon in the top-right corner) → “Add feed”.
-2. Fill in `name` and `rss_link`, set `delay_timeout` and `clean_timeout` → “Add feed”.
+1. Open “Feed settings” (the icon in the top-right corner) → the “add feed” icon above the table.
+2. Fill in the row: the feed name, the link, the headline fetch period and the news storage time →
+   the “save” icon at the end of the same row (in storage these are `name`, `rss_link`,
+   `delay_timeout`, `clean_timeout`).
    The feed is re-read once right away, so headlines appear immediately without waiting for the
    first alarm to fire.
 3. Open the reader (click the toolbar icon or the reader icon in the top-right corner) → the
@@ -67,28 +68,38 @@ settings screen).
 
 ## Feed settings screen (`src/feeds.html`)
 
-One card per feed. The fields are exactly the ones from the assignment:
+The feeds stand in a table: one row per feed, the columns named in plain words, while the fields
+are exactly the ones from the assignment:
 
-| Field | Meaning | Units | Default | Constraints |
-|---|---|---|---|---|
-| `name` | feed name | — | — | 1–120 characters |
-| `rss_link` | link to read the news from | — | — | must start with `http://` or `https://` |
-| `delay_timeout` | period of automatic headline loading | minutes | 30 | at least 1 (Chrome does not allow alarms with a period under a minute) |
-| `clean_timeout` | how long a news item stays in storage after loading | minutes | 1440 (1 day) | at least 1 |
+| Column | Field | Meaning | Units | Default | Constraints |
+|---|---|---|---|---|---|
+| Feed name | `name` | feed name | — | — | 1–120 characters |
+| Link | `rss_link` | link to read the news from | — | — | must start with `http://` or `https://` |
+| Headline fetch period | `delay_timeout` | period of automatic headline loading | minutes | 30 | at least 1 (Chrome does not allow alarms with a period under a minute) |
+| News storage time | `clean_timeout` | how long a news item stays in storage after loading | minutes | 1440 (1 day) | at least 1 |
 
-Card buttons:
+Next to the number of minutes the same term is shown in human units (“1.5 h”, “1 d”); it updates
+while you type.
 
-- **“Add feed” / “Save”** — validates the fields and saves the feed. Errors are shown under the
-  specific field; an invalid feed cannot be saved.
+Icons above the table and at the end of a row:
+
+- **“Add feed” (the “+” icon above the table)** — a new empty row: it is marked as a draft and
+  lives in the same table until it is saved.
+- **“Save”** — validates the fields and saves the feed. Errors are shown under the specific field;
+  an invalid feed cannot be saved. In a new row the same icon adds the feed, and the delete icon
+  cancels the draft.
 - **“Load now”** — reads the feed once off the schedule (no sound at that moment) and shows
   “New: N, read: M”.
 - **“Delete”** — deletes the feed together with its headlines (with a confirmation).
-- Each card shows “in storage: N” — how many headlines of this feed are currently stored; the
-  counter updates when the background finishes downloading something and does not overwrite
-  values you have already entered.
+- Every icon has both a tooltip and an `aria-label`, so its action is clear without a caption
+  under the column.
 
-Screen header: **“Add feed”** on the left; on the right the row of screen-switcher icons (here
-its “Feed settings” icon is the highlighted one) and the theme toggle.
+A message about the whole row (“Saved”, “Check the fields”, what a load returned) takes its own
+line under it, and the screen’s explanation of the fields is folded behind the “?” icon in the
+upper right of the table.
+
+Screen header: the row of screen-switcher icons (here its “Feed settings” icon is the highlighted
+one) and the theme toggle.
 
 ## Reading screen (`src/index.html`)
 
@@ -439,7 +450,7 @@ apart” from the background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js) and the guards over the screen markup: 38 tests
+                             # storage.js) and the guards over the screen markup: 39 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```

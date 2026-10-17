@@ -1,4 +1,4 @@
-// Configuration screen: add / edit / delete feeds and their timeouts.
+// Configuration screen: add / edit / delete feeds and their timeouts, as rows of one table.
 
 import { describeError } from './lib/errors.js';
 import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
@@ -13,7 +13,7 @@ import { humanDuration, newId, normalizeFeed } from './lib/util.js';
 applyI18n();
 
 const els = {
-  cards: document.getElementById('feed-cards'),
+  rows: document.getElementById('feed-rows'),
   empty: document.getElementById('feeds-empty'),
   add: document.getElementById('btn-add'),
   theme: document.getElementById('btn-theme'),
@@ -21,145 +21,170 @@ const els = {
 
 const state = {
   feeds: [],
-  /** Cards the user is filling in but has not saved yet. */
+  /** Rows the user is filling in but has not saved yet. */
   drafts: new Set(),
-  itemsByFeed: new Map(),
 };
 
-function field(label, inputType, value, { unit = '', step = '', min = '', wide = false, title = '' } = {}) {
-  const wrap = document.createElement('div');
-  wrap.className = wide ? 'field wide' : 'field';
-
-  const labelEl = document.createElement('label');
-  labelEl.textContent = label;
+/** `<td>` of a text column: the input and the error line under it. */
+function textCell(value, { label }) {
   const input = document.createElement('input');
-  input.type = inputType;
+  input.type = 'text';
   input.value = value ?? '';
-  if (step) input.step = step;
-  if (min) input.min = min;
-  if (title) input.title = title;
+  // The caption of the column is this cell's header, but a `<td>` is not a `<label>` and a table
+  // gives an input no name of its own, so the input carries the caption itself.
   input.setAttribute('aria-label', label);
 
   const error = document.createElement('div');
   error.className = 'error';
 
-  if (unit) {
-    const unitRow = document.createElement('div');
-    unitRow.className = 'unit';
-    unitRow.append(input, Object.assign(document.createElement('span'), { textContent: unit }));
-    wrap.append(labelEl, unitRow, error);
-  } else {
-    wrap.append(labelEl, input, error);
-  }
+  const cell = document.createElement('td');
+  // On a narrow screen the columns collapse and every cell names the field it holds.
+  cell.dataset.column = label;
+  cell.append(input, error);
+  return { cell, input, error };
+}
 
-  return { wrap, input, error };
+/** `<td>` of a minutes column: the number being edited plus its human reading, which follows it. */
+function minutesCell(value, { label, labels }) {
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.value = value ?? '';
+  input.min = '1';
+  input.step = '1';
+  input.setAttribute('aria-label', label);
+
+  const duration = document.createElement('span');
+  duration.className = 'duration muted';
+  const showDuration = () => {
+    duration.textContent = humanDuration(input.value, labels);
+  };
+  input.addEventListener('input', showDuration);
+  showDuration();
+
+  const minutes = document.createElement('div');
+  minutes.className = 'minutes';
+  minutes.append(input, duration);
+
+  const error = document.createElement('div');
+  error.className = 'error';
+
+  const cell = document.createElement('td');
+  cell.className = 'col-minutes';
+  cell.dataset.column = label;
+  cell.append(minutes, error);
+  return { cell, input, error };
+}
+
+/** An action of a row: the glyph says what it does, its tooltip and its name repeat it. */
+function actionButton(icon, caption, { danger = false, disabled = false } = {}) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = danger ? 'icon-btn danger' : 'icon-btn';
+  button.title = caption;
+  button.setAttribute('aria-label', caption);
+  button.disabled = disabled;
+  button.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#icon-${icon}"></use></svg>`;
+  return button;
 }
 
 /**
- * Build one editable card. `feed` may be a draft (no id yet).
+ * Build one editable row of the feed table. `feed` may be a draft (no id yet).
  */
-function buildCard(feed, { draft }) {
-  const card = document.createElement('div');
-  card.className = draft ? 'feed-card draft' : 'feed-card';
-
-  const head = document.createElement('div');
-  head.className = 'feed-card-head';
-  const stats = document.createElement('span');
-  stats.className = 'stats';
-  const status = document.createElement('span');
-  status.className = 'status';
-  head.append(stats, status);
-
-  const grid = document.createElement('div');
-  grid.className = 'grid';
-
+function buildRow(feed, { draft }) {
   const labels = unitLabels();
 
-  const name = field(t('feeds.field.name'), 'text', feed.name, {
-    title: t('feeds.field.namePlaceholder'),
+  const row = document.createElement('tr');
+  row.className = draft ? 'feed-row draft' : 'feed-row';
+
+  const name = textCell(feed.name, { label: t('feeds.field.name') });
+  const rssLink = textCell(feed.rss_link, { label: t('feeds.field.rss') });
+  const delay = minutesCell(feed.delay_timeout, {
+    label: t('feeds.field.delay'),
+    labels,
   });
-  const rssLink = field(t('feeds.field.rss'), 'text', feed.rss_link, { wide: true });
-  const delay = field(t('feeds.field.delay'), 'number', feed.delay_timeout, {
-    min: '1',
-    step: '1',
-    unit: t('feeds.field.delayUnit', { duration: humanDuration(feed.delay_timeout, labels) }),
-  });
-  const clean = field(t('feeds.field.clean'), 'number', feed.clean_timeout, {
-    min: '1',
-    step: '1',
-    unit: t('feeds.field.cleanUnit', { duration: humanDuration(feed.clean_timeout, labels) }),
+  const clean = minutesCell(feed.clean_timeout, {
+    label: t('feeds.field.clean'),
+    labels,
   });
 
-  grid.append(name.wrap, rssLink.wrap, delay.wrap, clean.wrap);
+  const actions = document.createElement('td');
+  actions.className = 'col-actions';
 
-  const actions = document.createElement('div');
-  actions.className = 'card-actions';
+  const save = actionButton('save', draft ? t('feeds.addCard') : t('feeds.save'));
+  const refresh = actionButton('refresh', t('feeds.loadNow'), { disabled: draft });
+  const remove = actionButton('trash', draft ? t('feeds.cancel') : t('feeds.delete'), {
+    danger: true,
+  });
+  actions.append(save, refresh, remove);
 
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.className = 'primary';
-  save.textContent = draft ? t('feeds.addCard') : t('feeds.save');
+  row.append(name.cell, rssLink.cell, delay.cell, clean.cell, actions);
 
-  const refresh = document.createElement('button');
-  refresh.type = 'button';
-  refresh.textContent = t('feeds.loadNow');
-  refresh.disabled = draft;
+  /* A row of the table holds only the fields, so a message about the row as a whole — what a load
+   * returned, "Saved", "Check the fields", what a draft still waits for — gets its own line under
+   * the row, as wide as the table. */
+  const noteRow = document.createElement('tr');
+  noteRow.className = draft ? 'row-note draft' : 'row-note';
+  noteRow.hidden = !draft;
 
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'danger';
-  remove.textContent = draft ? t('feeds.cancel') : t('feeds.delete');
+  const noteCell = document.createElement('td');
+  noteCell.colSpan = 5;
+  const status = document.createElement('span');
+  status.className = 'status';
+  if (draft) status.textContent = t('feeds.draftNote');
+  noteCell.append(status);
+  noteRow.append(noteCell);
 
-  if (draft) {
-    const note = document.createElement('span');
-    note.className = 'muted';
-    note.textContent = t('feeds.draftNote');
-    actions.append(save, remove, note);
-  } else {
-    actions.append(save, refresh, remove);
-  }
-  grid.append(actions);
-
-  const cardRecord = {
+  const rowRecord = {
     feed,
     draft,
-    card,
-    stats,
+    row,
+    noteRow,
     status,
-    inputs: { name, rss_link: rssLink, delay_timeout: delay, clean_timeout: clean },
+    inputs: {
+      name: name.input,
+      rss_link: rssLink.input,
+      delay_timeout: delay.input,
+      clean_timeout: clean.input,
+    },
+    errors: {
+      name: name.error,
+      rss_link: rssLink.error,
+      delay_timeout: delay.error,
+      clean_timeout: clean.error,
+    },
   };
 
-  save.addEventListener('click', () => void saveCard(cardRecord));
-  remove.addEventListener('click', () => void removeCard(cardRecord));
-  refresh.addEventListener('click', () => void refreshCard(cardRecord));
+  save.addEventListener('click', () => void saveRow(rowRecord));
+  remove.addEventListener('click', () => void removeRow(rowRecord));
+  refresh.addEventListener('click', () => void refreshRow(rowRecord));
 
-  card.append(head, grid);
-  return cardRecord;
+  return { record: rowRecord, note: noteRow };
 }
 
-function setStatus(cardRecord, message, kind = '') {
-  cardRecord.status.textContent = message;
-  cardRecord.status.className = kind ? `status ${kind}` : 'status';
+function setStatus(rowRecord, message, kind = '') {
+  rowRecord.status.textContent = message;
+  rowRecord.status.className = kind ? `status ${kind}` : 'status';
+  rowRecord.noteRow.hidden = false;
 }
 
-function showFieldErrors(cardRecord, errors) {
-  for (const [key, input] of Object.entries(cardRecord.inputs)) {
-    input.error.textContent = errors[key] ?? '';
+function showFieldErrors(rowRecord, errors) {
+  for (const [key, error] of Object.entries(rowRecord.errors)) {
+    error.textContent = errors[key] ?? '';
   }
 }
 
-function readCard(cardRecord) {
+function readRow(rowRecord) {
   return {
-    id: cardRecord.feed.id,
-    name: cardRecord.inputs.name.input.value,
-    rss_link: cardRecord.inputs.rss_link.input.value,
-    delay_timeout: cardRecord.inputs.delay_timeout.input.value,
-    clean_timeout: cardRecord.inputs.clean_timeout.input.value,
+    id: rowRecord.feed.id,
+    name: rowRecord.inputs.name.value,
+    rss_link: rowRecord.inputs.rss_link.value,
+    delay_timeout: rowRecord.inputs.delay_timeout.value,
+    clean_timeout: rowRecord.inputs.clean_timeout.value,
   };
 }
 
-async function saveCard(cardRecord) {
-  const values = readCard(cardRecord);
+async function saveRow(rowRecord) {
+  const values = readRow(rowRecord);
   const { feed, errors } = normalizeFeed(values, {
     name: t('feeds.error.name'),
     nameTooLong: t('feeds.error.nameTooLong'),
@@ -167,49 +192,48 @@ async function saveCard(cardRecord) {
     delay_timeout: t('feeds.error.delay'),
     clean_timeout: t('feeds.error.clean'),
   });
-  showFieldErrors(cardRecord, errors);
+  showFieldErrors(rowRecord, errors);
 
   if (Object.keys(errors).length > 0) {
-    setStatus(cardRecord, t('feeds.status.checkFields'), 'error');
+    setStatus(rowRecord, t('feeds.status.checkFields'), 'error');
     return;
   }
 
-  feed.id = cardRecord.feed.id ?? newId();
+  feed.id = rowRecord.feed.id ?? newId();
   await store.upsertFeed(feed);
 
-  if (cardRecord.draft) state.drafts.delete(cardRecord.feed);
-  setStatus(cardRecord, t('feeds.status.saved'), 'ok');
+  if (rowRecord.draft) state.drafts.delete(rowRecord.feed);
+  setStatus(rowRecord, t('feeds.status.saved'), 'ok');
 
   await notifyBackground();
-  await refreshCounts();
 
   // Re-fetch the new/edited feed right away so the reader is not left empty.
-  await refreshCard({ ...cardRecord, feed, draft: false });
+  await refreshRow({ ...rowRecord, feed, draft: false });
   await render();
 }
 
-async function removeCard(cardRecord) {
-  if (!cardRecord.draft) {
-    const name = cardRecord.feed.name || cardRecord.feed.rss_link;
+async function removeRow(rowRecord) {
+  if (!rowRecord.draft) {
+    const name = rowRecord.feed.name || rowRecord.feed.rss_link;
     if (!window.confirm(t('feeds.confirmDelete', { name }))) return;
-    await store.deleteFeed(cardRecord.feed.id);
+    await store.deleteFeed(rowRecord.feed.id);
   }
-  state.drafts.delete(cardRecord.feed);
+  state.drafts.delete(rowRecord.feed);
   await notifyBackground();
   await render();
 }
 
-async function refreshCard(cardRecord) {
-  if (!cardRecord.feed.id) return;
-  setStatus(cardRecord, t('common.loading'));
+async function refreshRow(rowRecord) {
+  if (!rowRecord.feed.id) return;
+  setStatus(rowRecord, t('common.loading'));
   try {
     const response = await chrome.runtime.sendMessage({
       type: MSG_REFRESH_FEED,
-      feedId: cardRecord.feed.id,
+      feedId: rowRecord.feed.id,
     });
     if (response?.ok) {
       setStatus(
-        cardRecord,
+        rowRecord,
         t('feeds.result', {
           added: response.added,
           seen: response.seen,
@@ -220,15 +244,14 @@ async function refreshCard(cardRecord) {
       );
     } else {
       setStatus(
-        cardRecord,
+        rowRecord,
         response?.error ? describeError(response.error) : t('feeds.status.loadError'),
         'error',
       );
     }
   } catch (error) {
-    setStatus(cardRecord, describeError(error), 'error');
+    setStatus(rowRecord, describeError(error), 'error');
   }
-  await refreshCounts();
 }
 
 /** The worker owns the alarms and the badge: tell it the feeds changed. */
@@ -240,41 +263,20 @@ async function notifyBackground() {
   }
 }
 
-async function refreshCounts() {
-  const items = await store.getItems();
-  const counts = new Map();
-  for (const item of items) {
-    counts.set(item.feedId, (counts.get(item.feedId) ?? 0) + 1);
-  }
-  state.itemsByFeed = counts;
-  for (const cardRecord of currentCards()) {
-    if (!cardRecord.feed.id) continue;
-    const count = counts.get(cardRecord.feed.id) ?? 0;
-    cardRecord.stats.textContent = t('feeds.stats', { count });
-  }
-}
-
-/** Cards currently mounted, in DOM order. */
-function currentCards() {
-  return [...els.cards.querySelectorAll('.feed-card')].map((card) => card.__record);
-}
-
 async function render() {
   state.feeds = await store.getFeeds();
 
-  els.cards.replaceChildren();
-  const cards = [
-    ...state.feeds.map((feed) => buildCard(feed, { draft: false })),
-    ...[...state.drafts].map((draft) => buildCard(draft, { draft: true })),
+  els.rows.replaceChildren();
+  const rows = [
+    ...state.feeds.map((feed) => buildRow(feed, { draft: false })),
+    ...[...state.drafts].map((draft) => buildRow(draft, { draft: true })),
   ];
 
-  for (const cardRecord of cards) {
-    cardRecord.card.__record = cardRecord;
-    els.cards.append(cardRecord.card);
+  for (const { record, note } of rows) {
+    els.rows.append(record.row, note);
   }
 
-  els.empty.hidden = cards.length > 0;
-  await refreshCounts();
+  els.empty.hidden = rows.length > 0;
 }
 
 els.add.addEventListener('click', () => {
@@ -288,23 +290,18 @@ mountNav();
 
 void wireThemeButton(els.theme);
 
-/** Counts change from the background worker; only the stats line is refreshed so that
- *  whatever the user is typing in a card is not thrown away. */
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
 
   // A language saved on the settings screen has to reach this page without a reload: adopt it,
-  // re-apply the dictionary to the static markup, then rebuild the cards — their labels, units
+  // re-apply the dictionary to the static markup, then rebuild the rows — their captions, units
   // and buttons were built from the old language and do not follow `applyI18n()`.
   const language = changes.settings?.newValue?.language;
   if (language && language !== currentLanguage()) {
     adoptLanguage(language);
     applyI18n();
     void render();
-    return;
   }
-
-  if (changes.items) void refreshCounts();
 });
 
 // The stored language wins; on first run there is none and the browser language is used.

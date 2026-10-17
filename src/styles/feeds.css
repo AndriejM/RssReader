@@ -19,96 +19,150 @@
   margin: 0;
 }
 
-.hint {
-  color: var(--text-muted);
-  font-size: 12px;
-  margin: 0 0 16px;
-}
-
-.feed-card {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 12px;
-  padding: 14px;
-  box-shadow: var(--shadow);
-}
-
-.feed-card.draft {
-  border-style: dashed;
-}
-
-.feed-card-head {
+/* The only two controls that are not a feed: «add a feed» on the left of the table, the explanation
+   folded behind a «?» on its right, so the table itself holds nothing but the feeds. */
+.table-bar {
   align-items: center;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
-.feed-card-head .stats {
+.info {
+  position: relative;
+}
+
+/* The summary is a button, not a disclosure triangle. */
+.info summary {
+  list-style: none;
+}
+
+.info summary::-webkit-details-marker {
+  display: none;
+}
+
+.info[open] summary {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.info .hint {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
   color: var(--text-muted);
   font-size: 12px;
+  margin: 6px 0 0;
+  max-width: 460px;
+  padding: 10px 12px;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 1;
 }
 
-.grid {
-  display: grid;
-  gap: 10px 14px;
-  grid-template-columns: repeat(2, minmax(220px, 1fr));
+/* One row per feed, one column per field of the feed record. `auto` layout: the declared widths are
+   a starting point, and the actions column keeps its squares whatever the window is. */
+.feed-table {
+  border-collapse: collapse;
+  table-layout: auto;
+  width: 100%;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.field.wide {
-  grid-column: 1 / 3;
-}
-
-.field label {
+.feed-table th {
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
   font-weight: 600;
+  padding: 8px 10px;
+  text-align: left;
 }
 
-.field .code {
-  font-family: ui-monospace, Consolas, monospace;
-  text-transform: none;
+/* The two free-text columns take the room they need, while a minute column is wide enough for its
+   field and the human reading of it side by side (88px of field + the term next to it). */
+.feed-table th:nth-child(1) {
+  width: 18%;
 }
 
-.field .unit {
+.feed-table th:nth-child(2) {
+  width: 26%;
+}
+
+.feed-table th:nth-child(3),
+.feed-table th:nth-child(4) {
+  width: 18%;
+}
+
+.feed-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+  vertical-align: top;
+}
+
+.feed-table td.col-minutes {
+  width: 18%;
+}
+
+.feed-table th.col-actions,
+.feed-table td.col-actions {
+  text-align: right;
+  white-space: nowrap;
+  width: 132px;
+}
+
+/* A draft row is a feed that does not exist yet: it is set apart but keeps the same columns. */
+.feed-row.draft td {
+  background: var(--bg-panel-alt);
+}
+
+/* The minutes of a feed: the number you edit and, next to it, the same term in human units. Wrapping
+   is only the last resort — a language whose term is longer than the column still reads. */
+.col-minutes .minutes {
   align-items: baseline;
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
-.field .unit input {
-  max-width: 120px;
+.col-minutes input {
+  flex: 0 0 88px;
+  max-width: 88px;
+  width: 88px;
 }
 
-.field .unit span {
-  color: var(--text-muted);
+.col-minutes .duration {
+  flex: 0 0 auto;
   font-size: 12px;
+  white-space: nowrap;
 }
 
-.field .error {
+.col-minutes .error,
+.feed-table td .error {
   color: var(--danger);
   font-size: 12px;
+  margin-top: 4px;
   min-height: 16px;
 }
 
-.card-actions {
-  display: flex;
-  gap: 8px;
-  grid-column: 1 / 3;
-  margin-top: 4px;
+/* The three actions of a row: save, load now, delete — each one its own square. */
+.col-actions .icon-btn {
+  margin-left: 6px;
+}
+
+/* A message about the whole row gets a line of its own under it, as wide as the table. */
+.row-note td {
+  border-bottom: none;
+  padding: 0 10px 10px;
+}
+
+.row-note.draft .status {
+  color: var(--text-muted);
 }
 
 .status {
   font-size: 13px;
-  margin-left: auto;
 }
 
 .status.ok {
@@ -119,13 +173,56 @@
   color: var(--danger);
 }
 
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 14px 0 0;
+}
+
 @media (max-width: 720px) {
-  .grid {
-    grid-template-columns: 1fr;
+  .feed-table,
+  .feed-table tbody,
+  .feed-table tr,
+  .feed-table td {
+    display: block;
+    width: auto;
   }
 
-  .field.wide,
-  .card-actions {
-    grid-column: 1 / 2;
+  .feed-table th {
+    display: none;
+  }
+
+  /* Without the columns, every cell names the field it holds. */
+  .feed-table td {
+    border-bottom: none;
+  }
+
+  .feed-table td::before {
+    color: var(--text-muted);
+    content: attr(data-column);
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .feed-row.draft td {
+    background: none;
+  }
+
+  .feed-row.draft td:first-child {
+    border-top: 1px dashed var(--border);
+  }
+
+  .col-actions {
+    text-align: left;
+  }
+
+  .col-actions .icon-btn {
+    margin: 0 6px 0 0;
+  }
+
+  .row-note td::before {
+    display: none;
   }
 }

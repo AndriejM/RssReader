@@ -611,6 +611,41 @@ test('every screen carries the same switcher and names the screen it is', () => 
   );
 });
 
+/**
+ * What a page asks for and what a page has are kept in step by hand. A `data-i18n*` that names a key
+ * no language translates shows the raw key to the user, and a `<use href="#icon-…">` that names a
+ * glyph the page's own sprite does not define draws nothing. Both fail silently, so they are guarded.
+ */
+test('a screen names only the captions and the glyphs it really has', () => {
+  for (const file of ['src/index.html', 'src/feeds.html', 'src/settings.html']) {
+    const source = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+
+    for (const lang of i18n.LANGUAGES) {
+      const keys = new Set(i18n.dictionaryKeys(lang));
+      for (const [, key] of source.matchAll(/data-i18n(?:-[a-z]+)?="([^"]+)"/g)) {
+        assert.ok(keys.has(key), `${lang} has no ${key}, which ${file} asks to show`);
+      }
+    }
+
+    const symbols = new Set([...source.matchAll(/<symbol id="([^"]+)"/g)].map((m) => m[1]));
+    assert.ok(symbols.size > 0, `${file} carries no icon sprite`);
+    for (const [, id] of source.matchAll(/<use href="#([^"]+)"/g)) {
+      assert.ok(symbols.has(id), `${file} draws ${id}, which its own sprite does not define`);
+    }
+  }
+
+  /* The actions of a feed row are built in `feeds.js`, so the glyphs they use are named only in
+   * that script and not in the markup the loop above reads. */
+  const feedsHtml = fs.readFileSync(new URL('../src/feeds.html', import.meta.url), 'utf8');
+  const feedsJs = fs.readFileSync(new URL('../src/feeds.js', import.meta.url), 'utf8');
+  for (const [, icon] of feedsJs.matchAll(/actionButton\('([^']+)'[^)]*\)/g)) {
+    assert.ok(
+      feedsHtml.includes(`<symbol id="icon-${icon}"`),
+      `a feed row offers the "${icon}" action, which the feeds sprite does not draw`,
+    );
+  }
+});
+
 test('t() follows the adopted language and fills placeholders', () => {
   i18n.adoptLanguage('en');
   assert.equal(i18n.t('settings.save'), 'Save');
