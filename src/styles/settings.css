@@ -19,7 +19,6 @@
   margin: 0;
 }
 
-.hint {
 .card {
   background: var(--bg-panel);
   border: 1px solid var(--border);
