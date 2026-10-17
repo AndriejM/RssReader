@@ -1,480 +1,499 @@
-# RSS Reader — расширение для Chrome
+# RSS Reader — a Chrome extension
 
-Чтение RSS-новостей: экран настройки лент, экран глобальных настроек, трёхпанельный интерфейс
-просмотра, автоматическая загрузка заголовков по расписанию и их автоочистка по истечении срока
-хранения.
+[Русская версия: README.ru.md](README.ru.md)
 
-Расширение без сторонних зависимостей и без сборки: после загрузки папки работают все функции,
-а сеть нужна только для чтения самих лент и статей.
+Reading RSS news: a feed settings screen, a global settings screen, a three-panel reading
+interface, automatic headline loading on a schedule and their automatic cleanup once their
+storage time expires.
 
-## Требования
+The extension has no third-party dependencies and requires no build: after the folder is loaded
+all features work, and the network is needed only to read the feeds and articles themselves.
 
-- **Chrome 109 или новее.** Требуется API `chrome.offscreen` — он нужен, чтобы играть звук:
-  у service worker нет DOM, поэтому для файла-сигнала создаётся offscreen-документ.
-  (Запасной путь `chrome.runtime.getContexts` появился в Chrome 116.)
-- MV3 (`manifest_version: 3`) — поддерживается всеми актуальными Chrome/Edge.
-- `node` (для `scripts/*.mjs`) — только для unit-тестов и перегенерации иконок; самому
-  расширению node не нужен.
+## Requirements
 
-## Установка
+- **Chrome 109 or newer.** The `chrome.offscreen` API is required — it is needed to play sound:
+  a service worker has no DOM, so an offscreen document is created for the signal file.
+  (The fallback path `chrome.runtime.getContexts` appeared in Chrome 116.)
+- MV3 (`manifest_version: 3`) — supported by all current Chrome/Edge.
+- `node` (for `scripts/*.mjs`) — only for the unit tests and regenerating icons; the extension
+  itself does not need node.
 
-1. `chrome://extensions` → включить «Режим разработчика».
-2. «Загрузить распакованное расширение» → выбрать папку проекта (`rss-reader-2`).
-3. Chrome спросит разрешения «Читать и изменять данные на всех сайтах» и «Читать историю
-   посещений». Первое нужно, чтобы читать XML лент и HTML статей по `<all_urls>` (см.
-   `host_permissions` в `manifest.json`). Второе (`permissions: tabs`) нужно ровно для одного
-   делам — найти свою же вкладку с читалкой, чтобы не открывать вторую; доступ к адресам
-   вкладок ему и так даёт `<all_urls>`.
-4. Пиктограмма RSS Reader появится на панели. Клик по ней открывает читалку в новой вкладке,
-   а если читалка уже открыта — переводит Chrome на эту вкладку (у `action` нет `default_popup`,
-   поэтому клик всегда ведёт в читалку).
-5. Экран глобальных настроек: кнопка **«Глобальные настройки»** в шапке читалки (перед
-   переключателем темы) — она открывает настройки в этой же вкладке — либо
-   `chrome://extensions` → RSS Reader → «Подробнее» → «Расширение: детали» → «Настройки»
-   (и напрямую `chrome-extension://<id>/src/settings.html`). Именно на этот экран теперь ведёт
-   кнопка «Настройки» в `chrome://extensions`.
-6. Экран настройки лент: кнопка **«Настройки лент»** в шапке читалки либо кнопка
-   «Настройки лент» на экране глобальных настроек (и напрямую
-   `chrome-extension://<id>/src/feeds.html`). Оба экрана настроек открываются в той же вкладке и
-   возвращаются в читалку кнопкой «Открыть читалку».
+## Installation
 
-## Быстрый старт
+1. `chrome://extensions` → enable “Developer mode”.
+2. “Load unpacked extension” → select the project folder (`rss-reader-2`).
+3. Chrome will ask for “Read and change all your data on all websites” and “Read your browsing
+   history” permissions. The first is needed to read feed XML and article HTML via `<all_urls>`
+   (see `host_permissions` in `manifest.json`). The second (`permissions: tabs`) is needed for
+   exactly one thing — finding the extension's own reader tab so it does not open a second one;
+   access to tab URLs is already granted by `<all_urls>` anyway.
+4. The RSS Reader icon appears in the toolbar. Clicking it opens the reader in a new tab, and
+   if the reader is already open — Chrome switches to that tab (the `action` has no
+   `default_popup`, so a click always leads to the reader).
+5. The global settings screen: the **“Global settings”** button in the reader header (before the
+   theme toggle) — it opens the settings in the same tab — or
+   `chrome://extensions` → RSS Reader → “Details” → “Extension details” → “Extension options”
+   (and directly `chrome-extension://<id>/src/settings.html`). The “Extensions: details” button
+   in `chrome://extensions` now leads to this very screen.
+6. The feed settings screen: the **“Feed settings”** button in the reader header, or the
+   “Feed settings” button on the global settings screen (and directly
+   `chrome-extension://<id>/src/feeds.html`). Both settings screens open in the same tab and
+   return to the reader via the “Open reader” button.
 
-1. Откройте «Настройки лент» → «Добавить ленту».
-2. Заполните `name` и `rss_link`, поставьте `delay_timeout` и `clean_timeout` → «Добавить ленту».
-   Лента тут же перечитывается один раз, поэтому заголовки появляются сразу, не дожидаясь
-   первого срабатывания alarm'а.
-3. Откройте читалку (клик по иконке или «Открыть читалку») → первая лента и самый свежий
-   заголовок уже выбраны, текст статьи — в правой панели; дальше клик по ленте слева или по
-   заголовку в средней панели переключает панели.
-4. Дальше лента опрашивается сама каждые `delay_timeout` минут; новые заголовки помечаются
-   бейджем на иконке и коротким звуком.
+## Quick start
 
-## Экран настройки лент (`src/feeds.html`)
+1. Open “Feed settings” → “Add feed”.
+2. Fill in `name` and `rss_link`, set `delay_timeout` and `clean_timeout` → “Add feed”.
+   The feed is re-read once right away, so headlines appear immediately without waiting for the
+   first alarm to fire.
+3. Open the reader (click the icon or “Open reader”) → the first feed and its freshest headline
+   are already selected, the article text is in the right panel; afterwards, clicking a feed on
+   the left or a headline in the middle panel switches the panels.
+4. From then on the feed is polled automatically every `delay_timeout` minutes; new headlines
+   are marked with a badge on the icon and a short sound.
 
-Карточка на ленту. Поля — ровно те, что в задании:
+## Feed settings screen (`src/feeds.html`)
 
-| Поле | Смысл | Единицы | По умолчанию | Ограничения |
+One card per feed. The fields are exactly the ones from the assignment:
+
+| Field | Meaning | Units | Default | Constraints |
 |---|---|---|---|---|
-| `name` | название ленты | — | — | 1–120 символов |
-| `rss_link` | ссылка для считывания новостей | — | — | должен начинаться с `http://` или `https://` |
-| `delay_timeout` | период автоматической загрузки заголовков | минуты | 30 | не меньше 1 (Chrome не даёт alarm'ам период меньше минуты) |
-| `clean_timeout` | время пребывания новости в хранилище после загрузки | минуты | 1440 (1 сутки) | не меньше 1 |
+| `name` | feed name | — | — | 1–120 characters |
+| `rss_link` | link to read the news from | — | — | must start with `http://` or `https://` |
+| `delay_timeout` | period of automatic headline loading | minutes | 30 | at least 1 (Chrome does not allow alarms with a period under a minute) |
+| `clean_timeout` | how long a news item stays in storage after loading | minutes | 1440 (1 day) | at least 1 |
 
-Кнопки карточки:
+Card buttons:
 
-- **«Добавить ленту» / «Сохранить»** — проверка полей и запись ленты. Ошибки показываются
-  под конкретным полем; невалидную ленту сохранить нельзя.
-- **«Загрузить сейчас»** — разово прочитать ленту вне расписания (звука при этом нет) и показать
-  «Новых: N, считано: M».
-- **«Удалить»** — удалить ленту вместе с её заголовками (с подтверждением).
-- В каждой карточке показывается «в хранилище: N» — сколько заголовков этой ленты сейчас лежит;
-  счётчик обновляется, когда фон что-то докачал, и не затирает уже введённые вами значения.
+- **“Add feed” / “Save”** — validates the fields and saves the feed. Errors are shown under the
+  specific field; an invalid feed cannot be saved.
+- **“Load now”** — reads the feed once off the schedule (no sound at that moment) and shows
+  “New: N, read: M”.
+- **“Delete”** — deletes the feed together with its headlines (with a confirmation).
+- Each card shows “in storage: N” — how many headlines of this feed are currently stored; the
+  counter updates when the background finishes downloading something and does not overwrite
+  values you have already entered.
 
-Верх экрана: **«Добавить ленту»**, **«Глобальные настройки»**, **«Открыть читалку»**
-(возвращает в читалку в этой же вкладке), переключатель темы.
+Screen header: **“Add feed”**, **“Global settings”**, **“Open reader”** (returns to the reader in
+this same tab), theme toggle.
 
-## Экран просмотра (`src/index.html`)
+## Reading screen (`src/index.html`)
 
-Три вертикальные панели:
+Three vertical panels:
 
-1. **Ленты** — список лент с числом заголовков и периодом обновления. Иконка обновления
-   вверху панели разово перечитывает выбранную ленту (звука при этом нет), а во время
-   загрузки крутится.
-2. **Заголовки** — заголовки выбранной ленты из хранилища, свежие сверху, с меткой
-   «загружен N мин назад» и временем хранения, отсчитываемым от `clean_timeout`.
-3. **Содержание** — текст статьи, загруженный в момент клика. Заголовок статьи в правой панели
-   сам является ссылкой на оригинал (новая вкладка); в левом углу над текстом — иконка
-   удаления: она убирает заголовок из списка и из хранилища, сразу открывает следующий заголовок
-   той же ленты и запоминает удалённый как прочитанный — при следующей загрузке ленты он уже не
-   появится.
+1. **Feeds** — a list of feeds with their headline counts and update periods. The refresh icon
+   at the top of the panel re-reads the selected feed once (no sound at that moment), and spins
+   while loading.
+2. **Headlines** — headlines of the selected feed from storage, freshest on top, with a
+   “loaded N min ago” label and a storage time counted down from `clean_timeout`.
+3. **Content** — the article text loaded at the moment of the click. The article headline in the
+   right panel is itself a link to the original (new tab); in the corner above the text there is
+   a delete icon: it removes the headline from the list and from storage, immediately opens the
+   next headline of the same feed, and remembers the deleted one as read — on the next feed load
+   it will no longer appear.
 
-При открытии читалки курсор нигде не остаётся пустым: выбрана первая лента списка, а в средней
-панели — первый (самый свежий) её заголовок, и его текст сразу показан в правой. Отказ от
-автовбора один: возврат из экрана настроек в этой же вкладке восстанавливает ровно ту ленту и
-ровно тот заголовок, на которых вы были (о них ниже).
+When the reader opens, no cursor is left empty: the first feed in the list is selected, the
+middle panel has its first (freshest) headline, and its text is shown in the right panel right
+away. There is exactly one case of opting out of auto-selection: returning from a settings
+screen in the same tab restores precisely the feed and precisely the headline you were on
+(more on this below).
 
-Вверху читалки — счётчик: общее число заголовков всех лент в хранилище. Рядом кнопка в виде
-иконки корзины («Удалить все») — один клик убирает из хранилища все заголовки (сами ленты
-остаются), дальше ещё три иконки — настройки лент, глобальные настройки и переключатель темы.
-Счётчики обновляются, когда фон докачал или почистил заголовки, поэтому открытая читалка не
-показывает устаревшие данные.
+At the top of the reader there is a counter: the total number of headlines of all feeds in
+storage. Next to it a trash-icon button (“Delete all”) — one click removes all headlines from
+storage (the feeds themselves remain), then three more icons — feed settings, global settings
+and the theme toggle. The counters update when the background downloads or cleans up headlines,
+so an open reader never shows stale data.
 
-Иконка «Настройки лент» открывает настройки в этой же вкладке — второй вкладки не появляется,
-— а «Открыть читалку» на экране настроек возвращает в читалку тем же способом: к той же ленте
-и тому же открытому заголовку. Иконка «Глобальные настройки» (стоит сразу перед переключателем
-темы) открывает экран глобальных настроек тем же способом.
+The “Feed settings” icon opens the settings in the same tab — no second tab appears — and “Open
+reader” on the settings screen returns to the reader the same way: to the same feed and the same
+open headline. The “Global settings” icon (placed right before the theme toggle) opens the
+global settings screen the same way.
 
-## Экран глобальных настроек (`src/settings.html`)
+## Global settings screen (`src/settings.html`)
 
-Настройки, которые относятся не к отдельной ленте, а к читалке целиком. Открывается иконкой
-«Глобальные настройки» в шапке читалки, а также кнопкой «Настройки» в
-`chrome://extensions` (`options_ui` в манифесте). Поля:
+Settings that apply to the reader as a whole rather than to a single feed. It opens via the
+“Global settings” icon in the reader header, and also via the “Extensions: details” button in
+`chrome://extensions` (`options_ui` in the manifest). Fields:
 
-| Поле | Смысл | Единицы | По умолчанию | Ограничения |
+| Field | Meaning | Units | Default | Constraints |
 |---|---|---|---|---|
-| `read_ttl_days` | через сколько дней забыть прочитанные: срок, который не даёт удалённой новости вернуться из ленты | дни | 7 | целое от 1 до 3650 |
-| звук при скачивании | combobox: какой mp3 из `src/media` играть, когда автоматическая загрузка принесла заголовки; первая строка «Без звука» выключает сигнал | — | `ceres.mp3` | только файлы из `src/media` или «Без звука» |
-| язык интерфейса | combobox: на каком языке подписи, подсказки и сообщения всех экранов («Русский», «English») | — | язык браузера, а его нет среди поддерживаемых — `English` | только языки из `src/lib/i18n.js` |
+| `read_ttl_days` | how many days to forget read items: the period that keeps a deleted news item from coming back from the feed | days | 7 | integer from 1 to 3650 |
+| sound on download | combobox: which mp3 from `src/media` to play when an automatic load brings headlines; the first row “No sound” turns the signal off | — | `ceres.mp3` | only files from `src/media` or “No sound” |
+| interface language | combobox: which language the labels, tooltips and messages of all screens use (“Русский”, “English”) | — | the browser language; if it is not among the supported ones — `English` | only languages from `src/lib/i18n.js` |
 
-Поля ничего не пишут в хранилище сами: срок, сигнал и язык уходят туда только по кнопке
-**«Записать»**. Пока значение в поле отличается от того, что лежит в хранилище, кнопка активна,
-а внизу карточки появляется «Изменения не записаны»; после записи там же видно «Записано: горят
-через M дн · звук: <файл> · язык: <язык>».
-Под полем показаны значение, которое сейчас лежит в хранилище, и число меток, которое оно держит
-(«прочитанных меток: N · горят через M дн»). Рядом с полем — кнопка **«Забыть прочитанные»** (с
-подтверждением): она одним нажатием очищает весь список `read`, не дожидаясь истечения
-`read_ttl_days`, поэтому новости, которые вы удаляли раньше, при следующей загрузке ленты могут
-вернуться.
+The fields themselves write nothing to storage: the period, the signal and the language go there
+only via the **“Write”** button. While a field's value differs from what is stored, the button is
+active and “Changes not saved” appears at the bottom of the card; after saving, the same spot
+shows “Saved: marks burn out in M days · sound: <file> · language: <language>”. Below the field
+are the value currently in storage and the number of marks it holds (“read marks: N · burn out
+in M days”). Next to the field is the **“Forget read items”** button (with a confirmation): one
+press clears the entire `read` list without waiting for `read_ttl_days` to expire, so news items
+you deleted earlier may come back on the next feed load.
 
-Все три значения лежат в ключе `settings` в `chrome.storage.local` — там же, где тема. Их читает
-service worker: срок — когда вычищает прочитанные, поэтому записанный «Записать» горизонт тут же
-пробуждает очистку и действует на автоматическую загрузку; `sound_file` — чтобы решить, какой
-файл играется после той же загрузки (или не играется вовсе, если выбрано «Без звука»).
+All three values live under the `settings` key in `chrome.storage.local` — in the same place as
+the theme. The service worker reads them: the period — when it purges read items, so a horizon
+saved via “Write” immediately wakes up the cleanup and applies to automatic loading;
+`sound_file` — to decide which file plays after that same load (or plays nothing at all if
+“No sound” is selected).
 
-Язык интерфейса берут страницы: `settings.language`, а если записи нет (первый запуск) — язык
-браузера (`navigator.language` и `navigator.languages`), и только если он не поддерживается
-расширением — `English`. Записанный язык действует сразу: экран, где его сменили, переклеивает
-свои подписи без перезагрузки, а читалка и экран лент подхватывают изменение по
-`chrome.storage.onChanged`.
+The interface language is taken by the pages: `settings.language`, and if there is no stored
+value (first launch) — the browser language (`navigator.language` and `navigator.languages`),
+and only if it is not supported by the extension — `English`. A saved language takes effect
+right away: the screen where it was changed re-pastes its own labels without a reload, and the
+reader and the feed screen pick up the change via `chrome.storage.onChanged`.
 
-Верх экрана: **«Настройки лент»**, **«Открыть читалку»** (возвращает в читалку в этой же вкладке,
-выбранная лента и заголовок сохраняются) и переключатель темы.
+Screen header: **“Feed settings”**, **“Open reader”** (returns to the reader in this same tab;
+the selected feed and headline are preserved) and the theme toggle.
 
-## Структура
+## Structure
 
 ```
 manifest.json                 MV3, permissions: storage, unlimitedStorage, alarms, offscreen,
                               tabs
-icons/                        пиктограмма RSS (16/32/48/128), генерируется скриптом
-src/background.js             service worker: опрос лент, очистка, бейдж, звук, клик по иконке
-src/index.html|js             трёхпанельная читалка (ленты → заголовки → содержание)
-src/feeds.html|js             экран конфигурации лент: добавить / изменить / удалить
-src/settings.html|js          экран глобальных настроек: срок жизни списка прочитанных, его
-                              ручная очистка, combobox файла-сигнала («Без звука» / mp3 из media)
-                              и combobox языка интерфейса
-src/lib/i18n.js              все надписи, сообщения и подсказки: словари `ru` и `en`, `t(key,
-                              params)`, `applyI18n()`, единицы измерения, язык браузера
-src/lib/i18n-boot.js         применить записанный язык до того, как страницу нарисует её модуль
-src/lib/errors.js             ошибку ленты (`{code, params}`) превратить в текст на языке страницы
-src/offscreen.html|js         offscreen-документ: единственный контекст расширения с DOM — здесь
-                              разбирается XML лент и воспроизводится звук
-src/lib/messages.js           имена сообщений между страницами и service worker
-src/lib/storage.js            ленты, заголовки, список прочитанных, настройки, автоочистка
-src/lib/alarms.js             alarm на каждую ленту + alarm периодической очистки
-src/lib/offscreen.js          создание offscreen-документа и обмен сообщениями с ним
-src/lib/rss.js                загрузка и разбор RSS 2.0 / Atom / RDF (работает внутри
-                              offscreen-документа)
-src/lib/encoding.js           байты ответа → текст: найти кодировку ленты (BOM, `Content-Type`,
-                              объявление в XML) и прочитать её в ней (покрыто тестами)
-src/lib/extract.js            извлечение текста статьи в момент клика по заголовку
-src/lib/sound.js              какой файл-сигнал просиграть (читает выбор с экрана настроек)
-src/media/                    аудиофайлы сигнала: играет тот, что выбран на экране настроек
-                              («Без звука» выключает сигнал)
-src/lib/theme.js              светлая/тёмная тема
-src/lib/tabs.js               один экран расширения — одна вкладка: найти открытую вкладку и
-                              активировать её вместо открытия второй
-src/lib/util.js               чистые функции без chrome.* (покрыты тестами)
-_locales/en|ru/               название и описание самого расширения — их выбирает Chrome по языку
-                              браузера (`__MSG_extensionName__` в манифесте)
-src/styles/                   theme.css (CSS-переменные тем), reader.css, feeds.css, settings.css
-scripts/test.mjs              unit-тесты чистых функций: node scripts/test.mjs
-scripts/make_icons.mjs        перегенерировать пиктограммы без зависимостей
-scripts/check_icons.mjs       проверить результат make_icons.mjs
-example_rss.xml               образец ленты; ни код читалки, ни тесты к нему не обращаются
-nnm_example_rss_item.xml      образец ленты в Windows-1251: на нём держатся тесты расшифровки
+icons/                        RSS icon (16/32/48/128), generated by a script
+src/background.js             service worker: feed polling, cleanup, badge, sound, icon click
+src/index.html|js             three-panel reader (feeds → headlines → content)
+src/feeds.html|js             feed configuration screen: add / edit / delete
+src/settings.html|js          global settings screen: lifetime of the read list, its manual
+                              cleanup, combobox of the signal file (“No sound” / mp3 from media)
+                              and combobox of the interface language
+src/lib/i18n.js              every label, message and tooltip: `ru` and `en` dictionaries,
+                              `t(key, params)`, `applyI18n()`, units, browser language
+src/lib/i18n-boot.js         apply the stored language before the page is drawn by its module
+src/lib/errors.js             turn a feed error (`{code, params}`) into text in the page's language
+src/offscreen.html|js         offscreen document: the extension's only context with a DOM — feed
+                              XML is parsed and sound is played here
+src/lib/messages.js           message names between pages and the service worker
+src/lib/storage.js            feeds, headlines, read list, settings, automatic cleanup
+src/lib/alarms.js             an alarm per feed + a periodic-cleanup alarm
+src/lib/offscreen.js          creating the offscreen document and exchanging messages with it
+src/lib/rss.js                loading and parsing RSS 2.0 / Atom / RDF (runs inside the
+                              offscreen document)
+src/lib/encoding.js           response bytes → text: find the feed's encoding (BOM, `Content-Type`,
+                              the XML declaration) and decode it with it (covered by tests)
+src/lib/extract.js            article text extraction on a headline click
+src/lib/sound.js              which signal file to play (reads the choice from the settings screen)
+src/media/                    signal audio files: the one selected on the settings screen plays
+                              (“No sound” turns the signal off)
+src/lib/theme.js              light/dark theme
+src/lib/tabs.js               one extension screen — one tab: find the open tab and activate it
+                              instead of opening a second one
+src/lib/util.js               pure functions without chrome.* (covered by tests)
+_locales/en|ru/               the extension's own name and description — Chrome picks them by the
+                              browser language (`__MSG_extensionName__` in the manifest)
+src/styles/                   theme.css (theme CSS variables), reader.css, feeds.css, settings.css
+scripts/test.mjs              unit tests of the pure functions: node scripts/test.mjs
+scripts/make_icons.mjs        regenerate the icons without dependencies
+scripts/check_icons.mjs       verify the result of make_icons.mjs
+example_rss.xml               a sample feed; neither the reader code nor the tests reference it
+nnm_example_rss_item.xml      a sample feed in Windows-1251: the decoding tests rely on it
 ```
 
-## Как выполнены требования
+## How the requirements are met
 
-| # | Требование | Где реализовано |
+| # | Requirement | Where it is implemented |
 |---|---|---|
-| 1 | Экран конфигурации со списком лент, add/edit/delete; у ленты `rss_link`, `name`, `delay_timeout`, `clean_timeout`. Заголовки хранятся со ссылкой на ленту, заголовком, http-ссылкой на новость и временем загрузки | `src/feeds.html`, `src/feeds.js`, `util.normalizeFeed`, `store.makeItem` |
-| 2 | Три вертикальные панели: ленты → заголовки из хранилища → содержание; содержание читается динамически в момент клика; над ним кнопка удаления (из списка и из хранилища), ссылка на оригинал — в самом заголовке статьи | `src/index.html`, `src/index.js`, `src/lib/extract.js`, `store.removeItem` |
-| 3 | Клик по иконке открывает экран просмотра в новой вкладке, а если он уже открыт — активируется существующая вкладка, а не создаётся новая | `chrome.action.onClicked` в `src/background.js` → `tabs.focusOrCreateTab` (в манифесте нет `default_popup`) |
-| 4 | Автоудаление заголовка по истечении `clean_timeout` | `store.cleanup` + `CLEANUP_ALARM_NAME` в `src/lib/alarms.js` (проверка раз в минуту), плюс `store.cleanup()` при открытии читалки |
-| 5 | Переключатель светлой/тёмной темы | `src/lib/theme.js`, `src/styles/theme.css`; значение в `chrome.storage.local`, поэтому синхронно на всех страницах |
-| 6 | Бейдж на иконке: `1…99` числом, `*` при больше 99, пусто при 0 | `util.badgeText` + `chrome.action.setBadgeText` + `chrome.action.setBadgeBackgroundColor` в `src/background.js`; подложка бейджа жёлтая и зависит от темы, поэтому число читается в обеих темах панели Chrome |
-| 7 | Звук, когда автоматическая загрузка принесла больше 0 заголовков | `store.addItems` возвращает число новых → `sound.playSound` читает выбранный на экране настроек файл → offscreen-документ проигрывает его (`playSound` делает ничего, если выбрано «Без звука»); ручной «Обновить»/«Загрузить сейчас» звука не даёт |
-| 8 | Отдельный экран глобальных настроек (иконка в шапке читалки, рядом с переключателем темы): `read_ttl_days` — через сколько дней забыть прочитанные и combobox файла-сигнала (оба записываются кнопкой «Записать»), и кнопка полной очистки списка прочитанных | `src/settings.html`, `src/settings.js`, `store.getReadTtlDays` / `store.setReadTtlDays` / `store.setSoundChoice` / `store.clearRead` |
-| 9 | Надписи, сообщения и подсказки вынесены в одну конфигурацию, на её основе сделана английская; на экране глобальных настроек — combobox языка, который записывается в хранилище; читалка при загрузке берёт записанный язык, иначе язык браузера, иначе английский | `src/lib/i18n.js` (словари `ru` / `en`), `store.getLanguage` / `store.setLanguage`, `src/lib/i18n-boot.js`, `src/lib/errors.js`, combobox `language-file` в `src/settings.html` |
+| 1 | Configuration screen with a feed list, add/edit/delete; a feed has `rss_link`, `name`, `delay_timeout`, `clean_timeout`. Headlines are stored with a link to the feed, the headline, the http link to the news and the loading time | `src/feeds.html`, `src/feeds.js`, `util.normalizeFeed`, `store.makeItem` |
+| 2 | Three vertical panels: feeds → headlines from storage → content; the content is fetched dynamically on a click; above it a delete button (from the list and from storage), the link to the original is in the article headline itself | `src/index.html`, `src/index.js`, `src/lib/extract.js`, `store.removeItem` |
+| 3 | Clicking the icon opens the reading screen in a new tab, and if it is already open — the existing tab is activated rather than a new one created | `chrome.action.onClicked` in `src/background.js` → `tabs.focusOrCreateTab` (no `default_popup` in the manifest) |
+| 4 | Automatic headline deletion once `clean_timeout` expires | `store.cleanup` + `CLEANUP_ALARM_NAME` in `src/lib/alarms.js` (checked once a minute), plus `store.cleanup()` when the reader opens |
+| 5 | Light/dark theme toggle | `src/lib/theme.js`, `src/styles/theme.css`; the value is in `chrome.storage.local`, so it is synchronous across all pages |
+| 6 | Badge on the icon: `1…99` as a number, `*` when over 99, empty at 0 | `util.badgeText` + `chrome.action.setBadgeText` + `chrome.action.setBadgeBackgroundColor` in `src/background.js`; the badge background is yellow and theme-dependent, so the number is readable in both Chrome toolbar themes |
+| 7 | Sound when an automatic load brings more than 0 headlines | `store.addItems` returns the number of new items → `sound.playSound` reads the file selected on the settings screen → the offscreen document plays it (`playSound` does nothing when “No sound” is selected); manual “Refresh”/“Load now” produce no sound |
+| 8 | A separate global settings screen (an icon in the reader header, next to the theme toggle): `read_ttl_days` — how many days to forget read items, and a signal-file combobox (both saved via the “Write” button), plus a button that fully clears the read list | `src/settings.html`, `src/settings.js`, `store.getReadTtlDays` / `store.setReadTtlDays` / `store.setSoundChoice` / `store.clearRead` |
+| 9 | Labels, messages and tooltips are factored into one configuration, from which the English one is derived; on the global settings screen a language combobox that is saved to storage; on load the reader takes the saved language, otherwise the browser language, otherwise English | `src/lib/i18n.js` (`ru` / `en` dictionaries), `store.getLanguage` / `store.setLanguage`, `src/lib/i18n-boot.js`, `src/lib/errors.js`, `language-file` combobox in `src/settings.html` |
 
-## Схема данных
+## Data schema
 
-«localstorage» из задания — это `chrome.storage.local`, а не `window.localStorage`: только он
-доступен и service worker'у, и обеим страницам расширения одновременно. Четыре ключа:
+The “localstorage” from the assignment is `chrome.storage.local`, not `window.localStorage`: it
+is the only store accessible simultaneously to both the service worker and both extension pages.
+Four keys:
 
-**`feeds`** — массив лент:
+**`feeds`** — an array of feeds:
 
 ```json
 {
-  "id": "c0f4…",              // uuid (util.newId), выдаётся при первом сохранении
+  "id": "c0f4…",              // uuid (util.newId), assigned on first save
   "name": "Хабр",
   "rss_link": "https://habr.com/ru/rss/all/all/",
-  "delay_timeout": 30,        // минуты
-  "clean_timeout": 1440       // минуты
+  "delay_timeout": 30,        // minutes
+  "clean_timeout": 1440       // minutes
 }
 ```
 
-**`items`** — массив заголовков. Поля из задания — `rss_link`, `title`, `link`, `time`;
-`uid`/`feedId`/`feedName` добавлены служебно: чтобы опознать заголовок и не плодить дубликаты.
+**`items`** — an array of headlines. The fields from the assignment are `rss_link`, `title`,
+`link`, `time`; `uid`/`feedId`/`feedName` were added internally: to identify a headline and avoid
+duplicates.
 
 ```json
 {
-  "uid": "<feedId>|<link>",   // уникальный ключ заголовка
+  "uid": "<feedId>|<link>",   // unique key of the headline
   "feedId": "c0f4…",
   "feedName": "Хабр",
-  "rss_link": "https://habr.com/ru/rss/all/all/",  // ссылка на ленту
+  "rss_link": "https://habr.com/ru/rss/all/all/",  // link to the feed
   "title": "Заголовок новости",
-  "link": "https://habr.com/ru/news/…/",            // http-ссылка на новость
-  "time": 1760000000000                             // время загрузки заголовка, мс
+  "link": "https://habr.com/ru/news/…/",            // http link to the news
+  "time": 1760000000000                             // headline loading time, ms
 }
 ```
 
-**`read`** — массив прочитанных (удалённых пользователем) новостей. Сервер ленты свои заголовки
-не удаляет, поэтому без этого списка удалённая новость возвращалась бы при каждой следующей
-загрузке. Ключ записи — `link` новости: сервер может переписать заголовок, но редко меняет ссылку,
-и метка переживает и правку ленты, и её повторное добавление.
+**`read`** — an array of read (user-deleted) news items. The feed server does not remove its own
+headlines, so without this list a deleted news item would return on every next load. The record
+key is the news `link`: a server may rewrite a headline but rarely changes the link, so a mark
+survives both a feed edit and re-adding the feed.
 
 ```json
 {
-  "link": "https://habr.com/ru/news/…/",              // признак новости, по которому она сверяется
-  "pubDate": "Tue, 01 Oct 2024 08:00:00 GMT",        // по возрасту этого поля список и чистится
-  "time": 1760000000000                              // момент удаления, если pubDate отсутствует
+  "link": "https://habr.com/ru/news/…/",              // the news identifier it is matched by
+  "pubDate": "Tue, 01 Oct 2024 08:00:00 GMT",        // the list is cleaned by this field's age
+  "time": 1760000000000                              // deletion moment, if pubDate is absent
 }
 ```
 
 **`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "read_ttl_days": 7, "sound_file": "src/media/ceres.mp3" | "none" }`.
 
-Прочие свойства хранилища:
+Other storage properties:
 
-- Порядок в `items` — свежие сверху (`store.sortItems`; при одинаковом `time` порядок
-  стабилизируется по заголовку).
-- В `read` попадают только заголовки, которые пользователь удалил сам (иконка удаления в читалке
-  и «Удалить все»). Заголовок, истёкший по `clean_timeout`, в `read` не пишется: его срок вышел
-  не по воле пользователя. Метка живёт `read_ttl_days` дней (по умолчанию 7; ставится на экране
-  глобальных настроек), отсчёт — от более позднего из `pubDate` и момента удаления
-  (`util.readTime`), поэтому удалённая недавно новость не «оживает» раньше срока, даже если
-  опубликована давно. Кнопка «Забыть прочитанные» на том же экране стирает весь список разом.
-- Тема дополнительно кешируется в `window.localStorage` (`rss-reader:theme`), чтобы страница
-  красилась сразу, не дожидаясь асинхронного чтения из `chrome.storage.local`.
-- Удаление ленты удаляет и её заголовки (`store.deleteFeed`); в `read` они не попадают: ленту
-  удалили целиком, а при её повторном добавлении заголовки читаются заново.
+- The order in `items` is freshest-first (`store.sortItems`; for equal `time` the order is
+  stabilized by the headline).
+- Only headlines the user deleted personally (the delete icon in the reader and “Delete all”)
+  get into `read`. A headline expired by `clean_timeout` is not written to `read`: its term
+  expired not by the user's will. A mark lives `read_ttl_days` days (7 by default; set on the
+  global settings screen), counted from the later of `pubDate` and the deletion moment
+  (`util.readTime`), so a recently deleted news item does not “come back to life” early even if
+  it was published long ago. The “Forget read items” button on the same screen wipes the whole
+  list at once.
+- The theme is additionally cached in `window.localStorage` (`rss-reader:theme`) so the page
+  gets its colors immediately without waiting for an asynchronous read from
+  `chrome.storage.local`.
+- Deleting a feed also deletes its headlines (`store.deleteFeed`); they do not get into `read`:
+  the feed was deleted wholesale, and on re-adding it the headlines are read anew.
 
-## Сообщения страниц ↔ service worker
+## Page ↔ service worker messages
 
-Страницы пишут в хранилище сами, а alarms и бейдж принадлежат фону, поэтому они общаются так:
+Pages write to storage themselves, while alarms and the badge belong to the background, so they
+communicate like this:
 
-| Сообщение | Откуда | Что делает фон |
+| Message | From where | What the background does |
 |---|---|---|
-| `MSG_REFRESH_FEED` (`feedId`) | читалка «Обновить», экран настроек «Загрузить сейчас» | читает ленту и сохраняет заголовки; отвечает `{ok, added, skipped, seen}`, где `skipped` — сколько заголовков отклонено как уже прочитанные; звука нет |
-| `MSG_FEEDS_CHANGED` | читалка (при открытии), экран настроек (после сохранения/удаления) | пересобирает alarms по списку лент, чистит просроченное, обновляет бейдж |
-| `MSG_COUNT` | никем из страниц пока не используется (зарезервировано) | отвечает `{ok, count}` — число заголовков в хранилище |
-| `MSG_PLAY_SOUND` (`src`) | только `sound.playSound` из фона | offscreen-документ проигрывает выбранный на экране настроек аудиофайл из `src/media` |
-| `MSG_FETCH_FEED` (`url`) | только фон (`background.readFeed`) | offscreen-документ читает ленту и разбирает её, отвечает `{ok, result}` или `{ok:false, error}` |
+| `MSG_REFRESH_FEED` (`feedId`) | reader “Refresh”, settings screen “Load now” | reads the feed and saves the headlines; replies `{ok, added, skipped, seen}`, where `skipped` is how many headlines were rejected as already read; no sound |
+| `MSG_FEEDS_CHANGED` | reader (on opening), settings screen (after save/delete) | rebuilds alarms from the feed list, clears expired items, updates the badge |
+| `MSG_COUNT` | not used by pages yet (reserved) | replies `{ok, count}` — the number of headlines in storage |
+| `MSG_PLAY_SOUND` (`src`) | only `sound.playSound` from the background | the offscreen document plays the audio file selected on the settings screen from `src/media` |
+| `MSG_FETCH_FEED` (`url`) | only the background (`background.readFeed`) | the offscreen document reads the feed and parses it, replies `{ok, result}` or `{ok:false, error}` |
 
-Плюс страницы и фон слушают `chrome.storage.onChanged`: изменение `feeds` пересобирает
-alarms, изменение `items` обновляет бейдж и списки, изменение `settings` (тема,
-`read_ttl_days`, выбранный `sound_file` или `language`) прогоняет очистку по новым правилам, а
-страницы меняют язык своих подписей. Поэтому экраны не «расходятся» с фоном.
+Additionally, pages and the background listen to `chrome.storage.onChanged`: a change in `feeds`
+rebuilds alarms, a change in `items` updates the badge and the lists, a change in `settings`
+(theme, `read_ttl_days`, the selected `sound_file` or `language`) runs the cleanup under the new
+rules, and the pages switch the language of their labels. This is why the screens never “drift
+apart” from the background.
 
-## Лимиты и константы
+## Limits and constants
 
-| Константа | Значение | Где |
+| Constant | Value | Where |
 |---|---|---|
-| `MIN_ALARM_PERIOD_MINUTES` | 1 | `util.js` — пол для `delay_timeout` |
-| `CLEANUP_PERIOD_MINUTES` | 1 | `util.js` — как часто проверять `clean_timeout` |
-| `DEFAULT_DELAY_TIMEOUT` | 30 мин | `util.js` |
-| `DEFAULT_CLEAN_TIMEOUT` | 1440 мин (1 сутки) | `util.js` |
-| `MAX_ITEMS_PER_FEED` | 100 | `util.js` — сколько самых свежих заголовков одной ленты хранится |
-| `MAX_ENTRIES` | 50 | `rss.js` — сколько записей берётся из одного ответа ленты |
-| `READ_TTL_DAYS` | 7 дней | `util.js` — **значение по умолчанию** для срока метки «прочитано»; настраивается полем `read_ttl_days` |
-| `MIN_READ_TTL_DAYS` / `MAX_READ_TTL_DAYS` | 1 / 3650 | `util.js` — границы этого поля (`util.toDays`) |
-| `MAX_READ_RECORDS` | 1000 | `util.js` — сколько таких меток хранится; старые вытесняются первыми |
-| `MAX_PARAGRAPHS` / `MAX_CHARACTERS` | 60 / 16000 | `extract.js` — предел текста статьи в правой панели |
-| `MIN_PARAGRAPH_LENGTH` | 40 | `extract.js` — короткие строки (меню, подписи) не считаются текстом статьи |
+| `MIN_ALARM_PERIOD_MINUTES` | 1 | `util.js` — the floor for `delay_timeout` |
+| `CLEAN_PERIOD_MINUTES` | 1 | `util.js` — how often `clean_timeout` is checked |
+| `DEFAULT_DELAY_TIMEOUT` | 30 min | `util.js` |
+| `DEFAULT_CLEAN_TIMEOUT` | 1440 min (1 day) | `util.js` |
+| `MAX_ITEMS_PER_FEED` | 100 | `util.js` — how many freshest headlines of one feed are stored |
+| `MAX_ENTRIES` | 50 | `rss.js` — how many entries are taken from one feed response |
+| `READ_TTL_DAYS` | 7 days | `util.js` — the **default value** for the “read” mark lifetime; configurable via the `read_ttl_days` field |
+| `MIN_READ_TTL_DAYS` / `MAX_READ_TTL_DAYS` | 1 / 3650 | `util.js` — bounds of this field (`util.toDays`) |
+| `MAX_READ_RECORDS` | 1000 | `util.js` — how many such marks are stored; the oldest are evicted first |
+| `MAX_PARAGRAPHS` / `MAX_CHARACTERS` | 60 / 16000 | `extract.js` — the limit of article text in the right panel |
+| `MIN_PARAGRAPH_LENGTH` | 40 | `extract.js` — short lines (menus, captions) are not counted as article text |
 | `ALARM_PREFIX` / `CLEANUP_ALARM_NAME` | `feed:<id>` / `rss-reader:cleanup` | `util.js` |
 
-## Особенности реализации
+## Implementation notes
 
-- **`delay_timeout` не может быть меньше 1 минуты**: Chrome в релизе не даёт alarm'ам период
-  меньше минуты (`util.alarmPeriodMinutes`). Хранится значение в минутах как есть. Первая
-  автоматическая загрузка новой ленты — через `delay_timeout` после сохранения; сразу после
-  сохранения лента перечитывается вручную, поэтому пустой читалка не остаётся.
-- **`clean_timeout` тоже в минутах**; срок отсчитывается от `time` заголовка, поэтому правка
-  `clean_timeout` у ленты сразу влияет на уже сохранённые её заголовки. Просроченные заголовки
-  вычищаются alarm'ом раз в минуту, а также при открытии читалки и при любом изменении лент.
-  Заголовок «без родительской ленты» (ленту удалили, пока alarm был в очереди) удаляется.
-- **Дубликаты**: заголовок идентифицируется по `uid = feedId + "|" + link`, поэтому повторный
-  опрос ленты не плодит копий и не сбрасывает срок хранения существующей записи.
-- **Бейдж считает заголовки всех лент вместе** (всё содержимое `items`), как и сказано в
-  задании: `1…99` числом, `*` при больше 99, пусто при 0.
-- **Цвет цифр бейджа Chrome выбирает сам**: API `chrome.action` не позволяет задать цвет цифр —
-  только цвет подложки, поэтому подложка сделана жёлтой и зависит от темы (тёмная тема
-  `#ffd54f`, светлая `#e6a817`): так цифры остаются хорошо заметными и на тёмной, и на светлой
-  панели Chrome. Прежний синий акцент `#1e88e5` их прятал.
-- **Содержание статьи** вытаскивается из HTML как текст (только текстовые узлы), поэтому на
-  страницу расширения не попадает чужая разметка, скрипты и стили. Из страницы вырезаются
-  служебные блоки (`nav`, `footer`, `iframe`, `form` и т. п.) и блоки с «рекламными»
-  class/id. Если текст не найден (лента отдаёт только отрывок, или страница собирается
-  скриптами), в правой панели показывается сообщение и остаётся ссылка на оригинал.
-- **Поддерживаются RSS 2.0, Atom и RDF**: разбираются `<item>` и `<entry>`, `link` в Atom
-  (`rel="alternate"`), `guid` с `isPermaLink="true"` как ссылка; относительные ссылки
-  достраиваются от URL ленты; до 50 записей за один ответ.
-- **Кодировка ленты определяется до записи в хранилище**: тело ответа читается байтами
-  (`response.arrayBuffer()`), а не `response.text()` — последнее читает всё как UTF-8, из-за чего
-  лента в Windows-1251 (её до сих пор отдают русскоязычные сайты) попадала в `chrome.storage.local`
-  непотребными знаками. `src/lib/encoding.js` ищет кодировку по надёжности находки: байтовый
-  маркер (BOM), `charset` заголовка `Content-Type`, объявление `encoding=` внутри XML или
-  `<meta charset>` страницы. Каждую находку он пробует прочитать строго: однобайтовая кодировка не
-  отвергает ни одних байтов, поэтому она принимается, только если полученный текст ей
-  соответствует (UTF-8, прочитанный как Windows-1251, выдаёт буквы чужих алфавитов — `ЂѓљҐґї`).
-  Если утверждений нет или они не сошлись, сначала пробуется UTF-8 (им кормится большинство лент),
-  затем — единственное предположение, нужное этому читателю, Windows-1251, и только когда байты
-  действительно дают русский текст, а не текст чужого алфавита; остальное дочитывается UTF-8 с
-  потерей, чтобы лента не отказывала из-за кодировки, которой никто не назвал. В `DOMParser` текст
-  входит уже расшифрованным, поэтому `retargetXmlDeclaration` меняет объявление в нём на ту
-  кодировку, в которую байты прочитаны на самом деле. В хранилище лежит текст, а не байты, поэтому
-  прочитать их неверно вторично уже нечем; если заявленная кодировка не совпала с байтами, `rss.js`
-  пишет об этом `console.warn`. Правила расшифровки держатся тестами `scripts/test.mjs`.
-- **Звук** — проигрывание сигнала, выбранного на экране глобальных настроек: его играет offscreen-документ через
-  `<audio>` (`reasons: ["AUDIO_PLAYBACK"]`), потому что у service worker'а DOM не разрешён.
-  Адрес файла фон передаёт сообщением (`MSG_PLAY_SOUND` с `src`), а offscreen-документ берёт его
-  через `chrome.runtime.getURL(src)` — файл лежит внутри расширения, ни `web_accessible_resources`
-  ни сеть для него не нужны. Плеер в offscreen-документе один и переиспользуется: файл грузится
-  один раз, повторный сигнал обрывает предыдущее проигрывание и начинается с начала.
-  Файл выбирается на экране глобальных настроек: combobox («Без звука» / файл `src/media`) пишет
-  его в `settings.sound_file`, а `playSound` (`src/lib/sound.js`) читает этот выбор и делает
-  ничего, если стоит `SOUND_NONE` («Без звука»). Список файлов задан константой `SOUND_FILES` в
-  `src/lib/storage.js` (ariel, carme, ceres, titan, …); неизвестный путь storage сводит к
-  `DEFAULT_SOUND_FILE` (`src/media/ceres.mp3`), поэтому сигнал играется только из `src/media`.
-  Флаг `settings.sound` (тот же ключ `true`/`false`) остаётся как совместимость со сборками,
-  где combobox'а ещё не было.
-- **Разбор XML — в offscreen-документе, а не в фоне**: у MV3 service worker'а нет DOM, поэтому
-  `DOMParser` в нём отсутствует (`rss.js` вызывается из `src/offscreen.js`, у документа разрешение
-  `DOM_PARSER`). Фон просит документ прочитать ленту (`MSG_FETCH_FEED`) и получает уже готовые
-  заголовки, а не XML. Тот же документ служит звуку (`AUDIO_PLAYBACK`): окно одно, создаётся по
-  мере надобности и переиспользуется.
-- **Удалённая новость не возвращается**: ключ хранилища `read` хранит ссылки тех заголовков,
-  которые пользователь удалил сам. `store.addItems` не добавляет заголовок, чья ссылка уже в этом
-  списке, поэтому лента, которая годами отдаёт один и тот же набор новостей, не наполняет читалку
-  заново каждые `delay_timeout`. Метка живёт `read_ttl_days` дней (по умолчанию `READ_TTL_DAYS` =
-  7), чистит её `store.cleanupRead` тем же alarm'ом раз в минуту, а всего в списке держится
-  `MAX_READ_RECORDS` записей: он не растёт бесконечно, но и совсем старая новость однажды снова
-  получает шанс попасть в читалку.
-- **Срок жизни прочитанных — пользовательская настройка, а не константа**: `store.cleanupRead`
-  каждый раз читает `read_ttl_days` из `settings`, поэтому значение, записанное на экране
-  глобальных настроек кнопкой «Записать», действует уже на ближайшей проверке: укоротили срок —
-  метки старше нового горизонта вычищаются сразу (фон делает это по событию
-  `chrome.storage.onChanged`), и удалённые новости возвращаются в ленты при ближайшей же
-  загрузке.
-- **Один экран — одна вкладка**: клик по иконке не плодит копий — `tabs.focusOrCreateTab` находит
-  уже открытую вкладку читалки по её адресу и активирует её вместе с окном (открыта в нескольких
-  окнах → выбирается то, где вы кликнули). «Настройки лент» и «Глобальные настройки» в читалке и
-  кнопка «Открыть читалку» на обоих экранах настроек пересаживают между тремя экранами в той же
-  вкладке; выбранная лента и открытый заголовок этот переход переживают — они лежат в
-  `sessionStorage`, который живёт столько, сколько вкладка. Это единственная причина разрешения
-  `tabs`.
-- **Курсор при открытии читалки**: свежая вкладка читалки не открывается с пустыми панелями —
-  `init()` выбирает первую ленту списка и первый (самый свежий) её заголовок, который тут же
-  раскрывается в правой панели. Если вкладка вернулась с экрана настроек, выбор из
-  `sessionStorage` важнее автовбора; но если сохранённая лента успела удалиться, а её заголовок
-  — истечь по `clean_timeout`, читалка всё равно выбирает первую ленту и её первый заголовок.
-- **Язык интерфейса — словарь, а не перевод страницы**: все подписи, подсказки (`title`),
-  `aria-label` и сообщения лежат в двух плоских словарях `ru` и `en` в `src/lib/i18n.js` под
-  общими ключами (`reader.*`, `feeds.*`, `settings.*`, `errors.*`, `units.*`). Разметка вместо
-  текста несёт ключ (`data-i18n`, `data-i18n-title`, `data-i18n-aria`);
-  живой текст строится `t(key, params)`, поэтому добавить язык — значит добавить словарь, а не
-  искать строки по экранам. Выбранный язык кэшируется в `localStorage` (`rss-reader:language`):
-  страницы расширения одного происхождения видят один и тот же `localStorage`, поэтому подписи
-  переклеиваются до того, как разрешится чтение `chrome.storage.local`. Названия языков в
-  combobox'е не переводятся («Русский», «English») — так их проще узнать.
-- **Отказ ленты едет кодом, а не текстом**: `rss.js`, `lib/offscreen.js` и `lib/extract.js`
-  помечают ошибку `code`/`params`, а `src/background.js` и offscreen-документ передают их странице
-  как есть (у любой ошибки с `code`, не только у `FeedError`), поэтому `errors.<code>`
-  подписывается языком читалки; технический `message` остаётся в консоли. По той же причине в
-  хранилище не замораживается перевод: заголовок без названия хранится пустым, а
-  `common.untitled` подставляет читалка (тест `an error thrown for a page names a key every
-  language translates` следит, чтобы у каждого кода был перевод на все языки).
-- **Без сторонних зависимостей**: опрос и разбор лент делают `fetch` под
-  `host_permissions: <all_urls>`, манифест не требует библиотеки разбора RSS, XML разбирается
-  встроенным `DOMParser` — но именно там, где он разрешён.
+- **`delay_timeout` cannot be under 1 minute**: release Chrome does not allow alarms with a
+  period under a minute (`util.alarmPeriodMinutes`). The value is stored in minutes as is. The
+  first automatic load of a new feed happens `delay_timeout` after saving; right after saving
+  the feed is re-read manually, so the reader is never left empty.
+- **`clean_timeout` is also in minutes**; the term is counted from the headline's `time`, so
+  editing a feed's `clean_timeout` immediately affects its already-stored headlines. Expired
+  headlines are purged by an alarm once a minute, and also when the reader opens and on any feed
+  change. A headline “without a parent feed” (the feed was deleted while the alarm was queued)
+  is removed.
+- **Duplicates**: a headline is identified by `uid = feedId + "|" + link`, so re-polling a feed
+  neither spawns copies nor resets the storage term of an existing record.
+- **The badge counts the headlines of all feeds together** (the entire contents of `items`), as
+  the assignment states: `1…99` as a number, `*` when over 99, empty at 0.
+- **Chrome picks the badge digits' color itself**: the `chrome.action` API does not allow setting
+  the digit color — only the background color, so the background was made yellow and
+  theme-dependent (dark theme `#ffd54f`, light `#e6a817`): this way the digits stay clearly
+  visible on both the dark and the light Chrome toolbar. The previous blue accent `#1e88e5`
+  hid them.
+- **The article content** is extracted from HTML as text (text nodes only), so no foreign
+  markup, scripts or styles get onto the extension page. Boilerplate blocks (`nav`, `footer`,
+  `iframe`, `form`, etc.) and blocks with “advertising” class/id are cut out of the page. If no
+  text is found (the feed serves only an excerpt, or the page is built by scripts), the right
+  panel shows a message and the link to the original remains.
+- **RSS 2.0, Atom and RDF are supported**: `<item>` and `<entry>` are parsed, the `link` in Atom
+  (`rel="alternate"`), `guid` with `isPermaLink="true"` as a link; relative links are resolved
+  against the feed URL; up to 50 entries per response.
+- **The feed encoding is determined before writing to storage**: the response body is read as
+  bytes (`response.arrayBuffer()`) rather than `response.text()` — the latter reads everything as
+  UTF-8, which made a Windows-1251 feed (still served by Russian-language sites) land in
+  `chrome.storage.local` as mojibake. `src/lib/encoding.js` searches for the encoding by how
+  reliably it was found: byte-order mark (BOM), the `charset` of the `Content-Type` header, an
+  `encoding=` declaration inside the XML or a page's `<meta charset>`. Each finding is tried
+  strictly: a single-byte encoding rejects no bytes at all, so it is accepted only if the
+  resulting text matches it (UTF-8 read as Windows-1251 produces letters of foreign alphabets —
+  `ЂѓљҐґї`). If there are no declarations or they do not match, UTF-8 is tried first (most feeds
+  use it), then — the single guess this reader needs, Windows-1251, and only when the bytes
+  genuinely produce Russian text rather than text of a foreign alphabet; everything else is read
+  as UTF-8 with replacement so a feed is never refused because of an encoding nobody declared.
+  Text enters `DOMParser` already decoded, so `retargetXmlDeclaration` rewrites the declaration
+  in it to the encoding the bytes were actually decoded as. Storage holds text, not bytes, so
+  there is no way to misread them a second time; if the declared encoding did not match the
+  bytes, `rss.js` writes a `console.warn` about it. The decoding rules are held by the tests in
+  `scripts/test.mjs`.
+- **Sound** — playing the signal selected on the global settings screen: it is played by the
+  offscreen document via `<audio>` (`reasons: ["AUDIO_PLAYBACK"]`), because a service worker is
+  not allowed a DOM. The file address is passed by the background in a message (`MSG_PLAY_SOUND`
+  with `src`), and the offscreen document resolves it via `chrome.runtime.getURL(src)` — the file
+  lives inside the extension, so neither `web_accessible_resources` nor the network is needed for
+  it. There is one player in the offscreen document and it is reused: the file loads once, a
+  repeated signal interrupts the previous playback and starts from the beginning. The file is
+  chosen on the global settings screen: the combobox (“No sound” / a file from `src/media`)
+  writes it to `settings.sound_file`, and `playSound` (`src/lib/sound.js`) reads this choice and
+  does nothing when `SOUND_NONE` (“No sound”) is set. The file list is fixed by the `SOUND_FILES`
+  constant in `src/lib/storage.js` (ariel, carme, ceres, titan, …); an unknown path is normalized
+  by storage to `DEFAULT_SOUND_FILE` (`src/media/ceres.mp3`), so the signal only ever plays from
+  `src/media`. The `settings.sound` flag (the same key `true`/`false`) remains for compatibility
+  with builds that predate the combobox.
+- **XML parsing happens in the offscreen document, not in the background**: an MV3 service worker
+  has no DOM, so `DOMParser` is absent there (`rss.js` is called from `src/offscreen.js`; the
+  document has the `DOM_PARSER` permission). The background asks the document to read the feed
+  (`MSG_FETCH_FEED`) and receives finished headlines rather than XML. The same document serves
+  sound (`AUDIO_PLAYBACK`): there is one window, created as needed and reused.
+- **A deleted news item does not come back**: the `read` storage key holds the links of headlines
+  the user deleted personally. `store.addItems` does not add a headline whose link is already in
+  this list, so a feed that has been serving the same set of news for years does not refill the
+  reader every `delay_timeout`. A mark lives `read_ttl_days` days (by default `READ_TTL_DAYS` =
+  7), `store.cleanupRead` cleans it with the same alarm once a minute, and the list holds at most
+  `MAX_READ_RECORDS` records: it does not grow without bound, but a once-very-old news item
+  eventually gets a chance to enter the reader again.
+- **The read-item lifetime is a user setting, not a constant**: `store.cleanupRead` reads
+  `read_ttl_days` from `settings` every time, so a value saved on the global settings screen via
+  the “Write” button already applies at the next check: shorten the period — marks older than the
+  new horizon are purged immediately (the background does this on the `chrome.storage.onChanged`
+  event), and deleted news items return to the feeds at the very next load.
+- **One screen — one tab**: clicking the icon spawns no copies — `tabs.focusOrCreateTab` finds
+  the already-open reader tab by its URL and activates it together with its window (open in
+  several windows → the one where you clicked is chosen). “Feed settings” and “Global settings”
+  in the reader and the “Open reader” button on both settings screens move between the three
+  screens within the same tab; the selected feed and open headline survive this transition — they
+  lie in `sessionStorage`, which lives as long as the tab does. This is the only reason for the
+  `tabs` permission.
+- **Cursor when the reader opens**: a fresh reader tab is not opened with empty panels — `init()`
+  selects the first feed in the list and its first (freshest) headline, which is immediately
+  shown in the right panel. If the tab returned from a settings screen, the choice from
+  `sessionStorage` outweighs auto-selection; but if the saved feed has meanwhile been deleted and
+  its headline has expired by `clean_timeout`, the reader still selects the first feed and its
+  first headline.
+- **The interface language is a dictionary, not a page translation**: all labels, tooltips
+  (`title`), `aria-label` and messages lie in two flat dictionaries `ru` and `en` in
+  `src/lib/i18n.js` under shared keys (`reader.*`, `feeds.*`, `settings.*`, `errors.*`,
+  `units.*`). The markup carries a key instead of text (`data-i18n`, `data-i18n-title`,
+  `data-i18n-aria`); live text is built by `t(key, params)`, so adding a language means adding a
+  dictionary rather than hunting strings across the screens. The chosen language is cached in
+  `localStorage` (`rss-reader:language`): extension pages of one origin share the same
+  `localStorage`, so labels are re-pasted before the read from `chrome.storage.local` resolves.
+  Language names in the combobox are not translated (“Русский”, “English”) — that way they are
+  easier to recognize.
+- **A feed refusal travels as a code, not as text**: `rss.js`, `lib/offscreen.js` and
+  `lib/extract.js` mark an error with `code`/`params`, and `src/background.js` and the offscreen
+  document pass them to the page as they are (for any error with a `code`, not only `FeedError`),
+  so `errors.<code>` is rendered in the reader's language; the technical `message` stays in the
+  console. For the same reason no translation is frozen into storage: a headline without a title
+  is stored empty, and the reader substitutes `common.untitled` (the test `an error thrown for a
+  page names a key every language translates` makes sure every code has a translation in every
+  language).
+- **No third-party dependencies**: feed polling and parsing are done by `fetch` under
+  `host_permissions: <all_urls>`, the manifest requires no RSS parsing library, and XML is parsed
+  by the built-in `DOMParser` — but exactly where it is allowed.
 
-## Проверка
+## Validation
 
 ```bash
-node scripts/test.mjs        # unit-тесты чистых функций (util.js, i18n.js, encoding.js, части storage.js): 37 тестов
-node scripts/make_icons.mjs  # перегенерировать иконки (без зависимостей)
-node scripts/check_icons.mjs # убедиться, что иконки корректны
+node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of storage.js): 37 tests
+node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
+node scripts/check_icons.mjs # make sure the icons are correct
 ```
 
-Тесты не покрывают `chrome.*`-код (alarms, action, offscreen, messages) и разбор XML — это
-проверяется в браузере после загрузки расширения.
+The tests do not cover `chrome.*` code (alarms, action, offscreen, messages) or XML parsing —
+that is checked in the browser after loading the extension.
 
-### Что проверить в браузере
+### What to check in the browser
 
-1. Добавить ленту → заголовки появились в читалке без ожидания.
-2. Поставить у ленты `delay_timeout: 1` → через минуту появились новые заголовки, бейдж
-   увеличился, прозвучал сигнал.
-3. Поставить `clean_timeout: 1` → через минуту заголовки исчезли из читалки и бейдж обнулился.
-4. Заголовок больше 99 → на иконке `*`.
-5. Иконка «удалить» в левом углу правой панели → заголовок пропал и из списка, и из
-   хранилища, а читалка сразу открыла следующий заголовок этой ленты.
-6. Переключить тему на одном экране → второй экран перекрасился без перезагрузки.
-7. Навести курсор на иконку читалки → подсказка объясняет, что она делает.
-8. Клик по кнопке «Удалить все» рядом со счётчиком → все заголовки исчезли из хранилища, число в
-   шапке обнулось, бейдж на иконке опустел. Сами ленты остались.
-9. Кликнуть по иконке плагина дважды → второй вкладки с читалкой нет: Chrome активировал уже
-   открытую (и её окно). То же для читалки, открытой в другом окне.
-10. В читалке выбрать ленту и заголовок → «Настройки лент» → настройки открылись в этой же
-   вкладке → «Открыть читалку» → те же лента и заголовок снова открыты.
-11. Открыть читалку в новой вкладке (ленты и заголовки уже есть) → первая лента подсвечена,
-   в средней панели подсвечен самый свежий заголовок этой ленты, его текст виден сразу, без
-   клика.
-12. Удалить заголовок (иконка корзины над текстом) и дождаться очередной загрузки этой ленты →
-   удалённая новость не появилась снова. На экране настроек «Загрузить сейчас» по той же ленте
-   статус покажет `уже прочитано: N`.
-13. Иконка «Глобальные настройки» в шапке читалки (перед переключателем темы) → экран глобальных
-   настроек открылся в этой же вкладке; «Открыть читалку» на нём вернуло к той же ленте и тому же
-   заголовку. Кнопка «Настройки» у расширения в `chrome://extensions` открывает тот же экран
-   глобальных настроек (отдельной вкладкой).
-14. На экране глобальных настроек поставить `read_ttl_days: 1` и нажать «Записать» → в карточке
-   видно число меток и новый срок, а кнопка «Записать» стала неактивной. Удалить заголовок, через
-   день перечитать ленту → новость появилась снова. Не нажимая «Записать», ввести
-   `read_ttl_days: 3651` или дробное значение и нажать «Записать» → поле подсказало, что нужно
-   целое от 1 до 3650, и значение в хранилище не изменилось (пока кнопка не нажата, поле вообще
-   ничего не записывает).
-15. Кнопка «Забыть прочитанные» → с подтверждением очистила список: под полем появилось
-   «прочитанных меток нет», а удалённые ранее новости вернулись в ленты при ближайшей загрузке.
-16. В combobox звука выбрать другой mp3 из `src/media` → «Записать» → следующая автоматическая
-   загрузка заголовков сопровождается выбранным сигналом. Выбрать первую строку «Без звука» →
-   «Записать» → загрузка больше не озвучивается.
-17. В combobox'е «Язык интерфейса» выбрать другой язык → «Записать» → подписи, подсказки и
-   сообщения этого экрана стали другими сразу, а открытые в других вкладках читалка и экран лент
-   переклеились без перезагрузки. Первый запуск (в хранилище нет `language`) → язык взят из
-   браузера; язык браузера, которого нет среди словарей → `English`.
-18. Добавить ленту, отвечающую в Windows-1251 (например `https://nnmclub.to/forum/rss.php?f=2&show=0`
-   или `https://nnmclub.to/forum/rssp.xml`) → заголовки читаются кириллицей, а не знаками вроде
-   `ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ñ`; в консоли предупреждение о кодировке появляется только там, где заявленная
-   кодировка не совпала с байтами.
+1. Add a feed → headlines appear in the reader with no waiting.
+2. Set `delay_timeout: 1` on a feed → after a minute new headlines appear, the badge grows, a
+   signal plays.
+3. Set `clean_timeout: 1` → after a minute the headlines disappear from the reader and the badge
+   resets to zero.
+4. More than 99 headlines → the icon shows `*`.
+5. The delete icon in the corner of the right panel → the headline vanishes from both the list
+   and storage, and the reader immediately opens the next headline of the same feed.
+6. Switch the theme on one screen → the other screen repaints without a reload.
+7. Hover the reader icon → a tooltip explains what it does.
+8. Click the “Delete all” button next to the counter → all headlines vanish from storage, the
+   number in the header resets to zero, the icon badge empties. The feeds themselves remain.
+9. Click the plugin icon twice → there is no second reader tab: Chrome activated the already open
+   one (and its window). Same for a reader open in another window.
+10. In the reader select a feed and a headline → “Feed settings” → the settings open in this same
+    tab → “Open reader” → the same feed and headline are open again.
+11. Open the reader in a new tab (feeds and headlines already exist) → the first feed is
+    highlighted, in the middle panel the freshest headline of that feed is highlighted, its text
+    is visible right away, without a click.
+12. Delete a headline (the trash icon above the text) and wait for this feed's next load → the
+    deleted news item does not reappear. On the settings screen, “Load now” on the same feed
+    shows the status `already read: N`.
+13. The “Global settings” icon in the reader header (before the theme toggle) → the global
+    settings screen opened in this same tab; “Open reader” on it returned to the same feed and
+    the same headline. The “Extensions: details” button of the extension in `chrome://extensions`
+    opens the same global settings screen (in a separate tab).
+14. On the global settings screen set `read_ttl_days: 1` and press “Write” → the card shows the
+    number of marks and the new term, and the “Write” button becomes inactive. Delete a headline,
+    a day later re-read the feed → the news item reappears. Without pressing “Write”, enter
+    `read_ttl_days: 3651` or a fractional value and press “Write” → the field hints that an
+    integer from 1 to 3650 is required and the storage value does not change (until the button is
+    pressed, the field writes nothing at all).
+15. The “Forget read items” button → with a confirmation cleared the list: under the field
+    “no read marks” appears, and previously deleted news items return to the feeds at the next
+    load.
+16. In the sound combobox choose another mp3 from `src/media` → “Write” → the next automatic
+    headline load is accompanied by the chosen signal. Choose the first row “No sound” → “Write”
+    → the load is no longer voiced.
+17. In the “Interface language” combobox choose another language → “Write” → the labels,
+    tooltips and messages of this screen change immediately, and the reader and the feed screen
+    open in other tabs re-paste without a reload. First launch (no `language` in storage) → the
+    language is taken from the browser; a browser language that is not among the dictionaries →
+    `English`.
+18. Add a feed that answers in Windows-1251 (for example
+    `https://nnmclub.to/forum/rss.php?f=2&show=0` or `https://nnmclub.to/forum/rssp.xml`) → the
+    headlines read as Cyrillic rather than as characters like `ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ñ`; the console
+    encoding warning appears only where the declared encoding did not match the bytes.
 
-## Ограничения
+## Limitations
 
-- **Минимум 1 минута** и для `delay_timeout`, и для `clean_timeout` (проверка просрочки сама
-  по себе раз в минуту) — точнее Chrome не позволит.
-- **Минимум 1 день** для `read_ttl_days`: «забыть прочитанные немедленно» — это кнопка
-  «Забыть прочитанные», а не нулевой срок.
-- **Текст статьи не всегда удаётся вытащить**: страницы, собранные JavaScript'ом, закрытые
-  платными стенами или те, где лента отдаёт только отрывок, покажут сообщение об этом и ссылку
-  на оригинал.
-- **Service worker «спит»** между событиями Chrome; это нормально для MV3. Alarms переживают
-  перезапуск воркера, а при любом пробуждении `bootstrap()` заново сверяет alarms, чистит
-  просроченные заголовки и обновляет бейдж.
-- **Offscreen-документ создаётся только когда нужен DOM** — разбор ленты или звук, — а не
-  постоянно; дальше он переиспользуется. Первое чтение ленты после пробуждения фона чуть дольше,
-  чем остальные, потому что окно ещё нужно создать.
-- **Два языка интерфейса** (`ru`, `en`): список задан `LANGUAGES` в `src/lib/i18n.js`, а язык
-  браузера вне этого списка сводится к `English`. Название и описание самого расширения Chrome
-  берёт из `_locales` по языку браузера, а не из выбранного в читалке языка.
-- **`host_permissions: <all_urls>`**: расширение может читать любой сайт, к которому ведёт
-  ссылка ленты или новости. Это следствие задания, а не лишнее расширение прав.
+- **At least 1 minute** for both `delay_timeout` and `clean_timeout` (the expiry check itself
+  runs once a minute) — Chrome will not allow finer.
+- **At least 1 day** for `read_ttl_days`: “forget read items immediately” is the “Forget read
+  items” button, not a zero term.
+- **Article text cannot always be extracted**: pages built by JavaScript, pages behind paywalls,
+  or feeds that serve only an excerpt will show a message about it and the link to the original.
+- **The service worker “sleeps”** between Chrome events; this is normal for MV3. Alarms survive a
+  worker restart, and on every wake-up `bootstrap()` re-reconciles the alarms, cleans expired
+  headlines and updates the badge.
+- **The offscreen document is created only when a DOM is needed** — parsing a feed or playing
+  sound — not permanently; afterwards it is reused. The first feed read after a background
+  wake-up is slightly slower than the rest because the window still has to be created.
+- **Two interface languages** (`ru`, `en`): the list is fixed by `LANGUAGES` in
+  `src/lib/i18n.js`, and a browser language outside this list falls back to `English`. Chrome
+  takes the extension's own name and description from `_locales` by the browser language, not by
+  the language chosen in the reader.
+- **`host_permissions: <all_urls>`**: the extension can read any site a feed or news link leads
+  to. This follows from the assignment, not from an excess of privileges.
