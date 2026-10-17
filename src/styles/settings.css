@@ -33,29 +33,118 @@
   padding: 14px;
 }
 
-/* «Записать» commits the whole panel, so it sits in the panel's top-right corner, above the fields it writes. */
+/* «Записать» commits the whole panel, so it sits in the panel's top-right corner. The «?» folds the
+   explanation behind an icon so the table below holds only the fields themselves. */
 .card-head {
+  align-items: center;
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
   margin-bottom: 12px;
 }
 
-/* The horizon field and the button that overrides it by hand belong to one decision. */
-.row {
-  align-items: flex-end;
+.info {
+  position: relative;
+}
+
+/* The summary is a button, not a disclosure triangle. */
+.info summary {
+  list-style: none;
+}
+
+.info summary::-webkit-details-marker {
+  display: none;
+}
+
+.info[open] summary {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.info .hint {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 6px 0 0;
+  max-width: 440px;
+  padding: 10px 12px;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 1;
+}
+
+/* Two columns: the name of a field on the left, its control — and the icon that acts on it — on the right. */
+.settings-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.settings-table th,
+.settings-table td {
+  padding: 8px 0;
+  vertical-align: top;
+}
+
+.settings-table th.field-name {
+  font-size: 13px;
+  font-weight: 600;
+  padding-right: 14px;
+  text-align: left;
+  width: 42%;
+}
+
+.settings-table th.field-name label {
+  font: inherit;
+}
+
+.settings-table td.field-value {
+  width: 58%;
+}
+
+/* The control and the icon that acts on it share one row, so the icon sits to the right of its field. */
+.field-value .control {
+  align-items: center;
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
 }
 
-.row .field {
-  flex: 1 1 260px;
+.field-value .control select {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-/* A square button that only holds its icon: it sits level with the select it previews. */
+.field-value .unit {
+  align-items: baseline;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-value .unit input {
+  max-width: 120px;
+}
+
+.field-value .unit span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.field-value .error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 4px;
+  min-height: 16px;
+}
+
+/* A square button that only holds its icon: it sits level with the field it acts on. */
 .icon-btn {
   align-items: center;
-  align-self: flex-end;
   display: inline-flex;
   flex: 0 0 auto;
   justify-content: center;
@@ -66,49 +155,44 @@
   display: block;
 }
 
+/* The danger icon (forget read) borrows the danger button's colours for its square. */
+.icon-btn.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.icon-btn.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--text-on-selected);
+}
+
 .icon-btn.playing {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+/* The status closes the table as its own full-width row, not a footer floating beside the fields. */
+.status-row td {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
 }
 
-.field label {
-  font-size: 12px;
-  font-weight: 600;
+.status {
+  font-size: 13px;
 }
 
-.field .unit {
-  align-items: baseline;
-  display: flex;
-  gap: 6px;
+.status.ok {
+  color: var(--accent);
 }
 
-.field .unit input {
-  max-width: 120px;
-}
-
-.field .unit span {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.field .error {
+.status.error {
   color: var(--danger);
-  font-size: 12px;
-  min-height: 16px;
 }
 
-.hint {
+/* The field holds a value the store does not have yet; «Записать» is the way to commit it. */
+.status.pending {
   color: var(--text-muted);
-  font-size: 12px;
-  margin: 14px 0 0;
 }
 
 .card-foot {
@@ -126,27 +210,10 @@
   font-size: 12px;
 }
 
-.status {
-  font-size: 13px;
-  margin-left: auto;
-}
-
-.status.ok {
-  color: var(--accent);
-}
-
-.status.error {
-  color: var(--danger);
-}
-
-/* The field holds a value the store does not have yet; «Записать» is the way to commit it. */
-.status.pending {
-  color: var(--text-muted);
-}
-
 @media (max-width: 560px) {
-  .row {
-    align-items: stretch;
+  .settings-table th.field-name,
+  .settings-table td.field-value {
+    width: auto;
   }
 
   .card-foot {
