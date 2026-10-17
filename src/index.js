@@ -5,7 +5,7 @@ import { describeError } from './lib/errors.js';
 import { loadColumnWidths, mountColumnResizers, wireColumnWidthChanges } from './lib/columns.js';
 import { loadFontScales, mountFontScales, wireFontScaleChanges } from './lib/fontsize.js';
 import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
-import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
+import { MSG_FEEDS_CHANGED, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from './lib/messages.js';
 import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
 import { wireThemeButton } from './lib/theme.js';
@@ -19,6 +19,7 @@ const els = {
   totalCount: document.getElementById('total-count'),
   theme: document.getElementById('btn-theme'),
   refresh: document.getElementById('btn-refresh'),
+  refreshAll: document.getElementById('btn-refresh-all'),
   clearAll: document.getElementById('btn-clear-all'),
 
   feedList: document.getElementById('feed-list'),
@@ -145,7 +146,13 @@ function selectFeed(feedId) {
   state.uid = null;
   renderFeeds();
   renderHeadlines();
-  showPlaceholder(t('reader.placeholder.inMiddle'));
+
+  // The cursor in the middle column goes to the first headline of the feed that was just
+  // picked; a feed whose headlines are all gone still has to say so in the empty panel.
+  const first = itemsOfSelectedFeed()[0];
+  if (first) openItem(first);
+  else showPlaceholder(t('reader.placeholder.inMiddle'));
+
   saveSelection();
 }
 
@@ -291,6 +298,37 @@ async function refreshSelectedFeed() {
   }
 }
 
+/**
+ * The header button that reads every feed at once, whatever is selected in the left column.
+ * The worker fetches them one after another and reports per feed; a feed that failed keeps its
+ * stored headlines, so a partial failure is a notice rather than an empty screen.
+ */
+async function refreshAllFeeds() {
+  if (state.feeds.length === 0) {
+    showPlaceholder(t('reader.feeds.empty'));
+    return;
+  }
+
+  const tip = els.refreshAll.title;
+  els.refreshAll.disabled = true;
+  els.refreshAll.classList.add('busy');
+  els.refreshAll.title = t('common.loading');
+  try {
+    const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_ALL_FEEDS });
+    if (!response?.ok) {
+      showPlaceholder(t('reader.refresh.failed', { error: describeError(response?.error) }));
+    } else if (response.failed > 0) {
+      const failure = (response.results ?? []).find((entry) => !entry.ok);
+      showPlaceholder(t('reader.refreshAll.failed', { error: describeError(failure?.error) }));
+    }
+    await renderAll();
+  } finally {
+    els.refreshAll.disabled = false;
+    els.refreshAll.classList.remove('busy');
+    els.refreshAll.title = tip;
+  }
+}
+
 async function renderAll() {
   state.feeds = await store.getFeeds();
   state.items = store.sortItems(await store.getItems());
@@ -357,6 +395,7 @@ wireFontScaleChanges();
 mountColumnResizers();
 wireColumnWidthChanges();
 els.refresh.addEventListener('click', () => void refreshSelectedFeed());
+els.refreshAll.addEventListener('click', () => void refreshAllFeeds());
 els.clearAll.addEventListener('click', () => void clearAllHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
 void wireThemeButton(els.theme);
@@ -386,9 +425,12 @@ async function init() {
   const lostHeadline = await renderAll();
 
   // renderAll() has already dropped a feed or a headline that no longer exists. With nothing
-  // left selected the reader would open on empty panels, so the cursor goes to the top: the
-  // first feed in the list and the first headline of that feed.
-  if (!selectedFeed() && state.feeds.length > 0) selectFeed(state.feeds[0].id);
+  // left selected the cursor goes to the top: the first feed in the list and, through
+  // selectFeed(), that feed's first headline.
+  if (!selectedFeed() && state.feeds.length > 0) {
+    selectFeed(state.feeds[0].id);
+    return;
+  }
 
   // A headline that survived the cleanup keeps its place; otherwise the top of the list opens.
   const item =

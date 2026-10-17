@@ -815,6 +815,77 @@ test('every reader border is a handle that can be grabbed, placed and clamped', 
   );
 });
 
+/**
+ * A page and the worker are edited apart as easily as a page and its sprite: a message a page sends
+ * that no worker answers hangs that page's `await` forever, and a name the worker answers that no
+ * exported constant spells is a typo the next page is free to make. Both are read here.
+ */
+test('every message a page sends is one the worker answers', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+
+  const exported = new Set(
+    [...read('src/lib/messages.js').matchAll(/export const (MSG_\w+)/g)].map((match) => match[1]),
+  );
+  const answered = new Set(
+    ['src/background.js', 'src/offscreen.js']
+      .flatMap((file) => [...read(file).matchAll(/message\?\.type === (MSG_\w+)/g)])
+      .map((match) => match[1]),
+  );
+
+  for (const file of [
+    'src/index.js',
+    'src/feeds.js',
+    'src/settings.js',
+    'src/background.js',
+    'src/lib/sound.js',
+  ]) {
+    for (const [, name] of read(file).matchAll(/type:\s*(MSG_\w+)/g)) {
+      assert.ok(exported.has(name), `${file} sends ${name}, which lib/messages.js does not export`);
+      assert.ok(answered.has(name), `${name} is sent by ${file}, which no worker answers`);
+    }
+  }
+});
+
+/**
+ * The reader header reads the whole list at once, and picking a feed in the left column puts the
+ * middle column on that feed's first headline. `index.js` is the only place either is wired, so the
+ * markup id, the message a click carries, the silence of a manual read and the cursor itself are
+ * checked against each other here.
+ */
+test('the header reads every feed and a picked feed opens on its first headline', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const html = read('src/index.html');
+  const page = read('src/index.js');
+  const worker = read('src/background.js');
+
+  assert.ok(html.includes('id="btn-refresh-all"'), 'the reader header has no button that reads every feed');
+  assert.ok(
+    page.includes("document.getElementById('btn-refresh-all')"),
+    'the page does not know the button the header declares',
+  );
+  assert.ok(
+    page.includes('els.refreshAll.addEventListener'),
+    'that button is looked up but wired to nothing',
+  );
+  assert.ok(
+    page.includes('{ type: MSG_REFRESH_ALL_FEEDS }'),
+    'a click on it sends the worker no message',
+  );
+
+  /* A read the user asked for by hand stays silent, whatever its scope: only an alarm-driven read
+   * plays the sound, so the handler must not repeat what the alarm branch does. */
+  const handlerStart = worker.indexOf('message?.type === MSG_REFRESH_ALL_FEEDS');
+  assert.ok(handlerStart > 0, 'the worker answers no MSG_REFRESH_ALL_FEEDS');
+  const handler = worker.slice(handlerStart, worker.indexOf('MSG_FEEDS_CHANGED', handlerStart));
+  assert.ok(handler.length > 0 && handler.includes('notify: false'), 'a manual read of every feed is silent');
+  assert.ok(!handler.includes('notify: true'), 'a manual read is not treated as an alarm');
+
+  const select = page.slice(page.indexOf('function selectFeed'), page.indexOf('function showPlaceholder'));
+  assert.ok(select.length > 0, 'selectFeed is gone, so nothing follows a click on a feed row');
+  assert.ok(select.includes('itemsOfSelectedFeed()[0]'), 'a picked feed is not taken to its first headline');
+  assert.ok(select.includes('openItem(first)'), 'the middle column is left with a placeholder');
+});
+
 test('t() follows the adopted language and fills placeholders', () => {
   i18n.adoptLanguage('en');
   assert.equal(i18n.t('settings.save'), 'Save');

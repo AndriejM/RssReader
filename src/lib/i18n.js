@@ -64,6 +64,8 @@ const DICTIONARIES = {
     'reader.feeds.empty': 'Лент нет. Добавьте их на экране «Настройки лент».',
     'reader.refresh.tooltip': 'Загрузить заголовки выбранной ленты',
     'reader.refresh.aria': 'Обновить',
+    'reader.refreshAll.tooltip': 'Загрузить заголовки всех лент сейчас',
+    'reader.refreshAll.aria': 'Обновить все ленты',
     'reader.feed.itemMeta': '{count} загол. · обновл. каждые {duration}',
 
     'reader.headlines.panelAria': 'Заголовки новостей',
@@ -86,6 +88,7 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Описание обрезано из-за ограничения длины.',
     'reader.refresh.noFeed': 'Сначала выберите ленту.',
     'reader.refresh.failed': 'Не удалось обновить ленту: {error}',
+    'reader.refreshAll.failed': 'Не удалось обновить часть лент: {error}',
 
     // Переключатель размера шрифта колонки: метка группы и четыре шага — здесь же tooltip и
     // aria-label каждого шага.
@@ -219,6 +222,8 @@ const DICTIONARIES = {
     'reader.feeds.empty': 'No feeds yet. Add them on the Feed settings screen.',
     'reader.refresh.tooltip': 'Load headlines for the selected feed',
     'reader.refresh.aria': 'Refresh',
+    'reader.refreshAll.tooltip': 'Load headlines of every feed now',
+    'reader.refreshAll.aria': 'Refresh all feeds',
     'reader.feed.itemMeta': '{count} headlines · refresh every {duration}',
 
     'reader.headlines.panelAria': 'News headlines',
@@ -241,6 +246,7 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Description truncated at the length limit.',
     'reader.refresh.noFeed': 'Select a feed first.',
     'reader.refresh.failed': 'Failed to refresh the feed: {error}',
+    'reader.refreshAll.failed': 'Some feeds could not be refreshed: {error}',
 
     // The per-column font size switcher: the name of the group and its four steps — each step is
     // both the tooltip and the accessible name there.
@@ -373,6 +379,8 @@ const DICTIONARIES = {
     'reader.feeds.empty': 'Стрічок немає. Додайте їх на екрані «Налаштування стрічок».',
     'reader.refresh.tooltip': 'Завантажити заголовки обраної стрічки',
     'reader.refresh.aria': 'Оновити',
+    'reader.refreshAll.tooltip': 'Завантажити заголовки всіх стрічок зараз',
+    'reader.refreshAll.aria': 'Оновити всі стрічки',
     'reader.feed.itemMeta': '{count} загол. · оновл. кожні {duration}',
 
     'reader.headlines.panelAria': 'Заголовки новин',
@@ -395,6 +403,7 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Опис обрізано через обмеження довжини.',
     'reader.refresh.noFeed': 'Спочатку оберіть стрічку.',
     'reader.refresh.failed': 'Не вдалося оновити стрічку: {error}',
+    'reader.refreshAll.failed': 'Не вдалося оновити частину стрічок: {error}',
 
     'reader.fontScale.aria': 'Розмір шрифту в цій колонці',
     'reader.fontScale.small': 'Малий шрифт',
@@ -525,6 +534,8 @@ const DICTIONARIES = {
     'reader.feeds.empty': 'Brak kanałów. Dodaj je na ekranie „Ustawienia kanałów”.',
     'reader.refresh.tooltip': 'Wczytaj nagłówki wybranego kanału',
     'reader.refresh.aria': 'Odśwież',
+    'reader.refreshAll.tooltip': 'Wczytaj nagłówki wszystkich kanałów teraz',
+    'reader.refreshAll.aria': 'Odśwież wszystkie kanały',
     'reader.feed.itemMeta': '{count} nagłów. · odśwież. co {duration}',
 
     'reader.headlines.panelAria': 'Nagłówki wiadomości',
@@ -547,6 +558,7 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Opis skrócony z powodu limitu długości.',
     'reader.refresh.noFeed': 'Najpierw wybierz kanał.',
     'reader.refresh.failed': 'Nie udało się odświeżyć kanału: {error}',
+    'reader.refreshAll.failed': 'Nie udało się odświeżyć części kanałów: {error}',
 
     'reader.fontScale.aria': 'Rozmiar czcionki w tej kolumnie',
     'reader.fontScale.small': 'Mała czcionka',
@@ -677,6 +689,8 @@ const DICTIONARIES = {
     'reader.feeds.empty': 'Keine Feeds. Fügen Sie sie auf dem Bildschirm „Feed-Einstellungen“ hinzu.',
     'reader.refresh.tooltip': 'Überschriften des ausgewählten Feeds laden',
     'reader.refresh.aria': 'Aktualisieren',
+    'reader.refreshAll.tooltip': 'Überschriften aller Feeds jetzt laden',
+    'reader.refreshAll.aria': 'Alle Feeds aktualisieren',
     'reader.feed.itemMeta': '{count} Überschr. · Aktualisierung alle {duration}',
 
     'reader.headlines.panelAria': 'Nachrichtenschlagzeilen',
@@ -699,6 +713,7 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Beschreibung wegen der Längenbegrenzung gekürzt.',
     'reader.refresh.noFeed': 'Zuerst einen Feed auswählen.',
     'reader.refresh.failed': 'Feed konnte nicht aktualisiert werden: {error}',
+    'reader.refreshAll.failed': 'Einige Feeds konnten nicht aktualisiert werden: {error}',
 
     'reader.fontScale.aria': 'Schriftgröße in dieser Spalte',
     'reader.fontScale.small': 'Kleine Schrift',
@@ -829,6 +844,8 @@ const DICTIONARIES = {
     'reader.feeds.empty': 'Aucun flux. Ajoutez-les sur l’écran « Réglages des flux ».',
     'reader.refresh.tooltip': 'Charger les titres du flux sélectionné',
     'reader.refresh.aria': 'Actualiser',
+    'reader.refreshAll.tooltip': 'Charger maintenant les titres de tous les flux',
+    'reader.refreshAll.aria': 'Actualiser tous les flux',
     'reader.feed.itemMeta': '{count} titres · actualisation toutes les {duration}',
 
     'reader.headlines.panelAria': 'Titres des actualités',
@@ -851,6 +868,7 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Description tronquée à la limite de longueur.',
     'reader.refresh.noFeed': 'Sélectionnez d’abord un flux.',
     'reader.refresh.failed': 'Échec de l’actualisation du flux : {error}',
+    'reader.refreshAll.failed': 'Certains flux n’ont pas pu être actualisés : {error}',
 
     'reader.fontScale.aria': 'Taille de la police dans cette colonne',
     'reader.fontScale.small': 'Petite police',
@@ -981,6 +999,8 @@ const DICTIONARIES = {
     'reader.feeds.empty': 'No hay fuentes. Añádalas en la pantalla «Ajustes de fuentes».',
     'reader.refresh.tooltip': 'Cargar los titulares de la fuente seleccionada',
     'reader.refresh.aria': 'Actualizar',
+    'reader.refreshAll.tooltip': 'Cargar ahora los titulares de todas las fuentes',
+    'reader.refreshAll.aria': 'Actualizar todas las fuentes',
     'reader.feed.itemMeta': '{count} titul. · actualización cada {duration}',
 
     'reader.headlines.panelAria': 'Titulares de noticias',
@@ -1003,6 +1023,7 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Descripción recortada por el límite de longitud.',
     'reader.refresh.noFeed': 'Primero seleccione una fuente.',
     'reader.refresh.failed': 'No se pudo actualizar la fuente: {error}',
+    'reader.refreshAll.failed': 'No se pudieron actualizar algunas fuentes: {error}',
 
     'reader.fontScale.aria': 'Tamaño de la letra en esta columna',
     'reader.fontScale.small': 'Letra pequeña',

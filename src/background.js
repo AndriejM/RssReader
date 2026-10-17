@@ -2,7 +2,7 @@
 // prunes them on clean_timeout, keeps the toolbar badge count and plays the alert sound.
 
 import { feedIdFromAlarm, syncAlarms } from './lib/alarms.js';
-import { MSG_COUNT, MSG_FETCH_FEED, MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
+import { MSG_COUNT, MSG_FETCH_FEED, MSG_FEEDS_CHANGED, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from './lib/messages.js';
 import { requestOffscreen } from './lib/offscreen.js';
 import { FeedError } from './lib/rss.js';
 import { playSound } from './lib/sound.js';
@@ -170,6 +170,36 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
     })();
     return true; // keep the message channel open for the async reply
+  }
+
+  /*
+   * Read every feed of the list in one click, in the order of that list. One after another on
+   * purpose: N feeds at once would be N simultaneous requests from a single click. A feed that
+   * refuses to be read does not stop the others — its error comes back with its id, so the page can
+   * say how many feeds failed. Like a manual refresh of one feed, this plays no sound.
+   */
+  if (message?.type === MSG_REFRESH_ALL_FEEDS) {
+    (async () => {
+      try {
+        const feeds = await store.getFeeds();
+        const results = [];
+        for (const feed of feeds) {
+          try {
+            results.push({ feedId: feed.id, ok: true, ...(await ingestFeed(feed, { notify: false })) });
+          } catch (error) {
+            results.push({ feedId: feed.id, ok: false, error: errorPayload(error) });
+          }
+        }
+        sendResponse({
+          ok: true,
+          results,
+          failed: results.filter((result) => !result.ok).length,
+        });
+      } catch (error) {
+        sendResponse({ ok: false, error: errorPayload(error) });
+      }
+    })();
+    return true;
   }
 
   if (message?.type === MSG_FEEDS_CHANGED) {
