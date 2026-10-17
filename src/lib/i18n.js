@@ -95,6 +95,9 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Крупный шрифт',
     'reader.fontScale.xlarge': 'Очень крупный шрифт',
 
+    // Граница между колонками: её tooltip и aria-label.
+    'reader.column.resize': 'Потяните, чтобы изменить ширину колонки',
+
     'feeds.title': 'Настройки RSS лент',
     'feeds.add': 'Добавить ленту',
     'feeds.empty': 'Лент нет. Нажмите «Добавить ленту».',
@@ -247,6 +250,9 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Large font',
     'reader.fontScale.xlarge': 'Extra-large font',
 
+    // The border between two columns: its tooltip and its aria-label.
+    'reader.column.resize': 'Drag to change the width of this column',
+
     'feeds.title': 'RSS feed settings',
     'feeds.add': 'Add feed',
     'feeds.empty': 'No feeds yet. Press “Add feed”.',
@@ -395,6 +401,8 @@ const DICTIONARIES = {
     'reader.fontScale.normal': 'Звичайний шрифт',
     'reader.fontScale.large': 'Великий шрифт',
     'reader.fontScale.xlarge': 'Дуже великий шрифт',
+
+    'reader.column.resize': 'Перетягніть, щоб змінити ширину колонки',
 
     'feeds.title': 'Налаштування RSS-стрічок',
     'feeds.add': 'Додати стрічку',
@@ -546,6 +554,8 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Duża czcionka',
     'reader.fontScale.xlarge': 'Bardzo duża czcionka',
 
+    'reader.column.resize': 'Przeciągnij, aby zmienić szerokość tej kolumny',
+
     'feeds.title': 'Ustawienia kanałów RSS',
     'feeds.add': 'Dodaj kanał',
     'feeds.empty': 'Brak kanałów. Naciśnij „Dodaj kanał”.',
@@ -695,6 +705,8 @@ const DICTIONARIES = {
     'reader.fontScale.normal': 'Normale Schrift',
     'reader.fontScale.large': 'Große Schrift',
     'reader.fontScale.xlarge': 'Sehr große Schrift',
+
+    'reader.column.resize': 'Ziehen, um die Breite dieser Spalte zu ändern',
 
     'feeds.title': 'Einstellungen der RSS-Feeds',
     'feeds.add': 'Feed hinzufügen',
@@ -846,6 +858,8 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Grande police',
     'reader.fontScale.xlarge': 'Très grande police',
 
+    'reader.column.resize': 'Faites glisser pour modifier la largeur de cette colonne',
+
     'feeds.title': 'Réglages des flux RSS',
     'feeds.add': 'Ajouter un flux',
     'feeds.empty': 'Aucun flux. Cliquez sur « Ajouter un flux ».',
@@ -995,6 +1009,8 @@ const DICTIONARIES = {
     'reader.fontScale.normal': 'Letra normal',
     'reader.fontScale.large': 'Letra grande',
     'reader.fontScale.xlarge': 'Letra muy grande',
+
+    'reader.column.resize': 'Arrastre para cambiar el ancho de esta columna',
 
     'feeds.title': 'Ajustes de las fuentes RSS',
     'feeds.add': 'Añadir fuente',

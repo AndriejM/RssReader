@@ -34,6 +34,7 @@ export const SOUND_KEY = 'sound';
 export const SOUND_FILE_KEY = 'sound_file';
 export const LANGUAGE_KEY = 'language';
 export const FONT_SCALES_KEY = 'font_scales';
+export const COLUMN_WIDTHS_KEY = 'column_widths';
 
 /** «Без звука»: автоматическая загрузка остаётся без сигнала. */
 export const SOUND_NONE = 'none';
@@ -384,6 +385,61 @@ export async function setFontScale(panel, scale) {
   scales[panel] = FONT_SCALES.includes(scale) ? scale : DEFAULT_FONT_SCALE;
   await updateSettings({ [FONT_SCALES_KEY]: scales });
   return scales;
+}
+
+/* ------------------------------------------------ width of the reader's columns */
+
+/** Колонки, чью ширину меняют мышью: граница тянет колонку слева от себя, сосед отдаёт остаток. */
+export const RESIZABLE_PANELS = ['feeds', 'headlines'];
+
+/**
+ * Ниже этой ширины колонку сделать нельзя: уже не влезет ни один заголовок, и колонка перестаёт
+ * быть колонкой. Это же число стоит нижним пределом в `minmax()` сетки — так предел держится и
+ * без скрипта.
+ */
+export const MIN_PANEL_WIDTH = 160;
+
+/** Выше этой ширины колонку не растягиваем: три колонки читалки должны уместиться в окно. */
+export const MAX_PANEL_WIDTH = 900;
+
+/** Ширина колонки, пока пользователь не потянул её границу. */
+export const DEFAULT_PANEL_WIDTHS = { feeds: 240, headlines: 340 };
+
+/**
+ * Ширины колонок читалки: доверяем хранимой карте ровно в той мере, в какой она описывает тянимые
+ * колонки — неизвестной колонке и числу вне границ отдаём ширину по умолчанию.
+ */
+export function normalizeColumnWidths(value) {
+  const widths = {};
+  for (const panel of RESIZABLE_PANELS) {
+    const fallback = DEFAULT_PANEL_WIDTHS[panel];
+    const width = Math.round(Number(value?.[panel]));
+    if (!Number.isFinite(width)) {
+      widths[panel] = fallback;
+      continue;
+    }
+    widths[panel] = Math.min(Math.max(width, MIN_PANEL_WIDTH), MAX_PANEL_WIDTH);
+  }
+  return widths;
+}
+
+/** Ширины колонок — из `settings.column_widths`. */
+export async function getColumnWidths() {
+  const settings = await getSettings();
+  return normalizeColumnWidths(settings[COLUMN_WIDTHS_KEY]);
+}
+
+/**
+ * Запомнить ширину одной колонки: остальные берут то, что уже лежит в хранилище, а не то, что было
+ * в памяти этой страницы, — две открытые читалки не затирают границу друг друга.
+ */
+export async function setColumnWidth(panel, width) {
+  if (!RESIZABLE_PANELS.includes(panel)) return null;
+
+  const widths = normalizeColumnWidths((await getSettings())[COLUMN_WIDTHS_KEY]);
+  widths[panel] = normalizeColumnWidths({ [panel]: width })[panel];
+  await updateSettings({ [COLUMN_WIDTHS_KEY]: widths });
+  return widths;
 }
 
 /**

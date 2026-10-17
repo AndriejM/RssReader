@@ -2,6 +2,7 @@
 
 import { sanitizePreview } from './lib/extract.js';
 import { describeError } from './lib/errors.js';
+import { loadColumnWidths, mountColumnResizers, wireColumnWidthChanges } from './lib/columns.js';
 import { loadFontScales, mountFontScales, wireFontScaleChanges } from './lib/fontsize.js';
 import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
@@ -351,6 +352,10 @@ mountNav();
 // `data-i18n-*` rule as the switcher's, so a language change re-pastes them too.
 mountFontScales();
 wireFontScaleChanges();
+// The draggable borders between the columns: each gap of the layout becomes a handle, and the width
+// a drag leaves behind is remembered for the next time the reader opens.
+mountColumnResizers();
+wireColumnWidthChanges();
 els.refresh.addEventListener('click', () => void refreshSelectedFeed());
 els.clearAll.addEventListener('click', () => void clearAllHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
@@ -364,6 +369,9 @@ async function init() {
   // The sizes the columns had when the reader was last closed; `font-boot.js` has already painted
   // them from its cache, so this only confirms them against storage.
   await loadFontScales();
+
+  // The same for the widths: `columns-boot.js` has painted them, storage confirms them.
+  await loadColumnWidths();
 
   restoreSelection();
   // Expired headlines should not linger in an open reader.

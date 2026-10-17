@@ -88,7 +88,7 @@
   </header>
 
   <main class="panels">
-    <section class="panel panel-feeds" data-i18n-aria="reader.feeds.panelAria">
+    <section id="panel-feeds" class="panel panel-feeds" data-i18n-aria="reader.feeds.panelAria">
       <div class="panel-head">
         <h2 data-i18n="reader.feeds.title"></h2>
         <!-- The size switcher `lib/fontsize.js` builds: it scales this column only. -->
@@ -103,7 +103,14 @@
       </div>
     </section>
 
-    <section class="panel panel-headlines" data-i18n-aria="reader.headlines.panelAria">
+    <!--
+      The gap between two columns is the handle that drags their border: `lib/columns.js` puts the
+      grab area here, so a handle is never laid out on top of a column and never eats a column's
+      pixels. `data-column-resize` names the column to the left of the border.
+    -->
+    <div class="panel-gap" data-column-resize="feeds"></div>
+
+    <section id="panel-headlines" class="panel panel-headlines" data-i18n-aria="reader.headlines.panelAria">
       <div class="panel-head">
         <h2 id="headlines-title" data-i18n="reader.headlines.title"></h2>
         <span class="muted" id="headlines-count"></span>
@@ -115,7 +122,9 @@
       </div>
     </section>
 
-    <section class="panel panel-content" data-i18n-aria="reader.content.panelAria">
+    <div class="panel-gap" data-column-resize="headlines"></div>
+
+    <section id="panel-content" class="panel panel-content" data-i18n-aria="reader.content.panelAria">
       <!-- Original link now lives in the article title itself, so the toolbar only holds delete. -->
       <div class="content-toolbar">
         <button id="content-delete" class="icon-btn danger" type="button" data-i18n-title="reader.content.delete.tooltip" data-i18n-aria="reader.content.delete.aria" hidden>
@@ -130,10 +139,12 @@
   </main>
 
   <!--
-    Read last in the markup on purpose: it paints every column at its remembered size from the
-    localStorage cache, and the panels it looks for have to exist already. It runs before the page
-    module, so a column never shows its text at the wrong size first.
+    Read last in the markup on purpose: it paints every column at its remembered size and its
+    remembered width from the localStorage cache, and the panels it looks for have to exist already.
+    It runs before the page module, so a column never shows its text at the wrong size or the wrong
+    width first.
   -->
   <script src="font-boot.js"></script>
+  <script src="columns-boot.js"></script>
 </body>
 </html>

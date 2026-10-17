@@ -705,6 +705,116 @@ test('every reader column has a size switcher that can be labelled and drawn', (
   }
 });
 
+test('normalizeColumnWidths keeps every draggable column inside its own limits', () => {
+  assert.deepEqual(store.RESIZABLE_PANELS, ['feeds', 'headlines'], 'the borders the mouse can drag');
+  assert.deepEqual(
+    store.normalizeColumnWidths(undefined),
+    { ...store.DEFAULT_PANEL_WIDTHS },
+    'a reader that was never resized opens at the widths of the stylesheet',
+  );
+
+  assert.deepEqual(
+    store.normalizeColumnWidths({ feeds: 300, headlines: 420 }),
+    { feeds: 300, headlines: 420 },
+    'a stored map is taken as it is',
+  );
+  assert.equal(store.normalizeColumnWidths({ feeds: 10 }).feeds, store.MIN_PANEL_WIDTH, 'the minimum width is never crossed');
+  assert.equal(
+    store.normalizeColumnWidths({ headlines: 1e6 }).headlines,
+    store.MAX_PANEL_WIDTH,
+    'clamped to the ceiling',
+  );
+  assert.equal(
+    store.normalizeColumnWidths({ feeds: 10 }).headlines,
+    store.DEFAULT_PANEL_WIDTHS.headlines,
+    'a column nobody resized keeps its own default',
+  );
+
+  assert.equal(store.normalizeColumnWidths({ feeds: '250' }).feeds, 250, 'a width written as text is a width');
+  assert.equal(store.normalizeColumnWidths({ feeds: 240.6 }).feeds, 241, 'a column is a whole number of pixels wide');
+  assert.equal(
+    store.normalizeColumnWidths({ feeds: 'abc' }).feeds,
+    store.DEFAULT_PANEL_WIDTHS.feeds,
+    'not a width at all',
+  );
+  assert.equal(store.normalizeColumnWidths({ side: 500 }).side, undefined, 'no column the reader has no border for');
+});
+
+/**
+ * A border of the reader is a handle `src/lib/columns.js` builds out of the gap the markup declares,
+ * so neither its caption nor the width limits it refuses to cross appear in the markup the guards
+ * above read. What the page declares, what the script places and draws, and what the stylesheet
+ * gives the handle are kept in step here: a gap with no handle drags nothing, and a handle the grid
+ * does not place in a gap sits on top of a column.
+ */
+test('every reader border is a handle that can be grabbed, placed and clamped', () => {
+  const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
+  const script = fs.readFileSync(new URL('../src/lib/columns.js', import.meta.url), 'utf8');
+  const boot = fs.readFileSync(new URL('../src/columns-boot.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../src/styles/reader.css', import.meta.url), 'utf8');
+
+  const borders = [...html.matchAll(/data-column-resize="(\w+)"/g)].map((match) => match[1]);
+  assert.deepEqual(borders, store.RESIZABLE_PANELS, 'one handle per draggable border, in the order of the columns');
+
+  for (const panel of store.RESIZABLE_PANELS) {
+    assert.ok(
+      html.includes(`id="panel-${panel}"`),
+      `the ${panel} column has no id, so its handle has nothing to name in aria-controls`,
+    );
+    assert.ok(
+      html.indexOf(`class="panel panel-${panel}"`) < html.indexOf(`data-column-resize="${panel}"`),
+      `the handle of ${panel} stands before its column, so the grid puts them in each other's place`,
+    );
+    assert.ok(
+      css.includes(`--col-${panel}:`) && script.includes('`--col-${panel}`'),
+      `nothing paints the width of the ${panel} column`,
+    );
+  }
+
+  for (const lang of i18n.LANGUAGES) {
+    assert.ok(
+      i18n.dictionaryKeys(lang).includes('reader.column.resize'),
+      `${lang} has no reader.column.resize, which every border asks to show`,
+    );
+  }
+
+  assert.match(css, /\.col-resize\s*\{[^}]*cursor: col-resize/, 'reader.css draws the handle as a border you can grab');
+  assert.ok(
+    !/\.col-resize\s*\{[^}]*position:\s*absolute/.test(css),
+    'the handle fills its gap cell as a grid item: absolutely positioned with only `top` given it is zero wide and zero tall, and no mouse can hit it',
+  );
+  assert.ok(css.includes('left: -1px'), 'the strip of the handle lies on the column border the user aims at');
+  assert.match(css, /--panel-min:\s*\d+px/, 'reader.css gives every column a floor in its own minmax');
+  assert.equal(
+    Number(css.match(/--panel-min:\s*(\d+)px/)[1]),
+    store.MIN_PANEL_WIDTH,
+    'the floor of the grid and the floor of the stored width are the same number',
+  );
+
+  for (const panel of store.RESIZABLE_PANELS) {
+    assert.equal(
+      css.match(new RegExp(`--col-${panel}: ([0-9]+)px`))?.[1],
+      String(store.DEFAULT_PANEL_WIDTHS[panel]),
+      `reader.css opens the ${panel} column at a width lib/storage.js does not default to`,
+    );
+    assert.ok(
+      boot.includes(`${panel}: ${store.DEFAULT_PANEL_WIDTHS[panel]}`),
+      `columns-boot.js has no default width for the ${panel} column`,
+    );
+  }
+
+  assert.ok(boot.includes(`MIN_PANEL_WIDTH = ${store.MIN_PANEL_WIDTH}`), 'columns-boot.js clamps to the same minimum');
+  assert.ok(boot.includes(`MAX_PANEL_WIDTH = ${store.MAX_PANEL_WIDTH}`), 'columns-boot.js clamps to the same ceiling');
+
+  // The width is written when the button is released, and the minimum is what the drag cannot cross.
+  assert.ok(script.includes("addEventListener('pointerup'"), 'releasing the border is what writes its width');
+  assert.ok(script.includes('MIN_PANEL_WIDTH),'), 'the drag stops at the minimum width instead of crossing it');
+  assert.ok(
+    script.includes('setPointerCapture'),
+    'a border released outside the reader window still ends its drag instead of following the cursor',
+  );
+});
+
 test('t() follows the adopted language and fills placeholders', () => {
   i18n.adoptLanguage('en');
   assert.equal(i18n.t('settings.save'), 'Save');

@@ -125,6 +125,18 @@ the article is read at a large size. The size of a column is written to storage 
 chosen (`settings.font_scales`) and is applied again when the reader opens; two reader tabs keep the
 same sizes, and a size chosen in one tab repaints the other without a reload.
 
+The border between two columns is a handle: hover it and a thin accent line lights up in the gap,
+press and hold the left mouse button and move the mouse left or right — the column to the left of
+the border takes the width and its neighbour gives the rest back. The article column is never
+dragged: it keeps whatever width the window leaves it. A column stops at 160 px and never grows
+past 900 px, and a drag cannot push a neighbouring column under 160 px either, so the border
+simply stops moving where a neighbour would start to vanish. The width is written to storage when
+the button is released (`settings.column_widths`), not while the border moves — a press that never
+moved writes nothing — and the reader opens at the remembered widths; two reader tabs keep the same
+widths, and a border moved in one tab repaints the other without a reload. In a window narrower
+than 980 px the panels wrap into two rows, and only the border between the two lists stays a
+handle.
+
 When the reader opens, no cursor is left empty: the first feed in the list is selected, the
 middle panel has its first (freshest) headline, and its text is shown in the right panel right
 away. There is exactly one case of opting out of auto-selection: returning from a settings
@@ -215,6 +227,10 @@ src/lib/theme.js              light/dark theme
 src/lib/fontsize.js           the size switcher in the head of a reader column: every column is sized
                               on its own, its size is written to the settings
 src/font-boot.js              paint the remembered sizes before the page is drawn by its module
+src/lib/columns.js            the draggable border between reader columns: it sizes the column on
+                              its left, keeps it inside its limits and writes the width to the
+                              settings when the button is released
+src/columns-boot.js           paint the remembered widths before the page is drawn by its module
 src/lib/nav.js                the row of screen-switcher icons: the same one on all three screens,
                               its tooltips taken from the dictionary (`nav.*`)
 src/lib/tabs.js               one extension screen — one tab: find the open tab and activate it
@@ -292,7 +308,7 @@ survives both a feed edit and re-adding the feed.
 }
 ```
 
-**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "read_ttl_days": 7, "sound_file": "src/media/ceres.mp3" | "none", "language": "ru", "font_scales": { "feeds": 1, "headlines": 1.2, "content": 1 } }`. `font_scales` is the font size of every reader column: a multiplier from the ladder `0.85 / 1 / 1.2 / 1.45` (`store.FONT_SCALES`), chosen by the switcher in the head of that column.
+**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "read_ttl_days": 7, "sound_file": "src/media/ceres.mp3" | "none", "language": "ru", "font_scales": { "feeds": 1, "headlines": 1.2, "content": 1 }, "column_widths": { "feeds": 240, "headlines": 340 } }`. `font_scales` is the font size of every reader column: a multiplier from the ladder `0.85 / 1 / 1.2 / 1.45` (`store.FONT_SCALES`), chosen by the switcher in the head of that column. `column_widths` is the width in pixels of every column the mouse can size — the feed column and the headline column — each clamped to 160..900 px (`store.MIN_PANEL_WIDTH`, `store.MAX_PANEL_WIDTH`); the article column takes the width the other two leave in the window.
 
 Other storage properties:
 
@@ -310,6 +326,9 @@ Other storage properties:
   `chrome.storage.local`.
 - The sizes of the reader columns are cached the same way (`rss-reader:font-scales`): `src/font-boot.js`
   paints them before the page module runs, so a column never shows its text at another size first.
+- The widths of the reader columns are cached the same way (`rss-reader:column-widths`): on top of
+  `settings.column_widths`, so `src/columns-boot.js` can open every column at its remembered width
+  without waiting for the asynchronous read.
 - Deleting a feed also deletes its headlines (`store.deleteFeed`); they do not get into `read`:
   the feed was deleted wholesale, and on re-adding it the headlines are read anew.
 
@@ -328,10 +347,11 @@ communicate like this:
 
 Additionally, pages and the background listen to `chrome.storage.onChanged`: a change in `feeds`
 rebuilds alarms, a change in `items` updates the badge and the lists, a change in `settings`
-(theme, `read_ttl_days`, the selected `sound_file`, `language` or the column sizes of `font_scales`)
-runs the cleanup under the new rules, and the pages switch the language of their labels — and the
-reader repaints the size of the column whose size changed, wherever that change came from. This is
-why the screens never “drift apart” from the background.
+(theme, `read_ttl_days`, the selected `sound_file`, `language`, the column sizes of `font_scales` or
+the column widths of `column_widths`) runs the cleanup under the new rules, and the pages switch the
+language of their labels — and the reader repaints the size or the width of the column that
+changed, wherever that change came from. This is why the screens never “drift apart” from the
+background.
 
 ## Limits and constants
 

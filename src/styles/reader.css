@@ -49,12 +49,78 @@
   }
 }
 
-/* Three vertical panels, each with its own scrolling column. */
+/*
+  Three vertical panels and the gap columns between them. A gap is a column of its own, and its whole
+  job is to hold the border handle: a handle never sits on top of a column and never takes a pixel of
+  a column's width.
+
+  `--col-feeds` and `--col-headlines` are the widths the mouse sizes — `columns-boot.js` paints them
+  from the remembered map, `lib/columns.js` moves them while a border is held. Each of them is written
+  as `minmax(floor, remembered)`: a column is exactly as wide as the user left it while the window has
+  room for it, and gives back to the floor when the window no longer does. The article column is the
+  one that stretches: it takes the width the other two leave in the window.
+*/
 .panels {
+  --col-gap: 8px;
+  --col-feeds: 240px;
+  --col-headlines: 340px;
+  /* The floor of every column: the same number `lib/storage.js` refuses to go below. */
+  --panel-min: 160px;
   display: grid;
   flex: 1;
-  grid-template-columns: 240px minmax(260px, 0.9fr) minmax(360px, 1.4fr);
+  grid-template-columns:
+    minmax(var(--panel-min), var(--col-feeds))
+    var(--col-gap)
+    minmax(var(--panel-min), var(--col-headlines))
+    var(--col-gap)
+    minmax(var(--panel-min), 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
+  position: relative;
+}
+
+/*
+  The handle of a border: a grid item of the gap column, so it fills the gap cell — the full height
+  of the row and the whole width of the gap — and is never laid over a column. It must stay a static
+  grid item: positioning it absolutely would drop it out of the grid's stretching, and an empty div
+  absolutely positioned with only `top` given is zero wide and zero tall, which no mouse can hit.
+  The column's own 1px border is the line the user sees; this is the area that answers to the mouse.
+*/
+.col-resize {
+  cursor: col-resize;
+  position: relative;
+  touch-action: none;
+  z-index: 2;
+}
+
+/*
+  The strip lies exactly on the line the user aims at. In the wide layout that line is the right
+  border of the column to the left of the gap: one pixel of it still belongs to that column, so the
+  strip stands one pixel before the gap and covers it. It is visible only while the handle is hovered
+  or held — an idle reader keeps its plain borders.
+*/
+.col-resize::after {
+  background: transparent;
+  bottom: 0;
+  content: "";
+  left: -1px;
+  position: absolute;
+  top: 0;
+  transition: background 0.12s ease;
+  width: 3px;
+}
+
+.col-resize:hover::after,
+.col-resize:active::after,
+.resizing .col-resize:active::after {
+  background: var(--accent);
+}
+
+/* While a border is held the mouse must keep reporting moves even outside the window. */
+.resizing,
+.resizing * {
+  cursor: col-resize !important;
+  user-select: none;
 }
 
 .panel {
@@ -290,13 +356,30 @@
 
 @media (max-width: 980px) {
   .panels {
-    grid-template-columns: 200px 1fr;
-    grid-template-rows: 1fr 1fr;
+    grid-template-columns: var(--col-feeds) var(--col-gap) minmax(var(--panel-min), 1fr);
+    grid-template-rows: minmax(0, 1fr) var(--col-gap) minmax(0, 1fr);
   }
 
   .panel-content {
     border-right: none;
-    grid-column: 1 / 3;
+    grid-column: 1 / 4;
+    grid-row: 3 / 4;
+  }
+
+  /* The article takes the whole third row, so the gap under the two lists is a row gap: its strip
+     lies across that row, on the bottom border of the column above it. */
+  .col-resize[data-column-resize="feeds"]::after {
+    bottom: auto;
+    height: 3px;
+    left: 0;
+    right: 0;
+    top: -1px;
+  }
+
+  /* Here the article takes the whole third row: the border between the lists and the article has no
+     column width left to drag, so only the border between the two lists stays a handle. */
+  .col-resize[data-column-resize="headlines"] {
+    display: none;
   }
 
   /* The columns are narrower here: the switcher gives up a little of its width before the title
