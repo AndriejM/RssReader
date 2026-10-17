@@ -133,7 +133,7 @@ details” button in
 |---|---|---|---|---|
 | `read_ttl_days` | how many days to forget read items: the period that keeps a deleted news item from coming back from the feed | days | 7 | integer from 1 to 3650 |
 | sound on download | combobox: which mp3 from `src/media` to play when an automatic load brings headlines; the first row “No sound” turns the signal off | — | `ceres.mp3` | only files from `src/media` or “No sound” |
-| interface language | combobox: which language the labels, tooltips and messages of all screens use (“Русский”, “English”) | — | the browser language; if it is not among the supported ones — `English` | only languages from `src/lib/i18n.js` |
+| interface language | combobox: which language the labels, tooltips and messages of all screens use (“Русский”, “English”, “Українська”, “Polski”, “Deutsch”, “Français”, “Español”) | — | the browser language; if it is not among the supported ones — `English` | only languages from `src/lib/i18n.js` |
 
 The fields themselves write nothing to storage: the period, the signal and the language go there
 only via the **“Write”** button. While a field's value differs from what is stored, the button is
@@ -172,8 +172,9 @@ src/feeds.html|js             feed configuration screen: add / edit / delete
 src/settings.html|js          global settings screen: lifetime of the read list, its manual
                               cleanup, combobox of the signal file (“No sound” / mp3 from media)
                               and combobox of the interface language
-src/lib/i18n.js              every label, message and tooltip: `ru` and `en` dictionaries,
-                              `t(key, params)`, `applyI18n()`, units, browser language
+src/lib/i18n.js              every label, message and tooltip: the `ru`, `en`, `uk`, `pl`,
+                              `de`, `fr` and `es` dictionaries, `t(key, params)`,
+                              `applyI18n()`, units, browser language
 src/lib/i18n-boot.js         apply the stored language before the page is drawn by its module
 src/lib/errors.js             turn a feed error (`{code, params}`) into text in the page's language
 src/offscreen.html|js         offscreen document: the extension's only context with a DOM — feed
@@ -196,8 +197,9 @@ src/lib/nav.js                the row of screen-switcher icons: the same one on 
 src/lib/tabs.js               one extension screen — one tab: find the open tab and activate it
                               instead of opening a second one
 src/lib/util.js               pure functions without chrome.* (covered by tests)
-_locales/en|ru/               the extension's own name and description — Chrome picks them by the
-                              browser language (`__MSG_extensionName__` in the manifest)
+_locales/                     the extension's own name and description in each of the seven
+                              locales (en|ru|uk|pl|de|fr|es) — Chrome picks them by the browser
+                              language (`__MSG_extensionName__` in the manifest)
 src/styles/                   theme.css (theme CSS variables), reader.css, feeds.css, settings.css
 scripts/test.mjs              unit tests of the pure functions: node scripts/test.mjs
 scripts/make_icons.mjs        regenerate the icons without dependencies
@@ -218,7 +220,7 @@ nnm_example_rss_item.xml      a sample feed in Windows-1251: the decoding tests 
 | 6 | Badge on the icon: `1…99` as a number, `*` when over 99, empty at 0 | `util.badgeText` + `chrome.action.setBadgeText` + `chrome.action.setBadgeBackgroundColor` in `src/background.js`; the badge background is yellow and theme-dependent, so the number is readable in both Chrome toolbar themes |
 | 7 | Sound when an automatic load brings more than 0 headlines | `store.addItems` returns the number of new items → `sound.playSound` reads the file selected on the settings screen → the offscreen document plays it (`playSound` does nothing when “No sound” is selected); manual “Refresh”/“Load now” produce no sound |
 | 8 | A separate global settings screen (the same icon in the top-right corner of all three screens, the last of the three, before the theme toggle): `read_ttl_days` — how many days to forget read items, and a signal-file combobox (both saved via the “Write” button), plus a button that fully clears the read list | `src/settings.html`, `src/settings.js`, `store.getReadTtlDays` / `store.setReadTtlDays` / `store.setSoundChoice` / `store.clearRead` |
-| 9 | Labels, messages and tooltips are factored into one configuration, from which the English one is derived; on the global settings screen a language combobox that is saved to storage; on load the reader takes the saved language, otherwise the browser language, otherwise English | `src/lib/i18n.js` (`ru` / `en` dictionaries), `store.getLanguage` / `store.setLanguage`, `src/lib/i18n-boot.js`, `src/lib/errors.js`, `language-file` combobox in `src/settings.html` |
+| 9 | Labels, messages and tooltips are factored into one configuration, from which the English one is derived; on the global settings screen a language combobox that is saved to storage; on load the reader takes the saved language, otherwise the browser language, otherwise English | `src/lib/i18n.js` (`ru` / `en` / `uk` / `pl` / `de` / `fr` / `es` dictionaries), `store.getLanguage` / `store.setLanguage`, `src/lib/i18n-boot.js`, `src/lib/errors.js`, `language-file` combobox in `src/settings.html` |
 
 ## Data schema
 
@@ -412,15 +414,15 @@ apart” from the background.
   its headline has expired by `clean_timeout`, the reader still selects the first feed and its
   first headline.
 - **The interface language is a dictionary, not a page translation**: all labels, tooltips
-  (`title`), `aria-label` and messages lie in two flat dictionaries `ru` and `en` in
-  `src/lib/i18n.js` under shared keys (`reader.*`, `feeds.*`, `settings.*`, `errors.*`,
-  `units.*`). The markup carries a key instead of text (`data-i18n`, `data-i18n-title`,
-  `data-i18n-aria`); live text is built by `t(key, params)`, so adding a language means adding a
-  dictionary rather than hunting strings across the screens. The chosen language is cached in
-  `localStorage` (`rss-reader:language`): extension pages of one origin share the same
-  `localStorage`, so labels are re-pasted before the read from `chrome.storage.local` resolves.
-  Language names in the combobox are not translated (“Русский”, “English”) — that way they are
-  easier to recognize.
+  (`title`), `aria-label` and messages lie in seven flat dictionaries — `ru`, `en`, `uk`, `pl`,
+  `de`, `fr` and `es` — in `src/lib/i18n.js` under shared keys (`reader.*`, `feeds.*`,
+  `settings.*`, `errors.*`, `units.*`). The markup carries a key instead of text (`data-i18n`,
+  `data-i18n-title`, `data-i18n-aria`); live text is built by `t(key, params)`, so adding a
+  language means adding a dictionary rather than hunting strings across the screens. The chosen
+  language is cached in `localStorage` (`rss-reader:language`): extension pages of one origin
+  share the same `localStorage`, so labels are re-pasted before the read from
+  `chrome.storage.local` resolves. Language names in the combobox are not translated (“Русский”,
+  “Deutsch”) — that way they are easier to recognize.
 - **A feed refusal travels as a code, not as text**: `rss.js`, `lib/offscreen.js` and
   `lib/extract.js` mark an error with `code`/`params`, and `src/background.js` and the offscreen
   document pass them to the page as they are (for any error with a `code`, not only `FeedError`),
@@ -514,9 +516,9 @@ that is checked in the browser after loading the extension.
 - **The offscreen document is created only when a DOM is needed** — parsing a feed or playing
   sound — not permanently; afterwards it is reused. The first feed read after a background
   wake-up is slightly slower than the rest because the window still has to be created.
-- **Two interface languages** (`ru`, `en`): the list is fixed by `LANGUAGES` in
-  `src/lib/i18n.js`, and a browser language outside this list falls back to `English`. Chrome
-  takes the extension's own name and description from `_locales` by the browser language, not by
-  the language chosen in the reader.
+- **Seven interface languages** (`ru`, `en`, `uk`, `pl`, `de`, `fr`, `es`): the list is fixed by
+  `LANGUAGES` in `src/lib/i18n.js`, and a browser language outside this list falls back to
+  `English`. Chrome takes the extension's own name and description from `_locales` by the browser
+  language, not by the language chosen in the reader.
 - **`host_permissions: <all_urls>`**: the extension can read any site a feed or news link leads
   to. This follows from the assignment, not from an excess of privileges.

@@ -629,8 +629,8 @@ test('t() follows the adopted language and fills placeholders', () => {
 
 test('an unsupported language falls back to English', () => {
   assert.equal(i18n.FALLBACK_LANGUAGE, 'en');
-  assert.equal(i18n.normalizeLanguage('de'), null);
-  assert.equal(i18n.adoptLanguage('de'), 'en', 'a browser language the reader has no dictionary for');
+  assert.equal(i18n.normalizeLanguage('it'), null);
+  assert.equal(i18n.adoptLanguage('it'), 'en', 'a browser language the reader has no dictionary for');
   assert.equal(i18n.adoptLanguage(undefined), 'en');
   assert.equal(i18n.adoptLanguage('ru'), 'ru');
 });

@@ -1,0 +1,10 @@
+{
+  "extensionName": {
+    "message": "RSS Reader",
+    "description": "Nom de l’extension : chrome://extensions et Web Store"
+  },
+  "extensionDescription": {
+    "message": "Lecture des actualités RSS : réglages des flux, réglages globaux (read_ttl_days, le signal du téléchargement automatique, la langue de l’interface), lecteur à trois panneaux, chargement et suppression automatiques des titres",
+    "description": "Brève description de ce que fait l’extension"
+  }
+}
