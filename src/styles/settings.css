@@ -19,12 +19,7 @@
   margin: 0;
 }
 
-.page-header .actions {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
+.hint {
 .card {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -142,30 +137,7 @@
   min-height: 16px;
 }
 
-/* A square button that only holds its icon: it sits level with the field it acts on. */
-.icon-btn {
-  align-items: center;
-  display: inline-flex;
-  flex: 0 0 auto;
-  justify-content: center;
-  padding: 7px;
-}
-
-.icon-btn svg {
-  display: block;
-}
-
-/* The danger icon (forget read) borrows the danger button's colours for its square. */
-.icon-btn.danger {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.icon-btn.danger:hover:not(:disabled) {
-  background: var(--danger);
-  color: var(--text-on-selected);
-}
-
+/* The play button takes on the accent while its signal sounds. */
 .icon-btn.playing {
   background: var(--accent-soft);
   border-color: var(--accent);

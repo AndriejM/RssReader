@@ -41,15 +41,17 @@ const DICTIONARIES = {
     'common.untitled': 'Заголовок без названия',
     'common.theme.light': 'Светлая тема',
     'common.theme.dark': 'Тёмная тема',
+    'common.theme.toggle': 'Переключить тему',
+
+    // Подписи переключателя экранов — одна на все три экрана: здесь же tooltip и aria-label.
+    'nav.reader': 'Читалка',
+    'nav.feeds': 'Настройки лент',
+    'nav.global': 'Глобальные настройки',
+    'nav.group': 'Переключение между экранами расширения',
 
     'reader.count.tooltip': 'Заголовков в хранилище',
     'reader.clearAll.tooltip': 'Удалить все заголовки из хранилище',
     'reader.clearAll.aria': 'Удалить все',
-    'reader.feedsSettings.tooltip': 'Настройки лент',
-    'reader.feedsSettings.aria': 'Настройки лент',
-    'reader.globalSettings.tooltip': 'Глобальные настройки',
-    'reader.globalSettings.aria': 'Глобальные настройки',
-    'reader.theme.tooltip': 'Переключить тему',
 
     'reader.feeds.panelAria': 'Список RSS лент',
     'reader.feeds.title': 'Ленты',
@@ -81,8 +83,6 @@ const DICTIONARIES = {
 
     'feeds.title': 'Настройки RSS лент',
     'feeds.add': 'Добавить ленту',
-    'feeds.global': 'Глобальные настройки',
-    'feeds.reader': 'Открыть читалку',
     'feeds.empty': 'Лент нет. Нажмите «Добавить ленту».',
     'feeds.hint':
       'delay_timeout — период автоматической загрузки заголовков (минуты, Chrome не позволяет реже 1 минуты). clean_timeout — сколько новость хранится в localstorage после загрузки (минуты), по истечении этого времени она удаляется автоматически.',
@@ -115,8 +115,6 @@ const DICTIONARIES = {
     'feeds.error.clean': 'Время хранения — не меньше 1 минуты',
 
     'settings.title': 'Глобальные настройки',
-    'settings.feeds': 'Настройки лент',
-    'settings.reader': 'Открыть читалку',
     'settings.save': 'Записать',
     'settings.clearRead': 'Забыть прочитанные',
     'settings.ttl': 'через сколько дней забыть прочитанные',
@@ -188,15 +186,18 @@ const DICTIONARIES = {
     'common.untitled': 'Untitled headline',
     'common.theme.light': 'Light theme',
     'common.theme.dark': 'Dark theme',
+    'common.theme.toggle': 'Toggle theme',
+
+    // Captions of the screen switcher — one set for all three screens: it is both the tooltip
+    // and the aria-label there.
+    'nav.reader': 'Reader',
+    'nav.feeds': 'Feed settings',
+    'nav.global': 'Global settings',
+    'nav.group': 'Switch between the extension screens',
 
     'reader.count.tooltip': 'Headlines in storage',
     'reader.clearAll.tooltip': 'Delete every headline from storage',
     'reader.clearAll.aria': 'Delete all',
-    'reader.feedsSettings.tooltip': 'Feed settings',
-    'reader.feedsSettings.aria': 'Feed settings',
-    'reader.globalSettings.tooltip': 'Global settings',
-    'reader.globalSettings.aria': 'Global settings',
-    'reader.theme.tooltip': 'Toggle theme',
 
     'reader.feeds.panelAria': 'List of RSS feeds',
     'reader.feeds.title': 'Feeds',
@@ -228,8 +229,6 @@ const DICTIONARIES = {
 
     'feeds.title': 'RSS feed settings',
     'feeds.add': 'Add feed',
-    'feeds.global': 'Global settings',
-    'feeds.reader': 'Open the reader',
     'feeds.empty': 'No feeds yet. Press “Add feed”.',
     'feeds.hint':
       'delay_timeout — how often headlines are fetched automatically (minutes; Chrome does not allow less than 1 minute). clean_timeout — how long a news stays in localstorage after it is loaded (minutes); after that time it is removed automatically.',
@@ -262,8 +261,6 @@ const DICTIONARIES = {
     'feeds.error.clean': 'Storage time — at least 1 minute',
 
     'settings.title': 'Global settings',
-    'settings.feeds': 'Feed settings',
-    'settings.reader': 'Open the reader',
     'settings.save': 'Save',
     'settings.clearRead': 'Forget read',
     'settings.ttl': 'after how many days to forget read headlines',
@@ -335,15 +332,17 @@ const DICTIONARIES = {
     'common.untitled': 'Заголовок без назви',
     'common.theme.light': 'Світла тема',
     'common.theme.dark': 'Темна тема',
+    'common.theme.toggle': 'Перемкнути тему',
+
+    // Підписи перемикача екранів — одні на всі три екрани: вони самі й є tooltip та aria-label.
+    'nav.reader': 'Читалка',
+    'nav.feeds': 'Налаштування стрічок',
+    'nav.global': 'Глобальні налаштування',
+    'nav.group': 'Перемикання між екранами розширення',
 
     'reader.count.tooltip': 'Заголовки у сховищі',
     'reader.clearAll.tooltip': 'Видалити всі заголовки зі сховища',
     'reader.clearAll.aria': 'Видалити всі',
-    'reader.feedsSettings.tooltip': 'Налаштування стрічок',
-    'reader.feedsSettings.aria': 'Налаштування стрічок',
-    'reader.globalSettings.tooltip': 'Глобальні налаштування',
-    'reader.globalSettings.aria': 'Глобальні налаштування',
-    'reader.theme.tooltip': 'Перемкнути тему',
 
     'reader.feeds.panelAria': 'Список RSS-стрічок',
     'reader.feeds.title': 'Стрічки',
@@ -375,8 +374,6 @@ const DICTIONARIES = {
 
     'feeds.title': 'Налаштування RSS-стрічок',
     'feeds.add': 'Додати стрічку',
-    'feeds.global': 'Глобальні налаштування',
-    'feeds.reader': 'Відкрити читалку',
     'feeds.empty': 'Стрічок немає. Натисніть «Додати стрічку».',
     'feeds.hint':
       'delay_timeout — період автоматичного завантаження заголовків (хвилини, Chrome не дозволяє рідше 1 хвилини). clean_timeout — скільки новина зберігається в localstorage після завантаження (хвилини), по закінченні цього часу вона видаляється автоматично.',
@@ -409,8 +406,6 @@ const DICTIONARIES = {
     'feeds.error.clean': 'Час зберігання — не менше 1 хвилини',
 
     'settings.title': 'Глобальні налаштування',
-    'settings.feeds': 'Налаштування стрічок',
-    'settings.reader': 'Відкрити читалку',
     'settings.save': 'Записати',
     'settings.clearRead': 'Забути прочитані',
     'settings.ttl': 'через скільки днів забути прочитані',
@@ -482,15 +477,18 @@ const DICTIONARIES = {
     'common.untitled': 'Nagłówek bez tytułu',
     'common.theme.light': 'Motyw jasny',
     'common.theme.dark': 'Motyw ciemny',
+    'common.theme.toggle': 'Przełącz motyw',
+
+    // Podpisy przełącznika ekranów — jedno dla wszystkich trzech ekranów: tam samo tooltip
+    // i aria-label.
+    'nav.reader': 'Czytnik',
+    'nav.feeds': 'Ustawienia kanałów',
+    'nav.global': 'Ustawienia globalne',
+    'nav.group': 'Przełączanie między ekranami rozszerzenia',
 
     'reader.count.tooltip': 'Nagłówki w pamięci',
     'reader.clearAll.tooltip': 'Usuń wszystkie nagłówki z pamięci',
     'reader.clearAll.aria': 'Usuń wszystkie',
-    'reader.feedsSettings.tooltip': 'Ustawienia kanałów',
-    'reader.feedsSettings.aria': 'Ustawienia kanałów',
-    'reader.globalSettings.tooltip': 'Ustawienia globalne',
-    'reader.globalSettings.aria': 'Ustawienia globalne',
-    'reader.theme.tooltip': 'Przełącz motyw',
 
     'reader.feeds.panelAria': 'Lista kanałów RSS',
     'reader.feeds.title': 'Kanały',
@@ -522,8 +520,6 @@ const DICTIONARIES = {
 
     'feeds.title': 'Ustawienia kanałów RSS',
     'feeds.add': 'Dodaj kanał',
-    'feeds.global': 'Ustawienia globalne',
-    'feeds.reader': 'Otwórz czytnik',
     'feeds.empty': 'Brak kanałów. Naciśnij „Dodaj kanał”.',
     'feeds.hint':
       'delay_timeout — jak często nagłówki są pobierane automatycznie (minuty; Chrome nie pozwala rzadziej niż 1 minutę). clean_timeout — jak długo wiadomość jest przechowywana w localstorage po wczytaniu (minuty); po upływie tego czasu jest usuwana automatycznie.',
@@ -556,8 +552,6 @@ const DICTIONARIES = {
     'feeds.error.clean': 'Czas przechowywania — co najmniej 1 minuta',
 
     'settings.title': 'Ustawienia globalne',
-    'settings.feeds': 'Ustawienia kanałów',
-    'settings.reader': 'Otwórz czytnik',
     'settings.save': 'Zapisz',
     'settings.clearRead': 'Zapomnij przeczytane',
     'settings.ttl': 'po ilu dniach zapomnieć przeczytane',

@@ -134,3 +134,88 @@ a {
 .muted {
   color: var(--text-muted);
 }
+
+/*
+  Icons and the square buttons that hold them: the screen switcher sits in the header of every
+  screen, and a screen also uses such buttons inside its own card, so the shared page stylesheet
+  carries them rather than each screen copying its own version.
+*/
+.icon-sprite {
+  display: none;
+}
+
+.icon-btn {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  width: 34px;
+}
+
+.icon-btn svg {
+  display: block;
+}
+
+.icon {
+  fill: none;
+  height: 18px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 18px;
+}
+
+/* The danger icon borrows the danger button's colours for its square. */
+.icon-btn.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.icon-btn.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--text-on-selected);
+}
+
+/* The row a header holds its actions in: the same spacing everywhere, so the switcher keeps the
+   same gaps and the same corner whatever else stands next to it. */
+.actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+/* The switcher: the same three screen icons in the top-right corner of every screen, in the same
+   order. Only the current one moves, so the strip never shifts when screens are switched. */
+.nav {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+/* The icon of the screen you are on is a marker, not a button — a `<span>` written by `lib/nav.js`
+   so it is never tabbable and its tooltip always shows. Being no button, it borrows none of the
+   `button` colours above, so its box is described here: the accent of an active tab rather than the
+   dimming a disabled control usually gets. */
+.nav-btn.current {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  cursor: default;
+}
+
+/* The theme button shows the glyph of the theme it would switch to. */
+.theme-toggle .icon-moon {
+  display: none;
+}
+
+:root[data-theme="light"] .theme-toggle .icon-moon {
+  display: inline;
+}
+
+:root[data-theme="light"] .theme-toggle .icon-sun {
+  display: none;
+}

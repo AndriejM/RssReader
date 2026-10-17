@@ -8,8 +8,8 @@
 // alert, so a plain per-page window.localStorage could not carry them.
 
 import { LANGUAGE_NAMES, adoptLanguage, applyI18n, currentLanguage, t } from './lib/i18n.js';
+import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
-import { READER_PAGE, SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
 import { MAX_READ_TTL_DAYS, MIN_READ_TTL_DAYS, READ_TTL_DAYS } from './lib/util.js';
 
@@ -27,8 +27,6 @@ const els = {
 
   language: document.getElementById('language-file'),
 
-  feeds: document.getElementById('btn-feeds'),
-  reader: document.getElementById('btn-reader'),
   theme: document.getElementById('btn-theme'),
 };
 
@@ -289,9 +287,9 @@ els.playSound.addEventListener('click', playPreview);
 els.save.addEventListener('click', () => void saveFields());
 els.clearRead.addEventListener('click', () => void clearRead());
 
-// The screen reaches the reader the way the feeds screen does — the tab keeps its place.
-els.feeds.addEventListener('click', () => leavePage(pageUrl(SETTINGS_PAGE)));
-els.reader.addEventListener('click', () => leavePage(pageUrl(READER_PAGE)));
+// The screen switcher reaches the reader the way the feeds screen does — the tab keeps its place —
+// but every jump here goes through `leavePage`, which asks before dropping unsaved fields.
+mountNav({ leave: leavePage });
 
 void wireThemeButton(els.theme);
 

@@ -30,24 +30,37 @@ all features work, and the network is needed only to read the feeds and articles
 4. The RSS Reader icon appears in the toolbar. Clicking it opens the reader in a new tab, and
    if the reader is already open — Chrome switches to that tab (the `action` has no
    `default_popup`, so a click always leads to the reader).
-5. The global settings screen: the **“Global settings”** button in the reader header (before the
-   theme toggle) — it opens the settings in the same tab — or
+5. The global settings screen: the **“Global settings”** icon in the top-right corner of the
+   reader — it opens the settings in the same tab — or
    `chrome://extensions` → RSS Reader → “Details” → “Extension details” → “Extension options”
    (and directly `chrome-extension://<id>/src/settings.html`). The “Extensions: details” button
    in `chrome://extensions` now leads to this very screen.
-6. The feed settings screen: the **“Feed settings”** button in the reader header, or the
-   “Feed settings” button on the global settings screen (and directly
+6. The feed settings screen: the **“Feed settings”** icon in the top-right corner (and directly
    `chrome-extension://<id>/src/feeds.html`). Both settings screens open in the same tab and
-   return to the reader via the “Open reader” button.
+   return to the reader through the same row of icons.
+
+## Screen switcher
+
+All three screens carry the same row of icons in the top-right corner: **Reader**, **Feed
+settings**, **Global settings**, and after them the theme toggle. The order is identical
+everywhere, so the strip does not shift when you move between screens; the icon of the screen you
+are on is highlighted and is not clickable.
+
+Every icon has both a tooltip (`title`) and an `aria-label`, taken from the same dictionary key
+(`nav.reader`, `nav.feeds`, `nav.global`), so the tooltip follows the interface language. The row
+is built by `src/lib/nav.js`: a screen only says which screen it is (`data-nav-active` on its
+`<nav>`) and adds whatever it needs in the strip of its own (for instance “Add feed” on the feed
+settings screen).
 
 ## Quick start
 
-1. Open “Feed settings” → “Add feed”.
+1. Open “Feed settings” (the icon in the top-right corner) → “Add feed”.
 2. Fill in `name` and `rss_link`, set `delay_timeout` and `clean_timeout` → “Add feed”.
    The feed is re-read once right away, so headlines appear immediately without waiting for the
    first alarm to fire.
-3. Open the reader (click the icon or “Open reader”) → the first feed and its freshest headline
-   are already selected, the article text is in the right panel; afterwards, clicking a feed on
+3. Open the reader (click the toolbar icon or the reader icon in the top-right corner) → the
+   first feed and its freshest headline are already selected, the article text is in the right
+   panel; afterwards, clicking a feed on
    the left or a headline in the middle panel switches the panels.
 4. From then on the feed is polled automatically every `delay_timeout` minutes; new headlines
    are marked with a badge on the icon and a short sound.
@@ -74,8 +87,8 @@ Card buttons:
   counter updates when the background finishes downloading something and does not overwrite
   values you have already entered.
 
-Screen header: **“Add feed”**, **“Global settings”**, **“Open reader”** (returns to the reader in
-this same tab), theme toggle.
+Screen header: **“Add feed”** on the left; on the right the row of screen-switcher icons (here
+its “Feed settings” icon is the highlighted one) and the theme toggle.
 
 ## Reading screen (`src/index.html`)
 
@@ -100,19 +113,20 @@ screen in the same tab restores precisely the feed and precisely the headline yo
 
 At the top of the reader there is a counter: the total number of headlines of all feeds in
 storage. Next to it a trash-icon button (“Delete all”) — one click removes all headlines from
-storage (the feeds themselves remain), then three more icons — feed settings, global settings
-and the theme toggle. The counters update when the background downloads or cleans up headlines,
-so an open reader never shows stale data.
+storage (the feeds themselves remain); in the top-right corner sit the screen-switcher icons and
+the theme toggle (the reader icon is the highlighted one). The counters update when the background
+downloads or cleans up headlines, so an open reader never shows stale data.
 
-The “Feed settings” icon opens the settings in the same tab — no second tab appears — and “Open
-reader” on the settings screen returns to the reader the same way: to the same feed and the same
-open headline. The “Global settings” icon (placed right before the theme toggle) opens the
-global settings screen the same way.
+The “Feed settings” icon opens the settings in the same tab — no second tab appears — and the
+reader icon on a settings screen returns the same way: to the same feed and the same
+open headline. The “Global settings” icon (the last of the three, before the theme toggle) opens
+the global settings screen the same way.
 
 ## Global settings screen (`src/settings.html`)
 
 Settings that apply to the reader as a whole rather than to a single feed. It opens via the
-“Global settings” icon in the reader header, and also via the “Extensions: details” button in
+“Global settings” icon in the top-right corner of any screen, and also via the “Extensions:
+details” button in
 `chrome://extensions` (`options_ui` in the manifest). Fields:
 
 | Field | Meaning | Units | Default | Constraints |
@@ -142,8 +156,9 @@ and only if it is not supported by the extension — `English`. A saved language
 right away: the screen where it was changed re-pastes its own labels without a reload, and the
 reader and the feed screen pick up the change via `chrome.storage.onChanged`.
 
-Screen header: **“Feed settings”**, **“Open reader”** (returns to the reader in this same tab;
-the selected feed and headline are preserved) and the theme toggle.
+Screen header: the row of screen-switcher icons (here its “Global settings” icon is the
+highlighted one; the reader icon returns to the reader in this same tab, keeping the selected feed
+and headline) and the theme toggle.
 
 ## Structure
 
@@ -176,6 +191,8 @@ src/lib/sound.js              which signal file to play (reads the choice from t
 src/media/                    signal audio files: the one selected on the settings screen plays
                               (“No sound” turns the signal off)
 src/lib/theme.js              light/dark theme
+src/lib/nav.js                the row of screen-switcher icons: the same one on all three screens,
+                              its tooltips taken from the dictionary (`nav.*`)
 src/lib/tabs.js               one extension screen — one tab: find the open tab and activate it
                               instead of opening a second one
 src/lib/util.js               pure functions without chrome.* (covered by tests)
@@ -200,7 +217,7 @@ nnm_example_rss_item.xml      a sample feed in Windows-1251: the decoding tests 
 | 5 | Light/dark theme toggle | `src/lib/theme.js`, `src/styles/theme.css`; the value is in `chrome.storage.local`, so it is synchronous across all pages |
 | 6 | Badge on the icon: `1…99` as a number, `*` when over 99, empty at 0 | `util.badgeText` + `chrome.action.setBadgeText` + `chrome.action.setBadgeBackgroundColor` in `src/background.js`; the badge background is yellow and theme-dependent, so the number is readable in both Chrome toolbar themes |
 | 7 | Sound when an automatic load brings more than 0 headlines | `store.addItems` returns the number of new items → `sound.playSound` reads the file selected on the settings screen → the offscreen document plays it (`playSound` does nothing when “No sound” is selected); manual “Refresh”/“Load now” produce no sound |
-| 8 | A separate global settings screen (an icon in the reader header, next to the theme toggle): `read_ttl_days` — how many days to forget read items, and a signal-file combobox (both saved via the “Write” button), plus a button that fully clears the read list | `src/settings.html`, `src/settings.js`, `store.getReadTtlDays` / `store.setReadTtlDays` / `store.setSoundChoice` / `store.clearRead` |
+| 8 | A separate global settings screen (the same icon in the top-right corner of all three screens, the last of the three, before the theme toggle): `read_ttl_days` — how many days to forget read items, and a signal-file combobox (both saved via the “Write” button), plus a button that fully clears the read list | `src/settings.html`, `src/settings.js`, `store.getReadTtlDays` / `store.setReadTtlDays` / `store.setSoundChoice` / `store.clearRead` |
 | 9 | Labels, messages and tooltips are factored into one configuration, from which the English one is derived; on the global settings screen a language combobox that is saved to storage; on load the reader takes the saved language, otherwise the browser language, otherwise English | `src/lib/i18n.js` (`ru` / `en` dictionaries), `store.getLanguage` / `store.setLanguage`, `src/lib/i18n-boot.js`, `src/lib/errors.js`, `language-file` combobox in `src/settings.html` |
 
 ## Data schema
@@ -383,9 +400,9 @@ apart” from the background.
   event), and deleted news items return to the feeds at the very next load.
 - **One screen — one tab**: clicking the icon spawns no copies — `tabs.focusOrCreateTab` finds
   the already-open reader tab by its URL and activates it together with its window (open in
-  several windows → the one where you clicked is chosen). “Feed settings” and “Global settings”
-  in the reader and the “Open reader” button on both settings screens move between the three
-  screens within the same tab; the selected feed and open headline survive this transition — they
+  several windows → the one where you clicked is chosen). The “Feed settings”, “Global settings”
+  and reader icons — one and the same row on all three screens — move between them within the
+  same tab; the selected feed and open headline survive this transition — they
   lie in `sessionStorage`, which lives as long as the tab does. This is the only reason for the
   `tabs` permission.
 - **Cursor when the reader opens**: a fresh reader tab is not opened with empty panels — `init()`
@@ -419,7 +436,8 @@ apart” from the background.
 ## Validation
 
 ```bash
-node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of storage.js): 37 tests
+node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
+                             # storage.js) and the guards over the screen markup: 38 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -443,17 +461,18 @@ that is checked in the browser after loading the extension.
    number in the header resets to zero, the icon badge empties. The feeds themselves remain.
 9. Click the plugin icon twice → there is no second reader tab: Chrome activated the already open
    one (and its window). Same for a reader open in another window.
-10. In the reader select a feed and a headline → “Feed settings” → the settings open in this same
-    tab → “Open reader” → the same feed and headline are open again.
+10. In the reader select a feed and a headline → the “Feed settings” icon → the settings open in
+    this same tab → the reader icon → the same feed and headline are open again.
 11. Open the reader in a new tab (feeds and headlines already exist) → the first feed is
     highlighted, in the middle panel the freshest headline of that feed is highlighted, its text
     is visible right away, without a click.
 12. Delete a headline (the trash icon above the text) and wait for this feed's next load → the
     deleted news item does not reappear. On the settings screen, “Load now” on the same feed
     shows the status `already read: N`.
-13. The “Global settings” icon in the reader header (before the theme toggle) → the global
-    settings screen opened in this same tab; “Open reader” on it returned to the same feed and
-    the same headline. The “Extensions: details” button of the extension in `chrome://extensions`
+13. The “Global settings” icon in the top-right corner of the reader (the last of the three, before
+    the theme toggle) → the global settings screen opened in this same tab; the reader icon on it
+    returned to the same feed and the same headline. The “Extensions: details” button of the
+    extension in `chrome://extensions`
     opens the same global settings screen (in a separate tab).
 14. On the global settings screen set `read_ttl_days: 1` and press “Write” → the card shows the
     number of marks and the new term, and the “Write” button becomes inactive. Delete a headline,
@@ -476,6 +495,10 @@ that is checked in the browser after loading the extension.
     `https://nnmclub.to/forum/rss.php?f=2&show=0` or `https://nnmclub.to/forum/rssp.xml`) → the
     headlines read as Cyrillic rather than as characters like `ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ñ`; the console
     encoding warning appears only where the declared encoding did not match the bytes.
+19. Compare the top-right corner of all three screens → the row of three icons stands in the same
+    place and looks the same everywhere, the icon of the screen you are on is highlighted and is
+    not clickable; hovering over any icon gives a tooltip naming the screen it leads to, and the
+    tooltip changes together with the interface language.
 
 ## Limitations
 

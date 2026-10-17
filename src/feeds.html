@@ -10,14 +10,60 @@
   <script type="module" src="feeds.js"></script>
 </head>
 <body>
+  <!--
+    Icon sprite of the screen switcher and the theme toggle: the same <symbol> definitions the
+    reader page has, so every screen draws its icons from the same glyphs. The pages are plain
+    HTML with no build step and no shared include, so this block is kept identical by hand.
+  -->
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="icon-reader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"></path>
+      <line x1="10" y1="14" x2="18" y2="14"></line>
+      <line x1="10" y1="18" x2="15" y2="18"></line>
+      <rect x="10" y="6" width="8" height="4" rx="1"></rect>
+    </symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"></circle>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+    </symbol>
+    <symbol id="icon-tune" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="4" y1="21" x2="4" y2="14"></line>
+      <line x1="4" y1="10" x2="4" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="12"></line>
+      <line x1="12" y1="8" x2="12" y2="3"></line>
+      <line x1="20" y1="21" x2="20" y2="16"></line>
+      <line x1="20" y1="12" x2="20" y2="3"></line>
+      <line x1="1" y1="14" x2="7" y2="14"></line>
+      <line x1="9" y1="8" x2="15" y2="8"></line>
+      <line x1="17" y1="16" x2="23" y2="16"></line>
+    </symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </symbol>
+  </svg>
+
   <div class="page">
     <header class="page-header">
       <h1 data-i18n="feeds.title"></h1>
       <div class="actions">
         <button id="btn-add" class="primary" type="button" data-i18n="feeds.add"></button>
-        <button id="btn-settings" type="button" data-i18n="feeds.global"></button>
-        <button id="btn-reader" type="button" data-i18n="feeds.reader"></button>
-        <button id="btn-theme" type="button"></button>
+        <!-- The switcher `lib/nav.js` fills with the three screen icons, current screen marked. -->
+        <nav class="nav" data-nav-active="feeds" data-i18n-aria="nav.group"></nav>
+        <button id="btn-theme" class="icon-btn theme-toggle" type="button" data-i18n-title="common.theme.toggle" data-i18n-aria="common.theme.toggle">
+          <svg class="icon icon-moon" aria-hidden="true"><use href="#icon-moon"></use></svg>
+          <svg class="icon icon-sun" aria-hidden="true"><use href="#icon-sun"></use></svg>
+        </button>
       </div>
     </header>
 

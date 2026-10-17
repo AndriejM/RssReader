@@ -4,8 +4,8 @@ import { sanitizePreview } from './lib/extract.js';
 import { describeError } from './lib/errors.js';
 import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
+import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
-import { GLOBAL_SETTINGS_PAGE, SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
 import { formatSince, humanDuration, itemTime } from './lib/util.js';
 
@@ -15,8 +15,6 @@ applyI18n();
 
 const els = {
   totalCount: document.getElementById('total-count'),
-  settings: document.getElementById('btn-settings'),
-  globalSettings: document.getElementById('btn-global-settings'),
   theme: document.getElementById('btn-theme'),
   refresh: document.getElementById('btn-refresh'),
   clearAll: document.getElementById('btn-clear-all'),
@@ -345,15 +343,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.items || changes.feeds) void renderAll();
 });
 
-els.settings.addEventListener('click', () => {
-  // The settings screen takes over this tab instead of adding a third one: «Открыть читалку»
-  // on that screen brings the reader back to the same place.
-  window.location.assign(pageUrl(SETTINGS_PAGE));
-});
-els.globalSettings.addEventListener('click', () => {
-  // Global settings live on their own screen, in the same tab, for the same reason as above.
-  window.location.assign(pageUrl(GLOBAL_SETTINGS_PAGE));
-});
+// The same screen switcher every screen has: it fills the header `<nav>` and jumps within this tab,
+// so the reader icon on a settings screen brings the reader back to the same place.
+mountNav();
 els.refresh.addEventListener('click', () => void refreshSelectedFeed());
 els.clearAll.addEventListener('click', () => void clearAllHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());

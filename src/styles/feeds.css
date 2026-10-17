@@ -19,12 +19,7 @@
   margin: 0;
 }
 
-.page-header .actions {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
+.card {
 .hint {
   color: var(--text-muted);
   font-size: 12px;

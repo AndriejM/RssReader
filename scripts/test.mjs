@@ -2,7 +2,7 @@
 //
 //   node scripts/test.mjs
 //
-// Only the chrome-free logic is covered (src/lib/util.js, src/lib/storage.js, src/lib/i18n.js). The chrome.*-dependent code is exercised in the
+// Only the chrome-free logic is covered (src/lib/util.js, src/lib/storage.js, src/lib/i18n.js), plus the guards that read the pages themselves. The chrome.*-dependent code is exercised in the
 // browser.
 
 import assert from 'node:assert/strict';
@@ -10,6 +10,7 @@ import fs from 'node:fs';
 
 import * as encoding from '../src/lib/encoding.js';
 import * as i18n from '../src/lib/i18n.js';
+import { SCREENS } from '../src/lib/nav.js';
 import * as store from '../src/lib/storage.js';
 import * as util from '../src/lib/util.js';
 
@@ -568,6 +569,46 @@ test('an error thrown for a page names a key every language translates', () => {
       assert.ok(keys.includes(`errors.${code}`), `${lang} is missing errors.${code}`);
     }
   }
+});
+
+/**
+ * The screen switcher is one and the same row of icons on every screen, and a page differs from its
+ * neighbours only by the screen it declares. This guard keeps a page from losing its `<nav>`, from
+ * writing its own navigation buttons around it, or from pointing at an icon its sprite does not draw.
+ */
+test('every screen carries the same switcher and names the screen it is', () => {
+  const pages = {
+    'src/index.html': 'reader',
+    'src/feeds.html': 'feeds',
+    'src/settings.html': 'global',
+  };
+  const declared = [];
+
+  for (const [file, active] of Object.entries(pages)) {
+    const source = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+
+    const navs = [...source.matchAll(/<nav class="nav" data-nav-active="(\w+)"/g)];
+    assert.equal(navs.length, 1, `${file} carries exactly one switcher`);
+    assert.equal(navs[0][1], active, `${file} declares the switcher of ${active}`);
+    declared.push(navs[0][1]);
+
+    for (const screen of SCREENS) {
+      assert.ok(
+        source.includes(`<symbol id="${screen.icon}"`),
+        `${file} cannot draw the ${screen.id} icon: its sprite has no ${screen.icon}`,
+      );
+      assert.ok(
+        i18n.dictionaryKeys(i18n.LANGUAGES[0]).includes(screen.label),
+        `${screen.label} has no caption, so the ${screen.id} icon would have no tooltip`,
+      );
+    }
+  }
+
+  assert.deepEqual(
+    declared.sort(),
+    SCREENS.map((screen) => screen.id).sort(),
+    'the screens named by the switcher are exactly the pages that carry it',
+  );
 });
 
 test('t() follows the adopted language and fills placeholders', () => {
