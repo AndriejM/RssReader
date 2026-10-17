@@ -2,6 +2,8 @@
 
 [Русская версия: README.ru.md](README.ru.md)
 
+**Repository:** <https://github.com/AndriejM/RssReader>
+
 Reading RSS news: a feed settings screen, a global settings screen, a three-panel reading
 interface, automatic headline loading on a schedule and their automatic cleanup once their
 storage time expires.
@@ -533,3 +535,22 @@ that is checked in the browser after loading the extension.
   language, not by the language chosen in the reader.
 - **`host_permissions: <all_urls>`**: the extension can read any site a feed or news link leads
   to. This follows from the assignment, not from an excess of privileges.
+
+## Author
+
+Andriy Melnyk (Андрей Мельник) — [andriejsoft@gmail.com](mailto:andriejsoft@gmail.com)
+
+Repository: <https://github.com/AndriejM/RssReader>
+
+## Development
+
+The project was created by VibeCoding with:
+
+1. **StrataLLM** — <https://github.com/Niko1221/Strata>, model `qwen3.8-flash-next-iq3_xxs`
+2. **Zed** editor — <https://zed.dev/>
+
+## License
+
+Released under the MIT License — see [LICENSE](LICENSE). You may use, copy, modify, merge,
+publish, distribute, sublicense and/or sell copies of this software, provided the copyright
+notice and the license notice are kept with it. The software is provided without any warranty.
