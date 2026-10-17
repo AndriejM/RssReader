@@ -118,6 +118,13 @@ Three vertical panels:
    next headline of the same feed, and remembers the deleted one as read — on the next feed load
    it will no longer appear.
 
+In the head of every panel there is its own font size switcher: four buttons drawn as the letter “A”,
+each at the size it stands for. A button scales only the column it sits in — the feed list, the
+headline list and the article text are sized independently, so the middle column stays compact while
+the article is read at a large size. The size of a column is written to storage as soon as it is
+chosen (`settings.font_scales`) and is applied again when the reader opens; two reader tabs keep the
+same sizes, and a size chosen in one tab repaints the other without a reload.
+
 When the reader opens, no cursor is left empty: the first feed in the list is selected, the
 middle panel has its first (freshest) headline, and its text is shown in the right panel right
 away. There is exactly one case of opting out of auto-selection: returning from a settings
@@ -205,6 +212,9 @@ src/lib/sound.js              which signal file to play (reads the choice from t
 src/media/                    signal audio files: the one selected on the settings screen plays
                               (“No sound” turns the signal off)
 src/lib/theme.js              light/dark theme
+src/lib/fontsize.js           the size switcher in the head of a reader column: every column is sized
+                              on its own, its size is written to the settings
+src/font-boot.js              paint the remembered sizes before the page is drawn by its module
 src/lib/nav.js                the row of screen-switcher icons: the same one on all three screens,
                               its tooltips taken from the dictionary (`nav.*`)
 src/lib/tabs.js               one extension screen — one tab: find the open tab and activate it
@@ -282,7 +292,7 @@ survives both a feed edit and re-adding the feed.
 }
 ```
 
-**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "read_ttl_days": 7, "sound_file": "src/media/ceres.mp3" | "none" }`.
+**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "read_ttl_days": 7, "sound_file": "src/media/ceres.mp3" | "none", "language": "ru", "font_scales": { "feeds": 1, "headlines": 1.2, "content": 1 } }`. `font_scales` is the font size of every reader column: a multiplier from the ladder `0.85 / 1 / 1.2 / 1.45` (`store.FONT_SCALES`), chosen by the switcher in the head of that column.
 
 Other storage properties:
 
@@ -298,6 +308,8 @@ Other storage properties:
 - The theme is additionally cached in `window.localStorage` (`rss-reader:theme`) so the page
   gets its colors immediately without waiting for an asynchronous read from
   `chrome.storage.local`.
+- The sizes of the reader columns are cached the same way (`rss-reader:font-scales`): `src/font-boot.js`
+  paints them before the page module runs, so a column never shows its text at another size first.
 - Deleting a feed also deletes its headlines (`store.deleteFeed`); they do not get into `read`:
   the feed was deleted wholesale, and on re-adding it the headlines are read anew.
 
@@ -316,9 +328,10 @@ communicate like this:
 
 Additionally, pages and the background listen to `chrome.storage.onChanged`: a change in `feeds`
 rebuilds alarms, a change in `items` updates the badge and the lists, a change in `settings`
-(theme, `read_ttl_days`, the selected `sound_file` or `language`) runs the cleanup under the new
-rules, and the pages switch the language of their labels. This is why the screens never “drift
-apart” from the background.
+(theme, `read_ttl_days`, the selected `sound_file`, `language` or the column sizes of `font_scales`)
+runs the cleanup under the new rules, and the pages switch the language of their labels — and the
+reader repaints the size of the column whose size changed, wherever that change came from. This is
+why the screens never “drift apart” from the background.
 
 ## Limits and constants
 
@@ -452,7 +465,7 @@ apart” from the background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js) and the guards over the screen markup: 39 tests
+                             # storage.js) and the guards over the screen markup: 41 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -514,6 +527,10 @@ that is checked in the browser after loading the extension.
     place and looks the same everywhere, the icon of the screen you are on is highlighted and is
     not clickable; hovering over any icon gives a tooltip naming the screen it leads to, and the
     tooltip changes together with the interface language.
+20. Press the largest “A” in the head of the middle panel → only the headlines grow, the feed list
+    and the article text keep their size. Close the reader and open it again → the middle panel is
+    large again. In a second reader tab change the size of the right column → the open first tab
+    repaints without a reload.
 
 ## Limitations
 

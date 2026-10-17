@@ -357,6 +357,30 @@ test('normalizeSoundChoice keeps only bundled signals or «Без звука»',
   assert.equal(store.normalizeSoundChoice(null), store.DEFAULT_SOUND_FILE);
 });
 
+test('normalizeFontScales gives every reader column a size from the ladder', () => {
+  assert.deepEqual(store.FONT_PANELS, ['feeds', 'headlines', 'content'], 'the columns of the reader, left to right');
+  assert.ok(
+    store.FONT_SCALES.includes(store.DEFAULT_FONT_SCALE),
+    'the size a column has until the user picks one is one of the steps it can be picked from',
+  );
+  assert.deepEqual(store.normalizeFontScales(undefined), { feeds: 1, headlines: 1, content: 1 });
+  assert.deepEqual(
+    store.normalizeFontScales({ feeds: 1.2, headlines: 1.45, content: 0.85 }),
+    { feeds: 1.2, headlines: 1.45, content: 0.85 },
+    'a stored map is taken as it is',
+  );
+  assert.deepEqual(
+    store.normalizeFontScales({ feeds: 4, headlines: 'large', content: null }),
+    { feeds: 1, headlines: 1, content: 1 },
+    'a size outside the ladder falls back to the default',
+  );
+  assert.deepEqual(
+    store.normalizeFontScales({ feeds: 1.2, sidebar: 1.45 }),
+    { feeds: 1.2, headlines: 1, content: 1 },
+    'a column the reader does not have is not kept',
+  );
+});
+
 test('capRead keeps the newest read markers', () => {
   const read = [];
   for (let i = 0; i < MAX_READ_RECORDS + 5; i += 1) read.push({ link: `l${i}`, time: i });
@@ -642,6 +666,41 @@ test('a screen names only the captions and the glyphs it really has', () => {
     assert.ok(
       feedsHtml.includes(`<symbol id="icon-${icon}"`),
       `a feed row offers the "${icon}" action, which the feeds sprite does not draw`,
+    );
+  }
+});
+
+/**
+ * The size switcher of a reader column is built by `src/lib/fontsize.js`, so neither its captions nor
+ * the sizes it offers appear in the markup the guard above reads. What the page declares, what the
+ * script offers and what the stylesheet draws are kept in step here: a column with no step of its own
+ * would be scaled by nothing, and a step with no CSS size would be drawn at the column's own size.
+ */
+test('every reader column has a size switcher that can be labelled and drawn', () => {
+  const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
+  const script = fs.readFileSync(new URL('../src/lib/fontsize.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../src/styles/reader.css', import.meta.url), 'utf8');
+
+  const columns = [...html.matchAll(/data-font-scale="(\w+)"/g)].map((match) => match[1]);
+  assert.deepEqual(columns, store.FONT_PANELS, 'one switcher per reader column, in the order of the columns');
+
+  const captions = [...script.matchAll(/'(reader\.fontScale\.\w+)'/g)].map((match) => match[1]);
+  assert.equal(
+    new Set(captions).size,
+    store.FONT_SCALES.length + 1,
+    'one caption per offered size, plus the name of the switcher itself',
+  );
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of new Set(captions)) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the size switcher asks to show`);
+    }
+  }
+
+  for (const scale of store.FONT_SCALES) {
+    assert.ok(
+      css.includes(`.font-step[data-font-scale-step="${scale}"]`),
+      `reader.css gives no size to the ${scale} step of the switcher`,
     );
   }
 });

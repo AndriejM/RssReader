@@ -33,6 +33,7 @@ export const READ_TTL_KEY = 'read_ttl_days';
 export const SOUND_KEY = 'sound';
 export const SOUND_FILE_KEY = 'sound_file';
 export const LANGUAGE_KEY = 'language';
+export const FONT_SCALES_KEY = 'font_scales';
 
 /** «Без звука»: автоматическая загрузка остаётся без сигнала. */
 export const SOUND_NONE = 'none';
@@ -340,6 +341,49 @@ export async function setTheme(theme) {
   const next = theme === 'light' ? 'light' : 'dark';
   await updateSettings({ [THEME_KEY]: next });
   return next;
+}
+
+/* ------------------------------------------------- font size of the reader's columns */
+
+/** Колонки читалки, у каждой из которых свой размер шрифта, — слева направо, как они стоят на странице. */
+export const FONT_PANELS = ['feeds', 'headlines', 'content'];
+
+/** Шаги переключателя: множитель базового размера текста колонки. */
+export const FONT_SCALES = [0.85, 1, 1.2, 1.45];
+
+/** Размер колонки, пока пользователь не выбрал другой. */
+export const DEFAULT_FONT_SCALE = 1;
+
+/**
+ * Хранимой карте доверяем ровно в той мере, в какой она описывает колонки читалки: неизвестной
+ * колонке и шагу вне списка возвращаем базовый размер.
+ */
+export function normalizeFontScales(value) {
+  const scales = {};
+  for (const panel of FONT_PANELS) {
+    const scale = value?.[panel];
+    scales[panel] = FONT_SCALES.includes(scale) ? scale : DEFAULT_FONT_SCALE;
+  }
+  return scales;
+}
+
+/** Размер шрифта каждой колонки читалки — из `settings.font_scales`. */
+export async function getFontScales() {
+  const settings = await getSettings();
+  return normalizeFontScales(settings[FONT_SCALES_KEY]);
+}
+
+/**
+ * Запомнить размер одной колонки: остальные берут то, что уже лежит в хранилище, а не то, что
+ * было в памяти этой страницы, — две открытые читалки не затирают выбор друг друга.
+ */
+export async function setFontScale(panel, scale) {
+  if (!FONT_PANELS.includes(panel)) return null;
+
+  const scales = normalizeFontScales((await getSettings())[FONT_SCALES_KEY]);
+  scales[panel] = FONT_SCALES.includes(scale) ? scale : DEFAULT_FONT_SCALE;
+  await updateSettings({ [FONT_SCALES_KEY]: scales });
+  return scales;
 }
 
 /**

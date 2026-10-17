@@ -2,6 +2,7 @@
 
 import { sanitizePreview } from './lib/extract.js';
 import { describeError } from './lib/errors.js';
+import { loadFontScales, mountFontScales, wireFontScaleChanges } from './lib/fontsize.js';
 import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import { mountNav } from './lib/nav.js';
@@ -346,6 +347,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // The same screen switcher every screen has: it fills the header `<nav>` and jumps within this tab,
 // so the reader icon on a settings screen brings the reader back to the same place.
 mountNav();
+// The per-column size switchers, one in the head of each panel; their labels follow the same
+// `data-i18n-*` rule as the switcher's, so a language change re-pastes them too.
+mountFontScales();
+wireFontScaleChanges();
 els.refresh.addEventListener('click', () => void refreshSelectedFeed());
 els.clearAll.addEventListener('click', () => void clearAllHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
@@ -355,6 +360,10 @@ async function init() {
   // The stored language wins; on first run there is none and the browser language is used.
   adoptLanguage(await store.getLanguage());
   applyI18n();
+
+  // The sizes the columns had when the reader was last closed; `font-boot.js` has already painted
+  // them from its cache, so this only confirms them against storage.
+  await loadFontScales();
 
   restoreSelection();
   // Expired headlines should not linger in an open reader.

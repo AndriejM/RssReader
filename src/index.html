@@ -91,6 +91,8 @@
     <section class="panel panel-feeds" data-i18n-aria="reader.feeds.panelAria">
       <div class="panel-head">
         <h2 data-i18n="reader.feeds.title"></h2>
+        <!-- The size switcher `lib/fontsize.js` builds: it scales this column only. -->
+        <div class="font-scale" data-font-scale="feeds"></div>
         <button id="btn-refresh" class="icon-btn" type="button" data-i18n-title="reader.refresh.tooltip" data-i18n-aria="reader.refresh.aria">
           <svg class="icon" aria-hidden="true"><use href="#icon-refresh"></use></svg>
         </button>
@@ -105,6 +107,7 @@
       <div class="panel-head">
         <h2 id="headlines-title" data-i18n="reader.headlines.title"></h2>
         <span class="muted" id="headlines-count"></span>
+        <div class="font-scale" data-font-scale="headlines"></div>
       </div>
       <div class="panel-scroll">
         <ul class="list" id="headline-list"></ul>
@@ -118,11 +121,19 @@
         <button id="content-delete" class="icon-btn danger" type="button" data-i18n-title="reader.content.delete.tooltip" data-i18n-aria="reader.content.delete.aria" hidden>
           <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
         </button>
+        <div class="font-scale" data-font-scale="content"></div>
       </div>
       <article class="content-body" id="content-body">
         <p class="empty" data-i18n="reader.content.empty"></p>
       </article>
     </section>
   </main>
+
+  <!--
+    Read last in the markup on purpose: it paints every column at its remembered size from the
+    localStorage cache, and the panels it looks for have to exist already. It runs before the page
+    module, so a column never shows its text at the wrong size first.
+  -->
+  <script src="font-boot.js"></script>
 </body>
 </html>

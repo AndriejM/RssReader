@@ -87,6 +87,14 @@ const DICTIONARIES = {
     'reader.refresh.noFeed': 'Сначала выберите ленту.',
     'reader.refresh.failed': 'Не удалось обновить ленту: {error}',
 
+    // Переключатель размера шрифта колонки: метка группы и четыре шага — здесь же tooltip и
+    // aria-label каждого шага.
+    'reader.fontScale.aria': 'Размер шрифта этой колонки',
+    'reader.fontScale.small': 'Мелкий шрифт',
+    'reader.fontScale.normal': 'Обычный шрифт',
+    'reader.fontScale.large': 'Крупный шрифт',
+    'reader.fontScale.xlarge': 'Очень крупный шрифт',
+
     'feeds.title': 'Настройки RSS лент',
     'feeds.add': 'Добавить ленту',
     'feeds.empty': 'Лент нет. Нажмите «Добавить ленту».',
@@ -231,6 +239,14 @@ const DICTIONARIES = {
     'reader.refresh.noFeed': 'Select a feed first.',
     'reader.refresh.failed': 'Failed to refresh the feed: {error}',
 
+    // The per-column font size switcher: the name of the group and its four steps — each step is
+    // both the tooltip and the accessible name there.
+    'reader.fontScale.aria': 'Font size in this column',
+    'reader.fontScale.small': 'Small font',
+    'reader.fontScale.normal': 'Normal font',
+    'reader.fontScale.large': 'Large font',
+    'reader.fontScale.xlarge': 'Extra-large font',
+
     'feeds.title': 'RSS feed settings',
     'feeds.add': 'Add feed',
     'feeds.empty': 'No feeds yet. Press “Add feed”.',
@@ -373,6 +389,12 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Опис обрізано через обмеження довжини.',
     'reader.refresh.noFeed': 'Спочатку оберіть стрічку.',
     'reader.refresh.failed': 'Не вдалося оновити стрічку: {error}',
+
+    'reader.fontScale.aria': 'Розмір шрифту в цій колонці',
+    'reader.fontScale.small': 'Малий шрифт',
+    'reader.fontScale.normal': 'Звичайний шрифт',
+    'reader.fontScale.large': 'Великий шрифт',
+    'reader.fontScale.xlarge': 'Дуже великий шрифт',
 
     'feeds.title': 'Налаштування RSS-стрічок',
     'feeds.add': 'Додати стрічку',
@@ -518,6 +540,12 @@ const DICTIONARIES = {
     'reader.refresh.noFeed': 'Najpierw wybierz kanał.',
     'reader.refresh.failed': 'Nie udało się odświeżyć kanału: {error}',
 
+    'reader.fontScale.aria': 'Rozmiar czcionki w tej kolumnie',
+    'reader.fontScale.small': 'Mała czcionka',
+    'reader.fontScale.normal': 'Normalna czcionka',
+    'reader.fontScale.large': 'Duża czcionka',
+    'reader.fontScale.xlarge': 'Bardzo duża czcionka',
+
     'feeds.title': 'Ustawienia kanałów RSS',
     'feeds.add': 'Dodaj kanał',
     'feeds.empty': 'Brak kanałów. Naciśnij „Dodaj kanał”.',
@@ -661,6 +689,12 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Beschreibung wegen der Längenbegrenzung gekürzt.',
     'reader.refresh.noFeed': 'Zuerst einen Feed auswählen.',
     'reader.refresh.failed': 'Feed konnte nicht aktualisiert werden: {error}',
+
+    'reader.fontScale.aria': 'Schriftgröße in dieser Spalte',
+    'reader.fontScale.small': 'Kleine Schrift',
+    'reader.fontScale.normal': 'Normale Schrift',
+    'reader.fontScale.large': 'Große Schrift',
+    'reader.fontScale.xlarge': 'Sehr große Schrift',
 
     'feeds.title': 'Einstellungen der RSS-Feeds',
     'feeds.add': 'Feed hinzufügen',
@@ -806,6 +840,12 @@ const DICTIONARIES = {
     'reader.refresh.noFeed': 'Sélectionnez d’abord un flux.',
     'reader.refresh.failed': 'Échec de l’actualisation du flux : {error}',
 
+    'reader.fontScale.aria': 'Taille de la police dans cette colonne',
+    'reader.fontScale.small': 'Petite police',
+    'reader.fontScale.normal': 'Police normale',
+    'reader.fontScale.large': 'Grande police',
+    'reader.fontScale.xlarge': 'Très grande police',
+
     'feeds.title': 'Réglages des flux RSS',
     'feeds.add': 'Ajouter un flux',
     'feeds.empty': 'Aucun flux. Cliquez sur « Ajouter un flux ».',
@@ -949,6 +989,12 @@ const DICTIONARIES = {
     'reader.content.truncated': 'Descripción recortada por el límite de longitud.',
     'reader.refresh.noFeed': 'Primero seleccione una fuente.',
     'reader.refresh.failed': 'No se pudo actualizar la fuente: {error}',
+
+    'reader.fontScale.aria': 'Tamaño de la letra en esta columna',
+    'reader.fontScale.small': 'Letra pequeña',
+    'reader.fontScale.normal': 'Letra normal',
+    'reader.fontScale.large': 'Letra grande',
+    'reader.fontScale.xlarge': 'Letra muy grande',
 
     'feeds.title': 'Ajustes de las fuentes RSS',
     'feeds.add': 'Añadir fuente',
