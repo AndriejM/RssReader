@@ -266,8 +266,9 @@ src/styles/                   theme.css (CSS-переменные тем), reade
 scripts/test.mjs              unit-тесты чистых функций: node scripts/test.mjs
 scripts/make_icons.mjs        перегенерировать пиктограммы без зависимостей
 scripts/check_icons.mjs       проверить результат make_icons.mjs
-example_rss.xml               образец ленты; ни код читалки, ни тесты к нему не обращаются
-nnm_example_rss_item.xml      образец ленты в Windows-1251: на нём держатся тесты расшифровки
+examples/                     example_rss.xml — образец ленты; ни код читалки, ни тесты к нему
+                              не обращаются; nnm_example_rss_item.xml — образец ленты в
+                              Windows-1251: на нём держатся тесты расшифровки
 ```
 
 ## Как выполнены требования

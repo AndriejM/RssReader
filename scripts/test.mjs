@@ -396,7 +396,7 @@ test('capRead keeps the newest read markers', () => {
 
 /** Bytes of the sample feed the reader actually fails on: RSS served as Windows-1251. */
 const CP1251_FEED = new Uint8Array(
-  fs.readFileSync(new URL('../nnm_example_rss_item.xml', import.meta.url)),
+  fs.readFileSync(new URL('../examples/nnm_example_rss_item.xml', import.meta.url)),
 );
 const CYRILLIC_HEADLINE = 'Коллекция короткометражных мультфильмов (1984-2011) BDRip, HDTVRip [Platinum]';
 

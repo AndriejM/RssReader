@@ -267,8 +267,9 @@ src/styles/                   theme.css (theme CSS variables), reader.css, feeds
 scripts/test.mjs              unit tests of the pure functions: node scripts/test.mjs
 scripts/make_icons.mjs        regenerate the icons without dependencies
 scripts/check_icons.mjs       verify the result of make_icons.mjs
-example_rss.xml               a sample feed; neither the reader code nor the tests reference it
-nnm_example_rss_item.xml      a sample feed in Windows-1251: the decoding tests rely on it
+examples/                     example_rss.xml — a sample feed; neither the reader code nor the
+                              tests reference it; nnm_example_rss_item.xml — a sample feed in
+                              Windows-1251: the decoding tests rely on it
 ```
 
 ## How the requirements are met
