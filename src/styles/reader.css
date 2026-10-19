@@ -216,6 +216,28 @@
   color: rgba(255, 255, 255, 0.78);
 }
 
+/*
+  The first row of the left column is not a feed but all of them together, so it is drawn apart from
+  the feeds under it: its title carries the accent, a rule closes it off from the list, and the row
+  keeps more room than a feed row does. Selected, it fills like any other row.
+*/
+.list-all-feeds {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.list-all-feeds > button {
+  padding: 10px;
+}
+
+.list-all-feeds > button .item-title {
+  font-weight: 600;
+}
+
+.list-all-feeds:not(.selected) > button .item-title {
+  color: var(--accent);
+}
+
 .item-title {
   display: block;
   font-weight: 500;

@@ -79,8 +79,8 @@ is built by `src/lib/nav.js`: a screen only says which screen it is (`data-nav-a
    The feed is re-read once right away, so headlines appear immediately without waiting for the
    first alarm to fire.
 3. Open the reader (click the toolbar icon or the reader icon in the top-right corner) → the
-   first feed and its freshest headline are already selected, the article text is in the right
-   panel; afterwards, clicking a feed on
+   “All feeds” row and the freshest headline of all the feeds are already selected, the article
+   text is in the right panel; afterwards, clicking a feed on
    the left or a headline in the middle panel switches the panels.
 4. From then on the feed is polled automatically every `delay_timeout` minutes; new headlines
    are marked with a badge on the icon and a short sound.
@@ -124,17 +124,23 @@ one) and the theme toggle.
 
 Three vertical panels:
 
-1. **Feeds** — a list of feeds with their headline counts and update periods. The refresh icon
-   at the top of the panel re-reads the selected feed once (no sound at that moment), and spins
-   while loading. Clicking a feed puts the middle panel on its first (freshest) headline, and its
-   text opens in the right panel right away.
+1. **Feeds** — a list of feeds with their headline counts and update periods. Above the list
+   stands a separate “All feeds” row: it is not a feed, so it is set in the accent colour, is
+   larger than a feed row, is closed off from the list by a rule, and its label counts the
+   headlines of every feed instead of naming one feed's refresh period. The refresh icon at the
+   top of the panel re-reads the selected feed once — “All feeds” makes it read every feed at once
+   (no sound at that moment) — and spins while loading. Clicking a feed puts the middle panel on
+   its first (freshest) headline, and its text opens in the right panel right away; clicking “All
+   feeds” puts it on the freshest headline there is, whichever feed it came from.
 2. **Headlines** — headlines of the selected feed from storage, freshest on top, with a
-   “loaded N min ago” label and a storage time counted down from `clean_timeout`.
+   “loaded N min ago” label and a storage time counted down from `clean_timeout`. When “All feeds”
+   is selected, the headlines of all the feeds stand here, also freshest on top, and each one is
+   labelled with the name of the feed it came from.
 3. **Content** — the article text loaded at the moment of the click. The article headline in the
    right panel is itself a link to the original (new tab); in the corner above the text there is
    a delete icon: it removes the headline from the list and from storage, immediately opens the
-   next headline of the same feed, and remembers the deleted one as read — on the next feed load
-   it will no longer appear.
+   next headline of the same feed (or, when “All feeds” is selected, the next headline by date),
+   and remembers the deleted one as read — on the next feed load it will no longer appear.
 
 In the head of every panel there is its own font size switcher: four buttons drawn as the letter “A”,
 each at the size it stands for. A button scales only the column it sits in — the feed list, the
@@ -155,12 +161,12 @@ widths, and a border moved in one tab repaints the other without a reload. In a 
 than 980 px the panels wrap into two rows, and only the border between the two lists stays a
 handle.
 
-When the reader opens, no cursor is left empty: the first feed in the list is selected, the
-middle panel has its first (freshest) headline, and its text is shown in the right panel right
-away. A click on any feed of the left column behaves the same way — the middle panel always moves
-to the first headline of the feed you picked. There is exactly one case of opting out of
-auto-selection: returning from a settings screen in the same tab restores precisely the feed and
-precisely the headline you were on (more on this below).
+When the reader opens, no cursor is left empty: the “All feeds” row is selected, the middle panel
+has the freshest headline of all the feeds, and its text is shown in the right panel right away. A
+click on any feed of the left column behaves the same way — the middle panel always moves to the
+first headline of whatever is selected, one feed or all of them. There is exactly one case of
+opting out of auto-selection: returning from a settings screen in the same tab restores precisely
+the feed and precisely the headline you were on (more on this below).
 
 At the top of the reader there is a counter: the total number of headlines of all feeds in
 storage. Next to it an RSS-icon button (“Refresh all”) — one click reads every feed of the list,
@@ -503,11 +509,11 @@ background.
   lie in `sessionStorage`, which lives as long as the tab does. This is the only reason for the
   `tabs` permission.
 - **Cursor when the reader opens**: a fresh reader tab is not opened with empty panels — `init()`
-  selects the first feed in the list and its first (freshest) headline, which is immediately
-  shown in the right panel. If the tab returned from a settings screen, the choice from
-  `sessionStorage` outweighs auto-selection; but if the saved feed has meanwhile been deleted and
-  its headline has expired by `clean_timeout`, the reader still selects the first feed and its
-  first headline.
+  selects the “All feeds” row of the left column and the freshest headline of every feed it
+  covers, which is immediately shown in the right panel. If the tab returned from a settings
+  screen, the choice from `sessionStorage` outweighs auto-selection; but if the saved feed has
+  meanwhile been deleted and its headline has expired by `clean_timeout`, the reader still selects
+  “All feeds” and its freshest headline.
 - **The interface language is a dictionary, not a page translation**: all labels, tooltips
   (`title`), `aria-label` and messages lie in seven flat dictionaries — `ru`, `en`, `uk`, `pl`,
   `de`, `fr` and `es` — in `src/lib/i18n.js` under shared keys (`reader.*`, `feeds.*`,
@@ -560,9 +566,9 @@ that is checked in the browser after loading the extension.
    one (and its window). Same for a reader open in another window.
 10. In the reader select a feed and a headline → the “Feed settings” icon → the settings open in
     this same tab → the reader icon → the same feed and headline are open again.
-11. Open the reader in a new tab (feeds and headlines already exist) → the first feed is
-    highlighted, in the middle panel the freshest headline of that feed is highlighted, its text
-    is visible right away, without a click.
+11. Open the reader in a new tab (feeds and headlines already exist) → the “All feeds” row is
+    highlighted, in the middle panel the freshest headline of all the feeds is highlighted, its
+    text is visible right away, without a click.
 12. Delete a headline (the trash icon above the text) and wait for this feed's next load → the
     deleted news item does not reappear. On the settings screen, “Load now” on the same feed
     shows the status `already read: N`.
@@ -611,6 +617,10 @@ that is checked in the browser after loading the extension.
     many feeds failed.
 22. Click another feed in the left column → the middle panel stands on that feed's first (freshest)
     headline and its text is already open in the right panel; no second click is needed.
+23. Click the “All feeds” row → the middle panel holds the headlines of every feed, freshest on
+    top, each labelled with the name of its own feed; the cursor moves to the freshest of them.
+    With “All feeds” selected, press the refresh icon at the top of the feeds panel → every feed is
+    re-read, as the “Refresh all” button in the header does.
 
 ## Limitations
 

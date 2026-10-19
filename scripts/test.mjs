@@ -919,6 +919,65 @@ test('the header reads every feed and a picked feed opens on its first headline'
   assert.ok(select.includes('openItem(first)'), 'the middle column is left with a placeholder');
 });
 
+/**
+ * The first row of the left column is not a feed but all of them at once: it has a name of its own,
+ * a look of its own, the whole stored list behind it, and it is where the reader opens. `index.js` is
+ * the only place the row is built, so its sentinel, the list it selects and the CSS that sets it
+ * apart are kept in step here.
+ */
+test('the left column leads with all feeds, whose headlines are the whole stored list', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const page = read('src/index.js');
+  const css = read('src/styles/reader.css');
+
+  const sentinel = page.match(/const ALL_FEEDS_ID = '([^']+)';/);
+  assert.ok(sentinel, 'the reader names no selection that stands for every feed');
+  const allId = sentinel[1];
+  /* A stored feed id is a UUID, or `id-<base36>-<base36>` when the generator is missing
+   * (`lib/util.js` -> `newId`): a sentinel built that way could be mistaken for a real feed. */
+  assert.ok(
+    !/^[0-9a-z-]+$/i.test(allId),
+    `the sentinel ${allId} is a name a generated feed id could also carry`,
+  );
+
+  const row = page.slice(page.indexOf('function renderAllFeedsRow'), page.indexOf('function renderFeeds'));
+  assert.ok(row.length > 0, 'the left column builds no row above its feeds');
+  assert.ok(row.includes("t('reader.feeds.all')"), 'that row is drawn without a caption');
+  assert.ok(row.includes('selectFeed(ALL_FEEDS_ID)'), 'a click on that row selects nothing');
+
+  const list = page.slice(page.indexOf('function renderFeeds'), page.indexOf('function renderHeadlines'));
+  assert.ok(
+    list.includes('renderAllFeedsRow()') &&
+      list.indexOf('renderAllFeedsRow()') < list.indexOf('for (const feed of state.feeds)'),
+    'the row is drawn among the feeds instead of over them',
+  );
+
+  /* The middle column follows the selection: the all-selection is the stored list itself, which
+   * `renderAll()` has already put newest first. */
+  const picked = page.slice(page.indexOf('function inSelection'), page.indexOf('function renderTotal'));
+  assert.ok(picked.includes('isAllFeeds()'), 'the all-selection picks no headlines of every feed');
+  assert.ok(picked.includes('state.items.filter(inSelection)'), 'the all-selection is not the sorted storage');
+
+  const init = page.slice(page.indexOf('async function init'));
+  assert.ok(init.includes('selectFeed(ALL_FEEDS_ID)'), 'the reader does not open on the all-feeds row');
+  assert.ok(!init.includes('selectFeed(state.feeds[0].id)'), 'the reader still opens on its first feed');
+
+  assert.ok(css.includes('.list-all-feeds'), 'the row is drawn exactly like a feed row');
+
+  const captions = [
+    'reader.feeds.all',
+    'reader.feeds.allMeta',
+    'reader.headlines.emptyAllFeeds',
+    'reader.placeholder.deletedLastAll',
+  ];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the all-feeds row asks to show`);
+    }
+  }
+});
+
 test('t() follows the adopted language and fills placeholders', () => {
   i18n.adoptLanguage('en');
   assert.equal(i18n.t('settings.save'), 'Save');

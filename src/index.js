@@ -42,6 +42,13 @@ const state = {
 };
 
 /*
+ * The first row of the left column is not a feed: it stands for all of them at once, and the middle
+ * column then holds the headlines of every feed, newest first. A stored feed id is a UUID
+ * (`lib/util.js` -> `newId`), so this sentinel cannot be mistaken for one of them.
+ */
+const ALL_FEEDS_ID = '__all__';
+
+/*
  * The settings screen opens in this same tab, so coming back to the reader has to land on the
  * same feed and headline. `sessionStorage` lives exactly as long as the tab does: a reader tab
  * opened elsewhere still starts with nothing selected.
@@ -62,6 +69,10 @@ function restoreSelection() {
   }
 }
 
+function isAllFeeds() {
+  return state.feedId === ALL_FEEDS_ID;
+}
+
 function selectedFeed() {
   return state.feeds.find((feed) => feed.id === state.feedId) ?? null;
 }
@@ -70,19 +81,55 @@ function countForFeed(feedId) {
   return state.items.filter((item) => item.feedId === feedId).length;
 }
 
-/** Заголовки выбранной ленты — в том же порядке, что в средней панели (свежие сверху). */
+/** Whether a headline belongs to what the left column has selected now: one feed, or all of them. */
+function inSelection(item) {
+  return isAllFeeds() || item.feedId === state.feedId;
+}
+
+/**
+ * Заголовки выбранного пункта левой колонки — в том же порядке, что в средней панели (свежие
+ * сверху). «Все ленты» — это `state.items`, которые `renderAll()` уже отсортировал по дате.
+ */
 function itemsOfSelectedFeed() {
   if (!state.feedId) return [];
-  return state.items.filter((item) => item.feedId === state.feedId);
+  return state.items.filter(inSelection);
 }
 
 function renderTotal() {
   els.totalCount.textContent = String(state.items.length);
 }
 
+/**
+ * The row above the feeds: it is not one of them, so it is drawn apart (see `reader.css`) and its
+ * meta line counts the headlines of every feed instead of naming one feed's refresh interval.
+ */
+function renderAllFeedsRow() {
+  const li = document.createElement('li');
+  li.className = `list-item list-all-feeds${state.feedId === ALL_FEEDS_ID ? ' selected' : ''}`;
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.innerHTML =
+    '<span class="item-title"></span>' +
+    '<span class="item-meta muted"></span>';
+  button.querySelector('.item-title').textContent = t('reader.feeds.all');
+  // Its meta line counts the headlines of every feed; the feeds themselves are named in the middle
+  // column, where each headline carries the feed it came from.
+  button.querySelector('.item-meta').textContent = t('reader.feeds.allMeta', {
+    count: state.items.length,
+  });
+
+  button.addEventListener('click', () => selectFeed(ALL_FEEDS_ID));
+  li.append(button);
+  els.feedList.append(li);
+}
+
 function renderFeeds() {
   els.feedList.replaceChildren();
   els.feedsEmpty.hidden = state.feeds.length > 0;
+
+  // With no feeds there is nothing to gather, so only the hint of the empty column is left.
+  if (state.feeds.length > 0) renderAllFeedsRow();
 
   for (const feed of state.feeds) {
     const li = document.createElement('li');
@@ -108,15 +155,20 @@ function renderFeeds() {
 function renderHeadlines() {
   els.headlineList.replaceChildren();
 
-  const feed = selectedFeed();
-  els.headlinesTitle.textContent = feed?.name ?? t('reader.headlines.title');
+  const all = isAllFeeds();
+  const feed = all ? null : selectedFeed();
+  els.headlinesTitle.textContent = all
+    ? t('reader.feeds.all')
+    : feed?.name ?? t('reader.headlines.title');
 
-  const items = feed ? state.items.filter((item) => item.feedId === feed.id) : [];
+  const items = itemsOfSelectedFeed();
   els.headlinesCount.textContent = items.length ? `${items.length}` : '';
   els.headlinesEmpty.hidden = items.length > 0;
-  els.headlinesEmpty.textContent = feed
-    ? t('reader.headlines.emptyForFeed')
-    : t('reader.headlines.emptyNoFeed');
+  els.headlinesEmpty.textContent = all
+    ? t('reader.headlines.emptyAllFeeds')
+    : feed
+      ? t('reader.headlines.emptyForFeed')
+      : t('reader.headlines.emptyNoFeed');
 
   for (const item of items) {
     const li = document.createElement('li');
@@ -129,9 +181,15 @@ function renderHeadlines() {
       '<span class="item-meta muted"></span>';
     // A headline the feed gave no title is labelled here, in the reader's language.
     button.querySelector('.item-title').textContent = item.title || t('common.untitled');
+    // In «Все ленты» the meta line names the feed the headline came from; a single feed's list
+    // needs no such tag.
     const when = itemTime(item);
-    button.querySelector('.item-meta').textContent =
-      when ? t('reader.published', { since: formatSince(when, Date.now(), unitLabels()) }) : '';
+    button.querySelector('.item-meta').textContent = [
+      all ? item.feedName || item.rss_link : '',
+      when ? t('reader.published', { since: formatSince(when, Date.now(), unitLabels()) }) : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
     button.title = item.link;
 
     button.addEventListener('click', () => openItem(item));
@@ -140,6 +198,10 @@ function renderHeadlines() {
   }
 }
 
+/**
+ * Move the left column's cursor — to a feed or to «Все ленты» — and put the middle column on the
+ * first headline of whatever that selection now covers.
+ */
 function selectFeed(feedId) {
   state.feedId = feedId;
   // Switching feeds drops whatever headline was open.
@@ -232,11 +294,12 @@ function note(text, kind = '') {
   return p;
 }
 
-/** Deleting a headline hands the reader over to the next headline of the same feed. */
+/** Deleting a headline hands the reader over to the next headline of the same selection. */
 async function deleteItem() {
   if (!state.uid) return;
 
   const feedId = state.feedId;
+  const all = isAllFeeds();
   const position = itemsOfSelectedFeed().findIndex((item) => item.uid === state.uid);
 
   const uid = state.uid;
@@ -245,9 +308,11 @@ async function deleteItem() {
   saveSelection();
   await renderAll();
 
-  const remaining = state.items.filter((item) => item.feedId === feedId);
+  // «Все ленты» keeps the whole list: the next headline is the one that stood below the removed
+  // one, whatever feed it belongs to.
+  const remaining = state.items.filter((item) => all || item.feedId === feedId);
   if (remaining.length === 0) {
-    showPlaceholder(t('reader.placeholder.deletedLast'));
+    showPlaceholder(all ? t('reader.placeholder.deletedLastAll') : t('reader.placeholder.deletedLast'));
     return;
   }
 
@@ -275,6 +340,20 @@ async function clearAllHeadlines() {
 }
 
 async function refreshSelectedFeed() {
+  // «Все ленты» is a selection too: reading it means reading every feed, as the header button does.
+  // This button is held disabled while that read runs, so it cannot start a second one.
+  if (isAllFeeds()) {
+    els.refresh.disabled = true;
+    els.refresh.classList.add('busy');
+    try {
+      await refreshAllFeeds();
+    } finally {
+      els.refresh.disabled = false;
+      els.refresh.classList.remove('busy');
+    }
+    return;
+  }
+
   const feed = selectedFeed();
   if (!feed) {
     showPlaceholder(t('reader.refresh.noFeed'));
@@ -333,12 +412,15 @@ async function renderAll() {
   state.feeds = await store.getFeeds();
   state.items = store.sortItems(await store.getItems());
 
-  // The selected feed may have been deleted on the settings screen.
-  if (!state.feeds.some((feed) => feed.id === state.feedId)) state.feedId = null;
+  // The selected feed may have been deleted on the settings screen; «Все ленты» is no feed, so it
+  // is not looked for in the list.
+  if (state.feedId !== ALL_FEEDS_ID && !state.feeds.some((feed) => feed.id === state.feedId)) {
+    state.feedId = null;
+  }
 
   // The open headline may have expired (clean_timeout) or been deleted elsewhere.
   let message = null;
-  if (state.uid && !state.items.some((item) => item.uid === state.uid)) {
+  if (state.uid && !state.items.some((item) => item.uid === state.uid && inSelection(item))) {
     state.uid = null;
     message = t('reader.placeholder.expired');
   }
@@ -360,9 +442,7 @@ function redraw() {
   renderHeadlines();
 
   const item = state.uid
-    ? state.items.find(
-        (candidate) => candidate.uid === state.uid && candidate.feedId === state.feedId,
-      )
+    ? state.items.find((candidate) => candidate.uid === state.uid && inSelection(candidate))
     : null;
   if (item) openItem(item);
 }
@@ -425,19 +505,17 @@ async function init() {
   const lostHeadline = await renderAll();
 
   // renderAll() has already dropped a feed or a headline that no longer exists. With nothing
-  // left selected the cursor goes to the top: the first feed in the list and, through
-  // selectFeed(), that feed's first headline.
-  if (!selectedFeed() && state.feeds.length > 0) {
-    selectFeed(state.feeds[0].id);
+  // left selected the cursor goes to the top of the left column: «Все ленты», taken through
+  // selectFeed() to the newest headline of all of them.
+  if (!isAllFeeds() && !selectedFeed() && state.feeds.length > 0) {
+    selectFeed(ALL_FEEDS_ID);
     return;
   }
 
   // A headline that survived the cleanup keeps its place; otherwise the top of the list opens.
   const item =
     (state.uid
-      ? state.items.find(
-          (candidate) => candidate.uid === state.uid && candidate.feedId === state.feedId,
-        )
+      ? state.items.find((candidate) => candidate.uid === state.uid && inSelection(candidate))
       : null) ??
     itemsOfSelectedFeed()[0] ??
     null;
@@ -445,7 +523,7 @@ async function init() {
   if (item) {
     openItem(item);
   } else if (state.feedId && !lostHeadline) {
-    // Nothing to open at all: the feed is selected, its panel says so.
+    // Nothing to open at all: the selection stands, its panel says so.
     showPlaceholder(t('reader.placeholder.inMiddle'));
   }
 }
