@@ -135,6 +135,18 @@
                     <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
                   </svg>
                 </button>
+                <div class="volume">
+                  <input
+                    id="sound-volume"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    data-i18n-title="settings.soundVolume"
+                    data-i18n-aria="settings.soundVolume"
+                  />
+                  <output id="sound-volume-value" class="muted" for="sound-volume"></output>
+                </div>
               </div>
             </td>
           </tr>

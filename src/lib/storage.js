@@ -6,6 +6,7 @@
 import {
   DEFAULT_CLEAN_TIMEOUT,
   DEFAULT_DELAY_TIMEOUT,
+  DEFAULT_SOUND_VOLUME,
   MAX_ITEMS_PER_FEED,
   MAX_READ_RECORDS,
   READ_TTL_DAYS,
@@ -16,6 +17,7 @@ import {
   normalizeUid,
   readTime,
   toDays,
+  toVolume,
 } from './util.js';
 import {
   FALLBACK_LANGUAGE,
@@ -32,6 +34,7 @@ export const THEME_KEY = 'theme';
 export const READ_TTL_KEY = 'read_ttl_days';
 export const SOUND_KEY = 'sound';
 export const SOUND_FILE_KEY = 'sound_file';
+export const SOUND_VOLUME_KEY = 'sound_volume';
 export const LANGUAGE_KEY = 'language';
 export const FONT_SCALES_KEY = 'font_scales';
 export const COLUMN_WIDTHS_KEY = 'column_widths';
@@ -494,6 +497,21 @@ export async function getSoundChoice() {
 export async function setSoundChoice(choice) {
   const next = normalizeSoundChoice(choice);
   await updateSettings({ [SOUND_FILE_KEY]: next, [SOUND_KEY]: next !== SOUND_NONE });
+  return next;
+}
+
+/**
+ * Громкость сигнала в процентах (0–100), выбранная на экране глобальных настроек: её делят на
+ * 100 и отдают `HTMLAudioElement.volume` и в превью, и в offscreen-сигнале автозагрузки.
+ */
+export async function getSoundVolume() {
+  const settings = await getSettings();
+  return toVolume(settings[SOUND_VOLUME_KEY], DEFAULT_SOUND_VOLUME);
+}
+
+export async function setSoundVolume(volume) {
+  const next = toVolume(volume, DEFAULT_SOUND_VOLUME);
+  await updateSettings({ [SOUND_VOLUME_KEY]: next });
   return next;
 }
 

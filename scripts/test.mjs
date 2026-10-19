@@ -17,10 +17,13 @@ import * as util from '../src/lib/util.js';
 const {
   DEFAULT_CLEAN_TIMEOUT,
   DEFAULT_DELAY_TIMEOUT,
+  DEFAULT_SOUND_VOLUME,
   MAX_ITEMS_PER_FEED,
   MAX_READ_RECORDS,
   MAX_READ_TTL_DAYS,
+  MAX_SOUND_VOLUME,
   MIN_READ_TTL_DAYS,
+  MIN_SOUND_VOLUME,
   READ_TTL_DAYS,
   alarmPeriodMinutes,
   badgeText,
@@ -36,6 +39,7 @@ const {
   normalizeUid,
   toDays,
   toMinutes,
+  toVolume,
 } = util;
 
 const MINUTE = 60_000;
@@ -73,6 +77,21 @@ test('toDays rounds, clamps and falls back like the read horizon it feeds', () =
   assert.equal(toDays('', 30), MIN_READ_TTL_DAYS, 'an empty field is 0, so it clamps too');
   assert.equal(toDays(undefined), READ_TTL_DAYS, 'missing setting keeps the default horizon');
   assert.equal(toDays('bogus', 30), 30);
+});
+
+test('toVolume rounds, clamps and falls back like the signal volume it feeds', () => {
+  assert.equal(toVolume(70), 70);
+  assert.equal(toVolume('45', 30), 45);
+  assert.equal(toVolume(62.6, 30), 63);
+  assert.equal(toVolume(-5, 30), MIN_SOUND_VOLUME, 'silent is allowed, below it is not');
+  assert.equal(toVolume(140, 30), MAX_SOUND_VOLUME, 'clamped to the ceiling');
+  assert.equal(toVolume('', 30), MIN_SOUND_VOLUME, 'an empty field is 0, so it clamps there');
+  assert.equal(
+    toVolume(undefined),
+    DEFAULT_SOUND_VOLUME,
+    'a build with no volume setting keeps the old full-volume sound',
+  );
+  assert.equal(toVolume('bogus', 30), 30);
 });
 
 test('alarmPeriodMinutes never asks Chrome for less than a minute', () => {

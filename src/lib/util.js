@@ -31,6 +31,14 @@ export const MAX_READ_TTL_DAYS = 3650;
 export const MAX_READ_RECORDS = 1000;
 
 /**
+ * Volume of the alert signal, in percent: the slider on the global settings screen. 100 is the
+ * default, which keeps the sound of the builds that had no volume control at all.
+ */
+export const DEFAULT_SOUND_VOLUME = 100;
+export const MIN_SOUND_VOLUME = 0;
+export const MAX_SOUND_VOLUME = 100;
+
+/**
  * Normalize a timeout value coming from the UI (always minutes).
  */
 export function toMinutes(value, fallback, { min = 1, max = 60 * 24 * 365 } = {}) {
@@ -46,6 +54,15 @@ export function toDays(value, fallback = READ_TTL_DAYS) {
   const n = Math.round(Number(value));
   if (!Number.isFinite(n)) return fallback;
   return Math.min(MAX_READ_TTL_DAYS, Math.max(MIN_READ_TTL_DAYS, n));
+}
+
+/**
+ * Normalize the signal volume coming from the settings screen slider (always percent).
+ */
+export function toVolume(value, fallback = DEFAULT_SOUND_VOLUME) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(MAX_SOUND_VOLUME, Math.max(MIN_SOUND_VOLUME, n));
 }
 
 export function alarmPeriodMinutes(delayTimeout) {

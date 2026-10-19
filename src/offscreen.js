@@ -29,10 +29,15 @@ function getAlertAudio(src) {
 
 /**
  * Сигнал «автоматическая загрузка принесла заголовки» — играем файл, а не синтезированный тон.
+ * `volume` — доля громкости (0–1), выбранная на экране глобальных настроек; она применяется к
+ * переиспользуемому плееру при каждом сигнале, чтобы новая громкость действовала сразу.
  * @returns {Promise<void>}
  */
-async function playSoundFile(src = DEFAULT_SOUND_FILE) {
+async function playSoundFile(src = DEFAULT_SOUND_FILE, volume = 1) {
   const player = getAlertAudio(src);
+
+  const fraction = Number(volume);
+  player.volume = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 1;
 
   // Повторный сигнал обрывает предыдущее проигрывание и стартует с начала файла.
   player.pause();
@@ -46,7 +51,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === MSG_PLAY_SOUND) {
     (async () => {
       try {
-        await playSoundFile(message.src ?? DEFAULT_SOUND_FILE);
+        await playSoundFile(message.src ?? DEFAULT_SOUND_FILE, message.volume ?? 1);
         sendResponse({ ok: true });
       } catch (error) {
         console.warn('could not play the sound:', error?.message ?? error);

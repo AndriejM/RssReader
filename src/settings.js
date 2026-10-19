@@ -11,7 +11,7 @@ import { LANGUAGE_NAMES, adoptLanguage, applyI18n, currentLanguage, t } from './
 import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
 import { wireThemeButton } from './lib/theme.js';
-import { MAX_READ_TTL_DAYS, MIN_READ_TTL_DAYS, READ_TTL_DAYS } from './lib/util.js';
+import { DEFAULT_SOUND_VOLUME, MAX_READ_TTL_DAYS, MIN_READ_TTL_DAYS, READ_TTL_DAYS } from './lib/util.js';
 
 const els = {
   days: document.getElementById('read-ttl-days'),
@@ -24,6 +24,8 @@ const els = {
   sound: document.getElementById('sound-file'),
   soundStats: document.getElementById('sound-stats'),
   playSound: document.getElementById('btn-sound-play'),
+  volume: document.getElementById('sound-volume'),
+  volumeValue: document.getElementById('sound-volume-value'),
 
   language: document.getElementById('language-file'),
 
@@ -38,10 +40,12 @@ const state = {
   ttlDays: READ_TTL_DAYS,
   readCount: 0,
   soundChoice: store.DEFAULT_SOUND_FILE,
+  soundVolume: DEFAULT_SOUND_VOLUME,
   language: currentLanguage(),
   /** A field holds a value the store does not have yet; only «Записать» commits it. */
   ttlPending: false,
   soundPending: false,
+  volumePending: false,
   languagePending: false,
 };
 
@@ -94,6 +98,24 @@ async function renderSound() {
   els.soundStats.textContent = t('settings.soundStats', { name: describeSound(state.soundChoice) });
 }
 
+/** Show the stored volume on the slider and in its readout. */
+async function renderVolume() {
+  state.soundVolume = await store.getSoundVolume();
+  if (!state.volumePending) els.volume.value = String(state.soundVolume);
+
+  updateVolumeReadout();
+}
+
+/** The slider names its own percent right next to itself; no dictionary is needed for a number. */
+function updateVolumeReadout() {
+  els.volumeValue.textContent = `${els.volume.value}%`;
+}
+
+/** The slider value as the fraction `HTMLAudioElement.volume` expects. */
+function volumeFraction() {
+  return Number(els.volume.value) / 100;
+}
+
 /** Show the stored language in the combobox. */
 async function renderLanguage() {
   state.language = await store.getLanguage();
@@ -108,6 +130,7 @@ async function renderLanguage() {
 async function refreshFields() {
   await renderTtl();
   await renderSound();
+  await renderVolume();
   await renderLanguage();
   markPending();
 }
@@ -125,6 +148,10 @@ function soundIsPending() {
   return els.sound.value !== state.soundChoice;
 }
 
+function volumeIsPending() {
+  return Number(els.volume.value) !== state.soundVolume;
+}
+
 function languageIsPending() {
   return els.language.value !== state.language;
 }
@@ -136,8 +163,9 @@ function languageIsPending() {
 function markPending() {
   state.ttlPending = ttlIsPending();
   state.soundPending = soundIsPending();
+  state.volumePending = volumeIsPending();
   state.languagePending = languageIsPending();
-  const dirty = state.ttlPending || state.soundPending || state.languagePending;
+  const dirty = state.ttlPending || state.soundPending || state.volumePending || state.languagePending;
 
   els.save.disabled = !dirty;
   els.save.title = dirty ? t('settings.save.tooltipDirty') : t('settings.save.tooltipClean');
@@ -189,6 +217,13 @@ async function saveFields() {
     els.sound.value = saved;
     parts.push(t('settings.savedSound', { name: describeSound(saved) }));
   }
+  if (Number(els.volume.value) !== state.soundVolume) {
+    const saved = await store.setSoundVolume(Number(els.volume.value));
+    state.soundVolume = saved;
+    els.volume.value = String(saved);
+    updateVolumeReadout();
+    parts.push(t('settings.savedVolume', { volume: saved }));
+  }
   if (els.language.value !== state.language) {
     const saved = await store.setLanguage(els.language.value);
     state.language = saved;
@@ -207,6 +242,7 @@ async function saveFields() {
 
   state.ttlPending = false;
   state.soundPending = false;
+  state.volumePending = false;
   state.languagePending = false;
   markPending();
   setStatus(t('settings.status.saved', { parts: parts.join(' · ') }), 'ok');
@@ -224,7 +260,8 @@ async function saveFields() {
  * value would drop it quietly — ask before doing that.
  */
 function leavePage(url) {
-  const dirty = state.ttlPending || state.soundPending || state.languagePending;
+  const dirty =
+    state.ttlPending || state.soundPending || state.volumePending || state.languagePending;
   if (dirty && !window.confirm(t('settings.confirmLeave'))) {
     return;
   }
@@ -244,6 +281,9 @@ function playPreview() {
   }
 
   const audio = new Audio(chrome.runtime.getURL(choice));
+  // The preview answers to the slider as it stands now — even to a volume not written yet —
+  // so the alert can be adjusted by ear before «Записать».
+  audio.volume = volumeFraction();
   els.playSound.classList.add('playing');
 
   const stop = () => {
@@ -282,6 +322,10 @@ async function clearRead() {
 
 els.days.addEventListener('input', markPending);
 els.sound.addEventListener('change', markPending);
+els.volume.addEventListener('input', () => {
+  updateVolumeReadout();
+  markPending();
+});
 els.language.addEventListener('change', markPending);
 els.playSound.addEventListener('click', playPreview);
 els.save.addEventListener('click', () => void saveFields());

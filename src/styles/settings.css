@@ -136,6 +136,26 @@
   min-height: 16px;
 }
 
+/* The volume belongs to the signal: its slider runs to the right of the play icon, with a fixed
+   width, so the combobox keeps the room it needs. The output names the current percent. */
+.field-value .volume {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.field-value .volume input[type="range"] {
+  width: 110px;
+}
+
+.field-value .volume output {
+  color: var(--text-muted);
+  font-size: 12px;
+  min-width: 38px;
+  text-align: right;
+}
+
 /* The play button takes on the accent while its signal sounds. */
 .icon-btn.playing {
   background: var(--accent-soft);

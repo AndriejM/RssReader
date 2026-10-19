@@ -189,6 +189,7 @@ details” button in
 |---|---|---|---|---|
 | `read_ttl_days` | how many days to forget read items: the period that keeps a deleted news item from coming back from the feed | days | 7 | integer from 1 to 3650 |
 | sound on download | combobox: which mp3 from `src/media` to play when an automatic load brings headlines; the first row “No sound” turns the signal off | — | `ceres.mp3` | only files from `src/media` or “No sound” |
+| signal volume | slider to the right of the preview-play icon: how loudly the signal plays — both the preview on this screen and the alert after an automatic load | percent | 100 | 0 to 100, in steps of 5 |
 | interface language | combobox: which language the labels, tooltips and messages of all screens use (“Русский”, “English”, “Українська”, “Polski”, “Deutsch”, “Français”, “Español”) | — | the browser language; if it is not among the supported ones — `English` | only languages from `src/lib/i18n.js` |
 
 The fields themselves write nothing to storage: the period, the signal and the language go there
@@ -200,11 +201,11 @@ in M days”). Next to the field is the **“Forget read items”** button (with
 press clears the entire `read` list without waiting for `read_ttl_days` to expire, so news items
 you deleted earlier may come back on the next feed load.
 
-All three values live under the `settings` key in `chrome.storage.local` — in the same place as
+All four values live under the `settings` key in `chrome.storage.local` — in the same place as
 the theme. The service worker reads them: the period — when it purges read items, so a horizon
 saved via “Write” immediately wakes up the cleanup and applies to automatic loading;
-`sound_file` — to decide which file plays after that same load (or plays nothing at all if
-“No sound” is selected).
+`sound_file` and `sound_volume` — to decide which file plays after that same load, at which
+volume (or plays nothing at all if “No sound” is selected).
 
 The interface language is taken by the pages: `settings.language`, and if there is no stored
 value (first launch) — the browser language (`navigator.language` and `navigator.languages`),
@@ -227,7 +228,7 @@ src/index.html|js             three-panel reader (feeds → headlines → conten
 src/feeds.html|js             feed configuration screen: add / edit / delete
 src/settings.html|js          global settings screen: lifetime of the read list, its manual
                               cleanup, combobox of the signal file (“No sound” / mp3 from media)
-                              and combobox of the interface language
+                              with its volume slider, and combobox of the interface language
 src/lib/i18n.js              every label, message and tooltip: the `ru`, `en`, `uk`, `pl`,
                               `de`, `fr` and `es` dictionaries, `t(key, params)`,
                               `applyI18n()`, units, browser language
@@ -444,13 +445,18 @@ background.
 - **Sound** — playing the signal selected on the global settings screen: it is played by the
   offscreen document via `<audio>` (`reasons: ["AUDIO_PLAYBACK"]`), because a service worker is
   not allowed a DOM. The file address is passed by the background in a message (`MSG_PLAY_SOUND`
-  with `src`), and the offscreen document resolves it via `chrome.runtime.getURL(src)` — the file
+  with `src` and a volume fraction), and the offscreen document resolves it via
+  `chrome.runtime.getURL(src)` — the file
   lives inside the extension, so neither `web_accessible_resources` nor the network is needed for
   it. There is one player in the offscreen document and it is reused: the file loads once, a
   repeated signal interrupts the previous playback and starts from the beginning. The file is
   chosen on the global settings screen: the combobox (“No sound” / a file from `src/media`)
   writes it to `settings.sound_file`, and `playSound` (`src/lib/sound.js`) reads this choice and
-  does nothing when `SOUND_NONE` (“No sound”) is set. The file list is fixed by the `SOUND_FILES`
+  does nothing when `SOUND_NONE` (“No sound”) is set. The volume slider to the right of the
+  preview button writes its percent to `settings.sound_volume`; `playSound` turns it into a 0–1
+  fraction in the same message and the preview plays the file at the slider value even before
+  “Write”, while the offscreen player applies `player.volume` before every signal — a saved
+  volume takes effect on the very next alert. The file list is fixed by the `SOUND_FILES`
   constant in `src/lib/storage.js` (ariel, carme, ceres, titan, …); an unknown path is normalized
   by storage to `DEFAULT_SOUND_FILE` (`src/media/ceres.mp3`), so the signal only ever plays from
   `src/media`. The `settings.sound` flag (the same key `true`/`false`) remains for compatibility
@@ -559,7 +565,9 @@ that is checked in the browser after loading the extension.
     load.
 16. In the sound combobox choose another mp3 from `src/media` → “Write” → the next automatic
     headline load is accompanied by the chosen signal. Choose the first row “No sound” → “Write”
-    → the load is no longer voiced.
+    → the load is no longer voiced. Drag the volume slider → “Preview” sounds at the chosen
+    volume right away, without “Write”; press “Write” → the automatic signal plays at that volume
+    from its very next alert.
 17. In the “Interface language” combobox choose another language → “Write” → the labels,
     tooltips and messages of this screen change immediately, and the reader and the feed screen
     open in other tabs re-paste without a reload. First launch (no `language` in storage) → the

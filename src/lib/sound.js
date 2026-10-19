@@ -5,7 +5,7 @@
 
 import { MSG_PLAY_SOUND } from './messages.js';
 import { requestOffscreen } from './offscreen.js';
-import { getSoundChoice, SOUND_NONE } from './storage.js';
+import { getSoundChoice, getSoundVolume, SOUND_NONE } from './storage.js';
 
 /** Файл-сигнал: путь от корня расширения, его отдаёт chrome.runtime.getURL. "Без звука" returns SOUND_NONE. */
 
@@ -14,11 +14,11 @@ import { getSoundChoice, SOUND_NONE } from './storage.js';
  * media/ceres.mp3 (offscreen-документ проигрывает его через <audio>).
  */
 export async function playSound() {
-  const src = await getSoundChoice();
+  const [src, volume] = await Promise.all([getSoundChoice(), getSoundVolume()]);
   if (src === SOUND_NONE) return false;
 
   try {
-    await requestOffscreen({ type: MSG_PLAY_SOUND, src });
+    await requestOffscreen({ type: MSG_PLAY_SOUND, src, volume: volume / 100 });
     return true;
   } catch (error) {
     console.warn('sound did not play:', error?.message ?? error);
