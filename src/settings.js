@@ -1,7 +1,8 @@
 // Global settings screen. It holds the horizon for «read» markers — how many days a deleted
-// headline stays out of the list — the mp3 signal played when an automatic fetch brings news and
-// the interface language. None of the fields writes on its own: all of them go to storage only
-// when «Записать» is pressed, next to a button that wipes the whole read list.
+// headline stays out of the list — the mp3 signal played when an automatic fetch brings news
+// (with its on/off flag and volume) and the interface language. None of the fields writes on
+// its own: all of them go to storage only when «Записать» is pressed, next to a button that
+// wipes the whole read list.
 //
 // The values are persisted in the shared settings store (chrome.storage.local), the same place the
 // theme lives: the background worker reads them when it prunes read markers and when it plays the
@@ -22,10 +23,12 @@ const els = {
   status: document.getElementById('read-status'),
 
   sound: document.getElementById('sound-file'),
+  soundEnabled: document.getElementById('sound-enabled'),
   soundStats: document.getElementById('sound-stats'),
   playSound: document.getElementById('btn-sound-play'),
   volume: document.getElementById('sound-volume'),
   volumeValue: document.getElementById('sound-volume-value'),
+  showMessage: document.getElementById('show-message'),
 
   language: document.getElementById('language-file'),
 
@@ -40,12 +43,16 @@ const state = {
   ttlDays: READ_TTL_DAYS,
   readCount: 0,
   soundChoice: store.DEFAULT_SOUND_FILE,
+  soundEnabled: true,
   soundVolume: DEFAULT_SOUND_VOLUME,
+  showMessage: false,
   language: currentLanguage(),
   /** A field holds a value the store does not have yet; only «Записать» commits it. */
   ttlPending: false,
   soundPending: false,
+  soundEnabledPending: false,
   volumePending: false,
+  messagePending: false,
   languagePending: false,
 };
 
@@ -62,7 +69,6 @@ function describeTtl(days) {
 
 /** How the stored sound choice reads to a person. */
 function describeSound(choice) {
-  if (choice === store.SOUND_NONE) return t('settings.soundDescNone');
   return choice.slice('src/media/'.length);
 }
 
@@ -98,6 +104,12 @@ async function renderSound() {
   els.soundStats.textContent = t('settings.soundStats', { name: describeSound(state.soundChoice) });
 }
 
+/** Show the stored sound flag in the checkbox. */
+async function renderSoundEnabled() {
+  state.soundEnabled = await store.getSoundEnabled();
+  if (!state.soundEnabledPending) els.soundEnabled.checked = state.soundEnabled;
+}
+
 /** Show the stored volume on the slider and in its readout. */
 async function renderVolume() {
   state.soundVolume = await store.getSoundVolume();
@@ -116,6 +128,12 @@ function volumeFraction() {
   return Number(els.volume.value) / 100;
 }
 
+/** Show the stored flag in the checkbox. */
+async function renderMessage() {
+  state.showMessage = await store.getShowMessage();
+  if (!state.messagePending) els.showMessage.checked = state.showMessage;
+}
+
 /** Show the stored language in the combobox. */
 async function renderLanguage() {
   state.language = await store.getLanguage();
@@ -130,7 +148,9 @@ async function renderLanguage() {
 async function refreshFields() {
   await renderTtl();
   await renderSound();
+  await renderSoundEnabled();
   await renderVolume();
+  await renderMessage();
   await renderLanguage();
   markPending();
 }
@@ -148,8 +168,16 @@ function soundIsPending() {
   return els.sound.value !== state.soundChoice;
 }
 
+function soundEnabledIsPending() {
+  return els.soundEnabled.checked !== state.soundEnabled;
+}
+
 function volumeIsPending() {
   return Number(els.volume.value) !== state.soundVolume;
+}
+
+function messageIsPending() {
+  return els.showMessage.checked !== state.showMessage;
 }
 
 function languageIsPending() {
@@ -163,9 +191,17 @@ function languageIsPending() {
 function markPending() {
   state.ttlPending = ttlIsPending();
   state.soundPending = soundIsPending();
+  state.soundEnabledPending = soundEnabledIsPending();
   state.volumePending = volumeIsPending();
+  state.messagePending = messageIsPending();
   state.languagePending = languageIsPending();
-  const dirty = state.ttlPending || state.soundPending || state.volumePending || state.languagePending;
+  const dirty =
+    state.ttlPending ||
+    state.soundPending ||
+    state.soundEnabledPending ||
+    state.volumePending ||
+    state.messagePending ||
+    state.languagePending;
 
   els.save.disabled = !dirty;
   els.save.title = dirty ? t('settings.save.tooltipDirty') : t('settings.save.tooltipClean');
@@ -182,8 +218,8 @@ function markPending() {
 /**
  * A raw days value is either an accepted whole number of days or a rejection we surface inline.
  * Storing clamps to the same bounds the input advertises, so an accepted value round-trips exactly.
- * The signal and the language are written by the same press of «Записать»: only a bundled sound or
- * «Без звука» reach storage, and the worker picks the new file up on its very next alert.
+ * The signal and the language are written by the same press of «Записать»: only a bundled sound
+ * reach storage, and the worker picks the new file up on its very next alert.
  */
 async function saveFields() {
   const parsed = Number(els.days.value);
@@ -217,12 +253,32 @@ async function saveFields() {
     els.sound.value = saved;
     parts.push(t('settings.savedSound', { name: describeSound(saved) }));
   }
+  if (els.soundEnabled.checked !== state.soundEnabled) {
+    const saved = await store.setSoundEnabled(els.soundEnabled.checked);
+    state.soundEnabled = saved;
+    els.soundEnabled.checked = saved;
+    parts.push(
+      t('settings.savedSoundEnabled', {
+        state: saved ? t('settings.savedSoundEnabled.on') : t('settings.savedSoundEnabled.off'),
+      }),
+    );
+  }
   if (Number(els.volume.value) !== state.soundVolume) {
     const saved = await store.setSoundVolume(Number(els.volume.value));
     state.soundVolume = saved;
     els.volume.value = String(saved);
     updateVolumeReadout();
     parts.push(t('settings.savedVolume', { volume: saved }));
+  }
+  if (els.showMessage.checked !== state.showMessage) {
+    const saved = await store.setShowMessage(els.showMessage.checked);
+    state.showMessage = saved;
+    els.showMessage.checked = saved;
+    parts.push(
+      t('settings.savedMessage', {
+        state: saved ? t('settings.savedMessage.on') : t('settings.savedMessage.off'),
+      }),
+    );
   }
   if (els.language.value !== state.language) {
     const saved = await store.setLanguage(els.language.value);
@@ -242,7 +298,9 @@ async function saveFields() {
 
   state.ttlPending = false;
   state.soundPending = false;
+  state.soundEnabledPending = false;
   state.volumePending = false;
+  state.messagePending = false;
   state.languagePending = false;
   markPending();
   setStatus(t('settings.status.saved', { parts: parts.join(' · ') }), 'ok');
@@ -261,7 +319,12 @@ async function saveFields() {
  */
 function leavePage(url) {
   const dirty =
-    state.ttlPending || state.soundPending || state.volumePending || state.languagePending;
+    state.ttlPending ||
+    state.soundPending ||
+    state.soundEnabledPending ||
+    state.volumePending ||
+    state.messagePending ||
+    state.languagePending;
   if (dirty && !window.confirm(t('settings.confirmLeave'))) {
     return;
   }
@@ -275,11 +338,6 @@ function leavePage(url) {
  */
 function playPreview() {
   const choice = els.sound.value;
-  if (choice === store.SOUND_NONE) {
-    setStatus(t('settings.status.nothingToPlay'), 'pending');
-    return;
-  }
-
   const audio = new Audio(chrome.runtime.getURL(choice));
   // The preview answers to the slider as it stands now — even to a volume not written yet —
   // so the alert can be adjusted by ear before «Записать».
@@ -322,10 +380,12 @@ async function clearRead() {
 
 els.days.addEventListener('input', markPending);
 els.sound.addEventListener('change', markPending);
+els.soundEnabled.addEventListener('change', markPending);
 els.volume.addEventListener('input', () => {
   updateVolumeReadout();
   markPending();
 });
+els.showMessage.addEventListener('change', markPending);
 els.language.addEventListener('change', markPending);
 els.playSound.addEventListener('click', playPreview);
 els.save.addEventListener('click', () => void saveFields());
@@ -368,20 +428,13 @@ function onLanguageChange(language) {
 function fillSoundOptions() {
   const value = els.sound.value;
   els.sound.replaceChildren();
-  els.sound.append(
-    soundOption(store.SOUND_NONE),
-    ...store.SOUND_FILES.map((file) => soundOption(file)),
-  );
+  els.sound.append(...store.SOUND_FILES.map((file) => soundOption(file)));
   if (value) els.sound.value = value;
 }
 
-/** One option per signal: «Без звука» is named by the dictionary, a file by its own name. */
+/** One option per signal, named by its own file name. */
 function soundOption(choice) {
-  const label =
-    choice === store.SOUND_NONE
-      ? t('settings.soundNone')
-      : choice.slice('src/media/'.length, -'.mp3'.length);
-  return option(choice, label);
+  return option(choice, choice.slice('src/media/'.length, -'.mp3'.length));
 }
 
 /**

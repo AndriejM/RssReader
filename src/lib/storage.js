@@ -17,6 +17,7 @@ import {
   normalizeUid,
   readTime,
   toDays,
+  toFlag,
   toVolume,
 } from './util.js';
 import {
@@ -35,6 +36,7 @@ export const READ_TTL_KEY = 'read_ttl_days';
 export const SOUND_KEY = 'sound';
 export const SOUND_FILE_KEY = 'sound_file';
 export const SOUND_VOLUME_KEY = 'sound_volume';
+export const SHOW_MESSAGE_KEY = 'show_message';
 export const LANGUAGE_KEY = 'language';
 export const FONT_SCALES_KEY = 'font_scales';
 export const COLUMN_WIDTHS_KEY = 'column_widths';
@@ -471,32 +473,45 @@ export async function setLanguage(language) {
 }
 
 /**
- * Play only the signals bundled with the extension: an unknown path is replaced by the default.
- * `SOUND_NONE` is the explicit «Без звука» choice.
+ * Play only the signals bundled with the extension: an unknown path — a stored `SOUND_NONE` of
+ * the old «Без звука» builds included — is replaced by the default file.
  */
 export function normalizeSoundChoice(value) {
-  if (value === SOUND_NONE) return SOUND_NONE;
   return SOUND_FILES.includes(value) ? value : DEFAULT_SOUND_FILE;
 }
 
 /**
- * Файл-сигнал, выбранный на экране глобальных настроек: путь от корня расширения либо
- * `SOUND_NONE`. Builds without the picker stored only the on/off flag, so an absent
- * `sound_file` falls back to it: an explicit `false` silences the alert, anything else plays
- * the default file.
+ * Файл-сигнал, выбранный на экране глобальных настроек: путь от корня расширения. Строит,
+ * которые хранили только старый признак звука, не имели выбора файла: для них играет файл
+ * по умолчанию, а `false` в старом ключе гасит сигнал через `getSoundEnabled`.
  */
 export async function getSoundChoice() {
   const settings = await getSettings();
-  const chosen = settings[SOUND_FILE_KEY];
-
-  if (chosen !== undefined) return normalizeSoundChoice(chosen);
-  if (settings[SOUND_KEY] === false) return SOUND_NONE;
-  return DEFAULT_SOUND_FILE;
+  return normalizeSoundChoice(settings[SOUND_FILE_KEY]);
 }
 
 export async function setSoundChoice(choice) {
   const next = normalizeSoundChoice(choice);
-  await updateSettings({ [SOUND_FILE_KEY]: next, [SOUND_KEY]: next !== SOUND_NONE });
+  await updateSettings({ [SOUND_FILE_KEY]: next });
+  return next;
+}
+
+/**
+ * «Звук»: играть ли сигнал вообще — отдельный признак на экране глобальных настроек, он
+ * не связан с выбором файла, его громкостью или сообщением о загрузке. Строит, которые
+ * хранили только старый признак, читаются через него: записанный `false` (там был «Без
+ * звука») гасит сигнал, всё остальное — звуку быть.
+ */
+export async function getSoundEnabled() {
+  const settings = await getSettings();
+  const stored = settings[SOUND_KEY];
+  if (typeof stored === 'boolean') return stored;
+  return settings[SOUND_FILE_KEY] !== SOUND_NONE;
+}
+
+export async function setSoundEnabled(enabled) {
+  const next = toFlag(enabled, true);
+  await updateSettings({ [SOUND_KEY]: next });
   return next;
 }
 
@@ -512,6 +527,22 @@ export async function getSoundVolume() {
 export async function setSoundVolume(volume) {
   const next = toVolume(volume, DEFAULT_SOUND_VOLUME);
   await updateSettings({ [SOUND_VOLUME_KEY]: next });
+  return next;
+}
+
+/**
+ * «Показывать сообщение»: фон сообщает через `chrome.notifications`, сколько заголовков
+ * принесла автоматическая загрузка. Записи нет — значит сборка без этого поля жила без
+ * сообщений: флаг выключен.
+ */
+export async function getShowMessage() {
+  const settings = await getSettings();
+  return toFlag(settings[SHOW_MESSAGE_KEY], false);
+}
+
+export async function setShowMessage(enabled) {
+  const next = toFlag(enabled, false);
+  await updateSettings({ [SHOW_MESSAGE_KEY]: next });
   return next;
 }
 

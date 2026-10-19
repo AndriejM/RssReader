@@ -143,6 +143,8 @@ const DICTIONARIES = {
     'settings.soundPlay.tooltip': 'Прослушать выбранный сигнал',
     'settings.soundPlay.aria': 'Прослушать выбранный сигнал',
     'settings.soundVolume': 'Громкость сигнала',
+    'settings.soundEnabled': 'включен',
+    'settings.showMessage': 'Показывать сообщение',
     'settings.info.tooltip': 'Как работают прочитанные метки',
     'settings.info.aria': 'Как работают прочитанные метки',
     'settings.hint':
@@ -167,10 +169,19 @@ const DICTIONARIES = {
     'settings.ttlYears': '{days} дн ({years} г)',
     'settings.savedTtl': 'горят через {ttl}',
     'settings.savedSound': 'звук: {name}',
+    'settings.savedSoundEnabled': 'звук {state}',
+    'settings.savedSoundEnabled.on': 'включён',
+    'settings.savedSoundEnabled.off': 'выключен',
     'settings.savedVolume': 'громкость: {volume}%',
+    'settings.savedMessage': 'сообщение: {state}',
+    'settings.savedMessage.on': 'включено',
+    'settings.savedMessage.off': 'выключено',
     'settings.savedLanguage': 'язык: {name}',
     'settings.soundDescNone': 'без звука',
     'settings.language': 'Язык интерфейса',
+
+    // Popup автоматической загрузки: сколько заголовков она принесла.
+    'notify.news': 'Получено новых заголовков: {count}',
 
     'errors.feedNotFound': 'Лента не найдена',
     'errors.feedUrl': 'Ссылка ленты должна начинаться с http:// или https://',
@@ -303,6 +314,8 @@ const DICTIONARIES = {
     'settings.soundPlay.tooltip': 'Preview the selected signal',
     'settings.soundPlay.aria': 'Preview the selected signal',
     'settings.soundVolume': 'Signal volume',
+    'settings.soundEnabled': 'enabled',
+    'settings.showMessage': 'Show a message',
     'settings.info.tooltip': 'How the read markers work',
     'settings.info.aria': 'How the read markers work',
     'settings.hint':
@@ -327,10 +340,19 @@ const DICTIONARIES = {
     'settings.ttlYears': '{days} d ({years} yr)',
     'settings.savedTtl': 'burn out after {ttl}',
     'settings.savedSound': 'sound: {name}',
+    'settings.savedSoundEnabled': 'sound {state}',
+    'settings.savedSoundEnabled.on': 'on',
+    'settings.savedSoundEnabled.off': 'off',
     'settings.savedVolume': 'volume: {volume}%',
+    'settings.savedMessage': 'message: {state}',
+    'settings.savedMessage.on': 'on',
+    'settings.savedMessage.off': 'off',
     'settings.savedLanguage': 'language: {name}',
     'settings.soundDescNone': 'no sound',
     'settings.language': 'Interface language',
+
+    // The automatic-load popup: how many headlines that load brought.
+    'notify.news': '{count} new headlines loaded',
 
     'errors.feedNotFound': 'Feed not found',
     'errors.feedUrl': 'The feed link must start with http:// or https://',
@@ -459,6 +481,8 @@ const DICTIONARIES = {
     'settings.soundPlay.tooltip': 'Прослухати обраний сигнал',
     'settings.soundPlay.aria': 'Прослухати обраний сигнал',
     'settings.soundVolume': 'Гучність сигналу',
+    'settings.soundEnabled': 'увімкнено',
+    'settings.showMessage': 'Показувати повідомлення',
     'settings.info.tooltip': 'Як працюють мітки прочитаного',
     'settings.info.aria': 'Як працюють мітки прочитаного',
     'settings.hint':
@@ -483,10 +507,19 @@ const DICTIONARIES = {
     'settings.ttlYears': '{days} дн ({years} р)',
     'settings.savedTtl': 'згорають через {ttl}',
     'settings.savedSound': 'звук: {name}',
+    'settings.savedSoundEnabled': 'звук {state}',
+    'settings.savedSoundEnabled.on': 'увімкнено',
+    'settings.savedSoundEnabled.off': 'вимкнено',
     'settings.savedVolume': 'гучність: {volume}%',
+    'settings.savedMessage': 'повідомлення: {state}',
+    'settings.savedMessage.on': 'увімкнено',
+    'settings.savedMessage.off': 'вимкнено',
     'settings.savedLanguage': 'мова: {name}',
     'settings.soundDescNone': 'без звуку',
     'settings.language': 'Мова інтерфейсу',
+
+    // Popup автоматичного завантаження: скільки заголовків воно принесло.
+    'notify.news': 'Отримано нових заголовків: {count}',
 
     'errors.feedNotFound': 'Стрічку не знайдено',
     'errors.feedUrl': 'Посилання стрічки має починатися з http:// або https://',
@@ -616,6 +649,8 @@ const DICTIONARIES = {
     'settings.soundPlay.tooltip': 'Odtwórz wybrany sygnał',
     'settings.soundPlay.aria': 'Odtwórz wybrany sygnał',
     'settings.soundVolume': 'Głośność sygnału',
+    'settings.soundEnabled': 'włączony',
+    'settings.showMessage': 'Pokazuj komunikat',
     'settings.info.tooltip': 'Jak działają znaczniki przeczytanych',
     'settings.info.aria': 'Jak działają znaczniki przeczytanych',
     'settings.hint':
@@ -640,10 +675,19 @@ const DICTIONARIES = {
     'settings.ttlYears': '{days} dni ({years} lat)',
     'settings.savedTtl': 'wygasają po {ttl}',
     'settings.savedSound': 'dźwięk: {name}',
+    'settings.savedSoundEnabled': 'dźwięk {state}',
+    'settings.savedSoundEnabled.on': 'włączony',
+    'settings.savedSoundEnabled.off': 'wyłączony',
     'settings.savedVolume': 'głośność: {volume}%',
+    'settings.savedMessage': 'komunikat: {state}',
+    'settings.savedMessage.on': 'włączony',
+    'settings.savedMessage.off': 'wyłączony',
     'settings.savedLanguage': 'język: {name}',
     'settings.soundDescNone': 'bez dźwięku',
     'settings.language': 'Język interfejsu',
+
+    // Popup automatycznego pobierania: ile nagłówków przyniosło to pobieranie.
+    'notify.news': 'Wczytano nowe nagłówki: {count}',
 
     'errors.feedNotFound': 'Kanał nie znaleziony',
     'errors.feedUrl': 'Link kanału musi zaczynać się od http:// lub https://',
@@ -773,6 +817,8 @@ const DICTIONARIES = {
     'settings.soundPlay.tooltip': 'Ausgewähltes Signal anhören',
     'settings.soundPlay.aria': 'Ausgewähltes Signal anhören',
     'settings.soundVolume': 'Signal-Lautstärke',
+    'settings.soundEnabled': 'aktiviert',
+    'settings.showMessage': 'Meldung anzeigen',
     'settings.info.tooltip': 'Wie gelesene Markierungen funktionieren',
     'settings.info.aria': 'Wie gelesene Markierungen funktionieren',
     'settings.hint':
@@ -797,10 +843,19 @@ const DICTIONARIES = {
     'settings.ttlYears': '{days} T. ({years} J.)',
     'settings.savedTtl': 'verfallen in {ttl}',
     'settings.savedSound': 'Ton: {name}',
+    'settings.savedSoundEnabled': 'Ton {state}',
+    'settings.savedSoundEnabled.on': 'an',
+    'settings.savedSoundEnabled.off': 'aus',
     'settings.savedVolume': 'Lautstärke: {volume}%',
+    'settings.savedMessage': 'Meldung: {state}',
+    'settings.savedMessage.on': 'ein',
+    'settings.savedMessage.off': 'aus',
     'settings.savedLanguage': 'Sprache: {name}',
     'settings.soundDescNone': 'ohne Ton',
     'settings.language': 'Oberflächensprache',
+
+    // Der Popup des automatischen Ladens: wie viele Schlagzeilen es gebracht hat.
+    'notify.news': '{count} neue Schlagzeilen geladen',
 
     'errors.feedNotFound': 'Feed nicht gefunden',
     'errors.feedUrl': 'Der Feed-Link muss mit http:// oder https:// beginnen',
@@ -930,6 +985,8 @@ const DICTIONARIES = {
     'settings.soundPlay.tooltip': 'Écouter le signal choisi',
     'settings.soundPlay.aria': 'Écouter le signal choisi',
     'settings.soundVolume': 'Volume du signal',
+    'settings.soundEnabled': 'activé',
+    'settings.showMessage': 'Afficher un message',
     'settings.info.tooltip': 'Fonctionnement des marques de lecture',
     'settings.info.aria': 'Fonctionnement des marques de lecture',
     'settings.hint':
@@ -954,10 +1011,19 @@ const DICTIONARIES = {
     'settings.ttlYears': '{days} j ({years} an(s))',
     'settings.savedTtl': 'expiration dans {ttl}',
     'settings.savedSound': 'son : {name}',
+    'settings.savedSoundEnabled': 'son {state}',
+    'settings.savedSoundEnabled.on': 'activé',
+    'settings.savedSoundEnabled.off': 'désactivé',
     'settings.savedVolume': 'volume : {volume} %',
+    'settings.savedMessage': 'message : {state}',
+    'settings.savedMessage.on': 'activé',
+    'settings.savedMessage.off': 'désactivé',
     'settings.savedLanguage': 'langue : {name}',
     'settings.soundDescNone': 'sans son',
     'settings.language': 'Langue de l’interface',
+
+    // Le popup du téléchargement automatique : combien de titres il a apportés.
+    'notify.news': '{count} nouveaux titres chargés',
 
     'errors.feedNotFound': 'Flux introuvable',
     'errors.feedUrl': 'Le lien du flux doit commencer par http:// ou https://',
@@ -1087,6 +1153,8 @@ const DICTIONARIES = {
     'settings.soundPlay.tooltip': 'Escuchar la señal elegida',
     'settings.soundPlay.aria': 'Escuchar la señal elegida',
     'settings.soundVolume': 'Volumen de la señal',
+    'settings.soundEnabled': 'activado',
+    'settings.showMessage': 'Mostrar un mensaje',
     'settings.info.tooltip': 'Cómo funcionan las marcas de lectura',
     'settings.info.aria': 'Cómo funcionan las marcas de lectura',
     'settings.hint':
@@ -1111,10 +1179,19 @@ const DICTIONARIES = {
     'settings.ttlYears': '{days} d ({years} a)',
     'settings.savedTtl': 'caducan en {ttl}',
     'settings.savedSound': 'sonido: {name}',
+    'settings.savedSoundEnabled': 'sonido {state}',
+    'settings.savedSoundEnabled.on': 'activado',
+    'settings.savedSoundEnabled.off': 'desactivado',
     'settings.savedVolume': 'volumen: {volume}%',
+    'settings.savedMessage': 'mensaje: {state}',
+    'settings.savedMessage.on': 'activado',
+    'settings.savedMessage.off': 'desactivado',
     'settings.savedLanguage': 'idioma: {name}',
     'settings.soundDescNone': 'sin sonido',
     'settings.language': 'Idioma de la interfaz',
+
+    // El popup de la descarga automática: cuántos titulares trajo esa descarga.
+    'notify.news': '{count} nuevos titulares descargados',
 
     'errors.feedNotFound': 'Fuente no encontrada',
     'errors.feedUrl': 'El enlace de la fuente debe empezar por http:// o https://',

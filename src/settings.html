@@ -121,6 +121,10 @@
             </th>
             <td class="field-value">
               <div class="control">
+                <label class="switch" for="sound-enabled">
+                  <input id="sound-enabled" type="checkbox" />
+                  <span data-i18n="settings.soundEnabled"></span>
+                </label>
                 <select id="sound-file"></select>
                 <button
                   id="btn-sound-play"
@@ -147,6 +151,17 @@
                   />
                   <output id="sound-volume-value" class="muted" for="sound-volume"></output>
                 </div>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <th class="field-name">
+              <label for="show-message" data-i18n="settings.showMessage"></label>
+            </th>
+            <td class="field-value">
+              <div class="control">
+                <input id="show-message" type="checkbox" />
               </div>
             </td>
           </tr>

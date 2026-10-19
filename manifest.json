@@ -10,7 +10,8 @@
     "unlimitedStorage",
     "alarms",
     "offscreen",
-    "tabs"
+    "tabs",
+    "notifications"
   ],
   "host_permissions": [
     "<all_urls>"

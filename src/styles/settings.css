@@ -156,6 +156,22 @@
   text-align: right;
 }
 
+/* A flag checkbox: a little larger than the default box, tinted with the theme accent. */
+.field-value input[type="checkbox"] {
+  accent-color: var(--accent);
+  height: 18px;
+  width: 18px;
+}
+
+/* The sound's on/off flag sits at the head of the signal row: the box and its caption read as
+   one control, so the switch comes before the combobox it enables. */
+.field-value .switch {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
 /* The play button takes on the accent while its signal sounds. */
 .icon-btn.playing {
   background: var(--accent-soft);

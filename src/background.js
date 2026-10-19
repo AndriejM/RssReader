@@ -3,6 +3,7 @@
 
 import { feedIdFromAlarm, syncAlarms } from './lib/alarms.js';
 import { MSG_COUNT, MSG_FETCH_FEED, MSG_FEEDS_CHANGED, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from './lib/messages.js';
+import { notifyIngest } from './lib/notify.js';
 import { requestOffscreen } from './lib/offscreen.js';
 import { FeedError } from './lib/rss.js';
 import { playSound } from './lib/sound.js';
@@ -119,7 +120,11 @@ async function ingestFeed(feed, { notify = false } = {}) {
   await updateBadge();
 
   if (added > 0 && notify) {
+    // The two notifications of the same automatic event answer to their own flags on the
+    // settings screen: «Звук» gates the signal, «Показывать сообщение» gates the popup that
+    // names how many headlines came in. Neither one looks at the other's setting.
     await playSound();
+    await notifyIngest(added);
   }
 
   return { added, skipped, seen: fetched.entries.length };

@@ -7,7 +7,7 @@ import { absoluteUrl, cleanTitle, isValidHttpUrl } from './util.js';
 import { decodeResponseBytes, retargetXmlDeclaration } from './encoding.js';
 
 const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5';
-const MAX_ENTRIES = 50;
+const MAX_ENTRIES = 250;
 
 export class FeedError extends Error {
   constructor(message, { status, code, params, cause } = {}) {

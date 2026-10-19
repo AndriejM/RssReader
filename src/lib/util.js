@@ -12,7 +12,7 @@ export const DEFAULT_DELAY_TIMEOUT = 30;
 export const DEFAULT_CLEAN_TIMEOUT = 1440; // 1 day
 
 /** Storage guard: newest headlines kept per feed. */
-export const MAX_ITEMS_PER_FEED = 100;
+export const MAX_ITEMS_PER_FEED = 250;
 
 /** Storage guard: feed `<description>` blobs are capped so `chrome.storage.local` stays lean. */
 export const MAX_PREVIEW_CHARS = 8000;
@@ -38,6 +38,26 @@ export const DEFAULT_SOUND_VOLUME = 100;
 export const MIN_SOUND_VOLUME = 0;
 export const MAX_SOUND_VOLUME = 100;
 
+/** How long the load message stays on screen before the extension clears it itself. */
+export const NOTIFY_TTL_SECONDS = 8;
+
+/**
+ * Normalize a boolean setting: only a real `true`/`false` is kept, anything else takes the
+ * fallback, so an absent key never turns a flag on by accident.
+ */
+export function toFlag(value, fallback = false) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+/**
+ * Normalize the signal volume coming from the settings screen slider (always percent).
+ */
+export function toVolume(value, fallback = DEFAULT_SOUND_VOLUME) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(MAX_SOUND_VOLUME, Math.max(MIN_SOUND_VOLUME, n));
+}
+
 /**
  * Normalize a timeout value coming from the UI (always minutes).
  */
@@ -56,15 +76,7 @@ export function toDays(value, fallback = READ_TTL_DAYS) {
   return Math.min(MAX_READ_TTL_DAYS, Math.max(MIN_READ_TTL_DAYS, n));
 }
 
-/**
- * Normalize the signal volume coming from the settings screen slider (always percent).
- */
-export function toVolume(value, fallback = DEFAULT_SOUND_VOLUME) {
-  const n = Math.round(Number(value));
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(MAX_SOUND_VOLUME, Math.max(MIN_SOUND_VOLUME, n));
-}
-
+/** The shortest alarm period Chrome may schedule for a feed, in minutes. */
 export function alarmPeriodMinutes(delayTimeout) {
   return Math.max(MIN_ALARM_PERIOD_MINUTES, toMinutes(delayTimeout, DEFAULT_DELAY_TIMEOUT));
 }

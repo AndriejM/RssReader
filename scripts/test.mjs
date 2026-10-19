@@ -38,6 +38,7 @@ const {
   normalizeFeed,
   normalizeUid,
   toDays,
+  toFlag,
   toMinutes,
   toVolume,
 } = util;
@@ -92,6 +93,15 @@ test('toVolume rounds, clamps and falls back like the signal volume it feeds', (
     'a build with no volume setting keeps the old full-volume sound',
   );
   assert.equal(toVolume('bogus', 30), 30);
+});
+
+test('toFlag keeps only real booleans, so an absent setting never turns a flag on', () => {
+  assert.equal(toFlag(true), true);
+  assert.equal(toFlag(false), false, 'a stored false beats any fallback');
+  assert.equal(toFlag(undefined, true), true, 'an absent key takes the fallback');
+  assert.equal(toFlag(undefined), false, 'no key and no fallback: the silent default');
+  assert.equal(toFlag('true'), false, 'a string is not a boolean');
+  assert.equal(toFlag(1, true), true, 'a number is not a boolean either, so it falls back');
 });
 
 test('alarmPeriodMinutes never asks Chrome for less than a minute', () => {
@@ -361,8 +371,12 @@ test('a read marker with no pubDate expires by its delete time', () => {
   assert.equal(isReadExpired({ link: 'a' }, now), true, 'no dates at all: the marker is useless');
 });
 
-test('normalizeSoundChoice keeps only bundled signals or «Без звука»', () => {
-  assert.equal(store.normalizeSoundChoice(store.SOUND_NONE), store.SOUND_NONE);
+test('normalizeSoundChoice keeps only bundled signals — the old «Без звука» falls back to the default', () => {
+  assert.equal(
+    store.normalizeSoundChoice(store.SOUND_NONE),
+    store.DEFAULT_SOUND_FILE,
+    'a stored «Без звука» of the old builds plays the default file; its silence lives in the sound flag',
+  );
   assert.equal(store.normalizeSoundChoice('src/media/titan.mp3'), 'src/media/titan.mp3');
   assert.equal(
     store.normalizeSoundChoice(store.DEFAULT_SOUND_FILE),
