@@ -14,9 +14,11 @@ import {
   alarmPeriodMinutes,
   capPreview,
   feedBackoffMinutes,
+  MAX_SOURCE_ID_CHARS,
   isExpired,
   isReadExpired,
   itemTime,
+  linkKey,
   normalizePreviewImages,
   normalizeUid,
   readTime,
@@ -383,10 +385,24 @@ export async function clearItemsForFeed(feedId) {
  * one uniform box on the way in (see `util.normalizePreviewImages`).
  * Service keys bind item to feed and allow dedup; the `pubDate` field acts as a timestamp for
  * the `clean_timeout` expiry (`time` — actual load time — as a fallback if feed has no date).
+ *
+ * `sourceId`/`sourceIdType` are what the *feed* calls this news (its `<guid>` or its Atom `<id>`,
+ * its link where the feed has neither — `rss.sourceIdentity`); `uid` is built on that id, not on the
+ * link, so a headline stays one headline when the feed reissues it under a changed address.
  */
-export function makeItem({ feed, title, link, description = '', pubDate = '', time = Date.now() }) {
+export function makeItem({
+  feed,
+  title,
+  link,
+  description = '',
+  pubDate = '',
+  sourceId = '',
+  sourceIdType = 'link',
+  time = Date.now(),
+}) {
+  const identity = sourceOf({ link, sourceId, sourceIdType });
   return {
-    uid: normalizeUid(feed.id, link),
+    uid: normalizeUid(feed.id, identity.sourceId),
     feedId: feed.id,
     feedName: feed.name,
     rss_link: feed.rss_link,
@@ -394,8 +410,50 @@ export function makeItem({ feed, title, link, description = '', pubDate = '', ti
     description: capPreview(normalizePreviewImages(description)),
     pubDate: String(pubDate ?? '').trim(),
     link,
+    sourceId: identity.sourceId,
+    sourceIdType: identity.sourceIdType,
     time,
   };
+}
+
+/**
+ * The identity a headline is matched on: the id the feed gave it, normalized the same way on the
+ * way in and on every later comparison.
+ *
+ * `linkKey` is applied only to a link. An opaque `guid`/`<id>` is kept as the feed wrote it: `URL`
+ * would read `12345:ru` as a scheme and cut the id to pieces, and an id is meant to be stable
+ * byte-for-byte anyway.
+ */
+function sourceOf({ link, sourceId, sourceIdType = 'link' }) {
+  const raw = String(sourceId ?? '').trim();
+  if (raw) {
+    const cut = raw.length > MAX_SOURCE_ID_CHARS ? raw.slice(0, MAX_SOURCE_ID_CHARS) : raw;
+    return { sourceId: cut, sourceIdType };
+  }
+  return { sourceId: linkKey(link), sourceIdType: 'link' };
+}
+
+/**
+ * Identity of a stored headline, computed the way a new candidate's is computed — so a record
+ * written before the feeds' own ids were kept (`uid` built on its raw link) still recognises the
+ * headline it describes, instead of being copied by the next poll.
+ *
+ * It carries the `feedId`: two feeds that ship the same news are two headlines of two feeds, exactly
+ * as a `uid` built on the link made them. Only the read markers reach across feeds (see
+ * `readIdentity`), because a news the user deleted must not come back from anywhere.
+ */
+function identityOf(item) {
+  return `${item?.feedId}|${sourceKeyOf(item)}`;
+}
+
+/** The identity of a headline on its own, without the feed that brought it: what a read marker is matched on. */
+function sourceKeyOf(item) {
+  const { sourceId, sourceIdType } = sourceOf({
+    link: item?.link,
+    sourceId: item?.sourceId,
+    sourceIdType: item?.sourceIdType,
+  });
+  return `${sourceIdType}:${sourceId}`;
 }
 
 /** Keep only the newest MAX_ITEMS_PER_FEED headlines of every feed. */
@@ -417,6 +475,9 @@ export function capPerFeed(items) {
  * Store freshly read headlines, skipping the duplicates already in storage and the headlines the
  * user has deleted before — a feed server keeps shipping its old items, so without the read list
  * a deleted news would come back on the next `delay_timeout`.
+ *
+ * Duplicates are recognised by the identity of the headline (`sourceId`, its link where the feed
+ * states no id) inside one feed; a read marker is matched across feeds.
  * @returns {{ added: number, skipped: number, seen: number }}
  */
 export async function addItems(candidates) {
@@ -425,17 +486,23 @@ export async function addItems(candidates) {
 
   const [items, read] = await Promise.all([getItems(), getRead()]);
   const known = new Set(items.map((item) => item.uid));
-  const readLinks = new Set(read.map((record) => record.link));
+  /* The same headline under another address: compared by what the feed calls it, which is what
+   * `makeItem` built `uid` on. Both sides of the match go through `identityOf`, so a record older
+   * than this field is still recognised by its own link. */
+  const knownSources = new Set(items.map((item) => identityOf(item)));
+  const readKeys = new Set(read.map((record) => readIdentity(record)));
   let added = 0;
   let skipped = 0;
 
   for (const candidate of fresh) {
-    if (known.has(candidate.uid)) continue;
-    if (readLinks.has(candidate.link)) {
+    const identity = identityOf(candidate);
+    if (known.has(candidate.uid) || knownSources.has(identity)) continue;
+    if (readKeys.has(sourceKeyOf(candidate)) || readKeys.has(candidate.link)) {
       skipped += 1;
       continue;
     }
     known.add(candidate.uid);
+    knownSources.add(identity);
     items.push(candidate);
     added += 1;
   }
@@ -474,29 +541,44 @@ export async function saveRead(read) {
  * Storage record for a headline the user deleted: `link` is the identity (a feed server reissues
  * the same link), while `pubDate` and `time` (the moment of deletion) together give the age of the
  * record — see `util.readTime`.
+ *
+ * `sourceId`/`sourceIdType` go with it: when the feed later reissues the news under another address,
+ * the marker is still found by the id the feed calls it, and the deleted news does not come back.
  */
 export function makeReadRecord(item, now = Date.now()) {
+  const { sourceId, sourceIdType } = sourceOf({
+    link: item?.link,
+    sourceId: item?.sourceId,
+    sourceIdType: item?.sourceIdType,
+  });
   return {
     link: String(item?.link ?? '').trim(),
+    sourceId,
+    sourceIdType,
     pubDate: String(item?.pubDate ?? '').trim(),
     time: now,
   };
 }
 
-/** Remember headlines as read, newest first, without repeating a link already stored. */
+/** Identity a read marker is matched on, the same way a candidate's identity is computed. */
+function readIdentity(record) {
+  return sourceKeyOf(record);
+}
+
+/** Remember headlines as read, newest first, without repeating a headline already stored. */
 export async function markRead(items) {
   const fresh = (items ?? []).filter((item) => item?.link);
   if (fresh.length === 0) return 0;
 
   const now = Date.now();
   const read = await getRead();
-  const known = new Set(read.map((record) => record.link));
+  const known = new Set(read.map((record) => readIdentity(record)));
   let added = 0;
 
   for (const item of fresh) {
     const record = makeReadRecord(item, now);
-    if (known.has(record.link)) continue;
-    known.add(record.link);
+    if (known.has(readIdentity(record))) continue;
+    known.add(readIdentity(record));
     read.push(record);
     added += 1;
   }

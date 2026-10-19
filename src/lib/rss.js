@@ -3,7 +3,7 @@
 // the extension that has DOMParser. `host_permissions` make the request same-
 // enough for the response to be readable (no CORS problem).
 
-import { FEED_FETCH_TIMEOUT_MS, absoluteUrl, cleanTitle, isValidHttpUrl } from './util.js';
+import { FEED_FETCH_TIMEOUT_MS, absoluteUrl, cleanTitle, isValidHttpUrl, linkKey } from './util.js';
 import { decodeResponseBytes, retargetXmlDeclaration } from './encoding.js';
 
 const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5';
@@ -182,7 +182,8 @@ function entryLink(entry) {
 
 /**
  * Needs a DOM: call it only from a context where DOMParser exists (the offscreen document).
- * Fields of entries reflect storage record: { feedTitle: string, entries: Array<{ title, description, pubDate, link }> }.
+ * Fields of entries reflect storage record: { title, description, pubDate, link, sourceId,
+ * sourceIdType }.
  */
 export function parseFeed(xml, baseUrl) {
   // The text is already decoded by `lib/encoding.js`; the declaration inside it must not invite an
@@ -209,15 +210,23 @@ export function parseFeed(xml, baseUrl) {
   const seen = new Set();
 
   for (const node of nodes.slice(0, MAX_ENTRIES)) {
-    const rawLink = firstText(node, 'link') || entryLink(node) || guidAsLink(node);
+    const identity = entryIdentity(node);
+    const rawLink = firstText(node, 'link') || entryLink(node) || (identity.guidIsLink ? identity.guid : '');
     // Without a link there is nothing to open later, and absoluteUrl('') would resolve to
     // the feed URL itself.
     if (!rawLink) continue;
 
     const link = absoluteUrl(rawLink, baseUrl);
     if (!link) continue;
-    if (seen.has(link)) continue;
-    seen.add(link);
+
+    const { sourceId, sourceIdType } = sourceIdentity({ ...identity, link });
+    if (!sourceId) continue;
+
+    // Two `<item>`s of one feed that the feed itself calls the same news are one headline here;
+    // `storage.addItems` does the same across the polls.
+    const key = `${sourceIdType}:${sourceId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
 
     entries.push({
       title: cleanTitle(firstText(node, 'title') || node.getAttribute('title'), ''),
@@ -226,15 +235,52 @@ export function parseFeed(xml, baseUrl) {
       description: firstText(node, 'description') || firstText(node, 'summary') || firstText(node, 'content'),
       pubDate: firstText(node, 'pubDate') || firstText(node, 'published') || firstText(node, 'updated'),
       link,
+      // What the feed calls this news: kept beside the link so a headline is still recognised when
+      // the address it points at has moved (see `storage.makeItem`).
+      sourceId,
+      sourceIdType,
     });
   }
 
   return { feedTitle, entries };
 }
 
-function guidAsLink(node) {
+/**
+ * The id fields of one entry, read straight from the XML: the RSS `<guid>` with its `isPermaLink`
+ * spelling, and the Atom `<id>`.
+ */
+function entryIdentity(node) {
   const [guid] = childNodes(node, 'guid');
-  if (!guid) return '';
-  const isLink = (guid.getAttribute('isPermaLink') ?? 'true').toLowerCase() === 'true';
-  return isLink ? guid.textContent?.trim() ?? '' : '';
+  const [id] = childNodes(node, 'id');
+  return {
+    guid: guid?.textContent?.trim() ?? '',
+    // An absent `isPermaLink` means «this guid is an address» (the RSS default); only an explicit
+    // `isPermaLink="false"` says the guid is the feed's own opaque id.
+    guidIsLink: guid ? (guid.getAttribute('isPermaLink') ?? 'true').toLowerCase() !== 'false' : true,
+    atomId: id?.textContent?.trim() ?? '',
+  };
+}
+
+/**
+ * Dedup identity of an entry — values, not nodes, so the rule is testable without a DOM
+ * (scripts/test.mjs).
+ *
+ * The feed's own id wins over its link, because that is the field a feed keeps stable while it
+ * rewrites the address: an opaque RSS `<guid>`, then the Atom `<id>` (required by the Atom spec to
+ * be unique and stable for the life of the entry). With neither, the identity *is* the link — read
+ * the way `util.linkKey` reads it, so the copy of the next poll matches the one in storage.
+ *
+ * @param {{ link?: string, guid?: string, guidIsLink?: boolean, atomId?: string }} entry
+ * @returns {{ sourceId: string, sourceIdType: 'link' | 'guid' | 'atom:id' }}
+ */
+export function sourceIdentity({ link = '', guid = '', guidIsLink = true, atomId = '' } = {}) {
+  const rawGuid = String(guid ?? '').trim();
+  const rawId = String(atomId ?? '').trim();
+
+  if (rawGuid && !guidIsLink) return { sourceId: rawGuid, sourceIdType: 'guid' };
+  if (rawId) return { sourceId: isValidHttpUrl(rawId) ? linkKey(rawId) : rawId, sourceIdType: 'atom:id' };
+
+  /* A permalink guid is the address of the news — `parseFeed` opens it when the entry has no other
+   * link — so such a guid is not an id of its own: the identity is the link the reader keeps. */
+  return { sourceId: linkKey(link), sourceIdType: 'link' };
 }

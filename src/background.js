@@ -178,6 +178,8 @@ async function readFeedOnce(feed) {
           description: entry.description,
           pubDate: entry.pubDate,
           link: entry.link,
+          sourceId: entry.sourceId,
+          sourceIdType: entry.sourceIdType,
           time: now,
         }),
       );

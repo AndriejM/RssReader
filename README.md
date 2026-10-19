@@ -404,29 +404,33 @@ record they belong to one address, so changing `rss_link` clears them too — an
 feed would answer `304` for a different one.
 
 **`items`** — an array of headlines. The fields from the assignment are `rss_link`, `title`,
-`link`, `time`; `uid`/`feedId`/`feedName` were added internally: to identify a headline and avoid
-duplicates.
+`link`, `time`; `uid`/`feedId`/`feedName`/`sourceId`/`sourceIdType` were added internally: to
+identify a headline and avoid duplicates.
 
 ```json
 {
-  "uid": "<feedId>|<link>",   // unique key of the headline
+  "uid": "<feedId>|<sourceId>", // unique key of the headline
   "feedId": "c0f4…",
   "feedName": "Хабр",
   "rss_link": "https://habr.com/ru/rss/all/all/",  // link to the feed
   "title": "Заголовок новости",
-  "link": "https://habr.com/ru/news/…/",            // http link to the news
+  "link": "https://habr.com/ru/news/…/",            // http link to the news, as the feed wrote it
+  "sourceId": "https://habr.com/ru/news/1",         // what the feed calls this news: its guid / Atom <id>, else its link
+  "sourceIdType": "link",                          // 'link' | 'guid' | 'atom:id'
   "time": 1760000000000                             // headline loading time, ms
 }
 ```
 
 **`read`** — an array of read (user-deleted) news items. The feed server does not remove its own
-headlines, so without this list a deleted news item would return on every next load. The record
-key is the news `link`: a server may rewrite a headline but rarely changes the link, so a mark
-survives both a feed edit and re-adding the feed.
+headlines, so without this list a deleted news item would return on every next load. The record is
+matched by the identity of the news — its `sourceId`, or its `link` when the feed states no id —
+so a mark survives both a feed edit and the server reissuing the news under another address.
 
 ```json
 {
-  "link": "https://habr.com/ru/news/…/",              // the news identifier it is matched by
+  "link": "https://habr.com/ru/news/…/",              // the address the news had when it was deleted
+  "sourceId": "https://habr.com/ru/news/1",           // the identity the marker is matched by
+  "sourceIdType": "link",                            // 'link' | 'guid' | 'atom:id'
   "pubDate": "Tue, 01 Oct 2024 08:00:00 GMT",        // the list is cleaned by this field's age
   "time": 1760000000000                              // deletion moment, if pubDate is absent
 }
@@ -523,8 +527,13 @@ background.
   headlines are purged by an alarm once a minute, and also when the reader opens and on any feed
   change. A headline “without a parent feed” (the feed was deleted while the alarm was queued)
   is removed.
-- **Duplicates**: a headline is identified by `uid = feedId + "|" + link`, so re-polling a feed
-  neither spawns copies nor resets the storage term of an existing record.
+- **Duplicates**: a headline is identified by `uid = feedId + "|" + sourceId`, where `sourceId` is
+  the RSS `<guid>` or the Atom `<id>` when the feed states one and its link otherwise — the link
+  read through `util.linkKey`, which drops what a feed varies between its own polls: `http` and
+  `https`, `www`, the port the protocol implies, a trailing slash, the `#…` fragment and the
+  tracking parameters (`utm_…`, `gclid`, `fbclid`, …). Re-polling a feed neither spawns copies nor
+  resets the storage term of an existing record, and a news whose address moved is still recognised
+  as the news it already is.
 - **The badge counts the headlines of all feeds together** (the entire contents of `items`), as
   the assignment states: `1…99` as a number, `*` when over 99, empty at 0.
 - **Chrome picks the badge digits' color itself**: the `chrome.action` API does not allow setting
@@ -539,7 +548,9 @@ background.
   panel shows a message and the link to the original remains.
 - **RSS 2.0, Atom and RDF are supported**: `<item>` and `<entry>` are parsed, the `link` in Atom
   (`rel="alternate"`), `guid` with `isPermaLink="true"` as a link; relative links are resolved
-  against the feed URL; up to 50 entries per response.
+  against the feed URL; up to 250 entries per response. The RSS `guid` (an `isPermaLink="false"`
+  one, above all) and the Atom `<id>` are kept as `sourceId` — the name the feed gives its news,
+  which is what the dedup matches on.
 - **The feed encoding is determined before writing to storage**: the response body is read as
   bytes (`response.arrayBuffer()`) rather than `response.text()` — the latter reads everything as
   UTF-8, which made a Windows-1251 feed (still served by Russian-language sites) land in
@@ -812,6 +823,12 @@ that is checked in the browser after loading the extension.
     its ordinary numbers, and the headlines appear once. A row answers `busy` (the console says
     `read by another request, this one is skipped`) only while a read of another context holds the
     feed; then the row simply stays at “Loading…”.
+30. Open `chrome.storage.local` (`items`) and compare a headline's `link` with its `sourceId` →
+    `sourceId` has no `utm_…`, no `www`, no trailing slash, while `link` is the address the feed
+    wrote. On a feed that reissues the same news under another address (a `guid` with
+    `isPermaLink="false"`, or a link that only grew tracking parameters) the list keeps **one**
+    headline, `added 0` in the read's numbers; delete it and press “Refresh” → it does not come back
+    while its read marker lives, and in `read` the marker carries the same `sourceId`.
 
 ## Limitations
 

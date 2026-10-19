@@ -45,6 +45,20 @@ export const MAX_READ_TTL_DAYS = 3650;
 export const MAX_READ_RECORDS = 1000;
 
 /**
+ * Storage guard: a `guid`/`<id>` is an opaque string the feed invents. It is stored as the identity
+ * of a headline, so it is kept short; a feed that puts a whole article in it is not an id.
+ */
+export const MAX_SOURCE_ID_CHARS = 200;
+
+/**
+ * Parameters that say nothing about *which* page is meant: the same article arrives with a
+ * different tail of them from one poll of a feed to the next (a campaign tag added by a share
+ * button, a click id per click), which is exactly the link-move dedup must survive.
+ */
+const TRACKING_PARAM =
+  /^(utm_.+|source|medium|campaign|term|content|clid|gclid|dclid|fbclid|msclkid|yclid|igshid|icid|ihref|share_.+|ref_.+|ref|trk_.+|trk|vero_.+|mc_.+|s_kwcid|cmp|scene|si|si_[a-z0-9_.-]+|_hs.*)_?$/i;
+
+/**
  * Volume of the alert signal, in percent: the slider on the global settings screen. 100 is the
  * default, which keeps the sound of the builds that had no volume control at all.
  */
@@ -280,6 +294,52 @@ export function normalizePreviewImages(text, { width = PREVIEW_IMAGE_WIDTH, heig
 
 export function normalizeUid(feedId, link) {
   return `${feedId}|${String(link ?? '').trim()}`;
+}
+
+/**
+ * How a link must read to be recognised as one it has seen before: the *stored* `link` stays exactly
+ * as the feed wrote it (that is the address the reader opens), while the match drops what a feed
+ * changes between its own polls — `http` and `https`, the default port, `www`, a trailing slash, the
+ * `#…` fragment and the tracking parameters.
+ *
+ * Returns the trimmed text back when the link is not something `URL` can read, so a comparison
+ * degrades to a plain string match instead of dropping the headline.
+ */
+export function linkKey(link) {
+  const raw = String(link ?? '').trim();
+  if (!raw) return '';
+
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return raw;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return raw;
+
+  url.protocol = 'https:';
+  if (
+    (url.protocol === 'https:' && url.port === '443') ||
+    (url.protocol === 'http:' && url.port === '80')
+  ) {
+    url.port = '';
+  }
+  url.username = '';
+  url.password = '';
+  url.hash = '';
+  if (url.hostname.startsWith('www.')) url.hostname = url.hostname.slice(4);
+
+  for (const name of [...url.searchParams.keys()]) {
+    if (TRACKING_PARAM.test(name)) url.searchParams.delete(name);
+  }
+
+  /* `URL.pathname` is read-only, so the slash is cut from the path the URL keeps. Only a real tail
+   * goes: `/` is the whole path of a site root, and dropping it would make the root and its empty
+   * subdirectory the same page. */
+  if (url.pathname.length > 1 && url.pathname.endsWith('/')) url.pathname = url.pathname.slice(0, -1);
+
+  // `pathname` and `search` are read through `URL`, so they come back percent-encoded the same way.
+  return url.href;
 }
 
 export function isValidHttpUrl(value) {

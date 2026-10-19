@@ -26,6 +26,7 @@ const {
   MAX_ITEMS_PER_FEED,
   MAX_READ_RECORDS,
   MAX_READ_TTL_DAYS,
+  MAX_SOURCE_ID_CHARS,
   MAX_SOUND_VOLUME,
   MIN_READ_TTL_DAYS,
   MIN_SOUND_VOLUME,
@@ -41,6 +42,7 @@ const {
   isReadExpired,
   isValidHttpUrl,
   absoluteUrl,
+  linkKey,
   newId,
   normalizeFeed,
   normalizePreviewImages,
@@ -236,6 +238,49 @@ test('absoluteUrl of an empty link falls back to the base, so callers must check
   assert.equal(absoluteUrl('', 'https://example.com/rss/feed.xml'), 'https://example.com/rss/feed.xml');
 });
 
+test('linkKey reads the same page however the feed spelled its link', () => {
+  const one = 'https://example.com/ru/news/1';
+
+  assert.equal(linkKey('http://example.com/ru/news/1'), one, 'http and https are the same page');
+  assert.equal(linkKey('https://www.example.com/ru/news/1'), one, 'www is the same site');
+  assert.equal(linkKey('https://example.com/ru/news/1/'), one, 'the trailing slash of an article');
+  assert.equal(linkKey('https://example.com:443/ru/news/1'), one, 'the port the protocol implies');
+  assert.equal(
+    linkKey('https://example.com/ru/news/1/?utm_source=telegram&utm_campaign=share&gclid=x&ref=rss'),
+    one,
+    'a tail of tracking parameters says nothing about which page is meant',
+  );
+  assert.equal(linkKey('https://example.com/ru/news/1#part-2'), one, 'a fragment is not another news');
+  assert.equal(
+    linkKey('http://user:pass@example.com/ru/news/1'),
+    one,
+    'credentials of one reader are not part of the page',
+  );
+
+  // What a link really says is kept: only the parts a feed varies between its own polls go.
+  assert.equal(linkKey('https://example.com/ru/news/1?page=2'), 'https://example.com/ru/news/1?page=2');
+  assert.equal(linkKey('https://example.com/a?q=utm_test'), 'https://example.com/a?q=utm_test');
+  assert.equal(linkKey('https://example.com/a?utm_test=1'), 'https://example.com/a', 'a parameter named utm_* is a tracking parameter');
+  assert.equal(linkKey('https://example.com/a?utmip=1'), 'https://example.com/a?utmip=1', 'a parameter that only looks like one is kept');
+  assert.equal(
+    linkKey('http://example.com:8080/ru/news/1'),
+    'https://example.com:8080/ru/news/1',
+    'a real port is a different site, only the implied one is dropped',
+  );
+  assert.equal(
+    linkKey('https://www.example.com/'),
+    'https://example.com/',
+    'the whole path of a site root is not a trailing slash',
+  );
+  assert.equal(linkKey('https://web.example.com/a'), 'https://web.example.com/a', 'only the www prefix');
+  assert.equal(linkKey('  https://a.b/x  '), 'https://a.b/x');
+
+  assert.equal(linkKey('mailto:a@b.c'), 'mailto:a@b.c', 'not a web link: compared as text');
+  assert.equal(linkKey('not a link at all'), 'not a link at all', 'a comparison degrades, a headline does not vanish');
+  assert.equal(linkKey(''), '');
+  assert.equal(linkKey(undefined), '');
+});
+
 test('cleanTitle strips markup and whitespace', () => {
   assert.equal(cleanTitle('<b>Привет</b>  <i>мир</i>'), 'Привет мир');
   assert.equal(cleanTitle('  a\n\n\tb  '), 'a b');
@@ -313,18 +358,53 @@ test('makeItem stores feed link, headline, article link and load time', () => {
   const item = store.makeItem({ feed, title: 'Заголовок', link: 'https://habr.com/ru/news/1/', time });
 
   assert.deepEqual(item, {
-    uid: 'f1|https://habr.com/ru/news/1/',
+    uid: 'f1|https://habr.com/ru/news/1',
     feedId: 'f1',
     feedName: 'Хабр',
     rss_link: 'https://habr.com/ru/rss/all/',
     title: 'Заголовок',
     description: '',
     pubDate: '',
+    // The address the reader opens stays exactly as the feed wrote it; the trailing slash is gone
+    // only from the `uid`, which exists to recognise the same headline on the next poll.
     link: 'https://habr.com/ru/news/1/',
+    sourceId: 'https://habr.com/ru/news/1',
+    sourceIdType: 'link',
     time,
   });
   assert.equal(store.makeItem({ feed, title: 't', link: 'u' }).time > 0, true, 'time defaults to now');
   assert.equal(normalizeUid('f1', '  https://a '), 'f1|https://a');
+});
+
+test('makeItem keys a headline by what the feed calls it, not by its address', () => {
+  const feed = { id: 'f1', name: 'Lenta', rss_link: 'https://lenta.ru/rss' };
+  const opaque = 'urn:uuid:6f2c1c0a-1';
+
+  const byGuid = store.makeItem({
+    feed,
+    title: 't',
+    link: 'https://lenta.ru/articles/2024/10/01/x/',
+    sourceId: opaque,
+    sourceIdType: 'guid',
+  });
+  assert.equal(byGuid.sourceId, opaque, 'an opaque guid is kept as the feed wrote it');
+  assert.equal(byGuid.sourceIdType, 'guid');
+  assert.equal(byGuid.link, 'https://lenta.ru/articles/2024/10/01/x/', 'the link to open is untouched');
+  assert.equal(byGuid.uid, `f1|${opaque}`, 'a moved address does not make a second headline');
+
+  /* The link is normalized into the id only when there is no id: an opaque `guid` is not a URL, and
+   * reading it as one would cut `12345:ru` to `12345`. */
+  assert.equal(
+    store.makeItem({ feed, title: 't', link: 'https://a.b/x/?utm_source=rss', sourceId: '12345:ru', sourceIdType: 'guid' }).sourceId,
+    '12345:ru',
+  );
+
+  const id = store.makeItem({ feed, title: 't', link: 'http://a.b/x', sourceId: ' tag-42 ', sourceIdType: 'atom:id' });
+  assert.deepEqual(
+    { sourceId: id.sourceId, sourceIdType: id.sourceIdType },
+    { sourceId: 'tag-42', sourceIdType: 'atom:id' },
+    'the kind the feed gave is the kind that is stored',
+  );
 });
 
 /* ------------------------- preview pictures ------------------------- */
@@ -417,10 +497,19 @@ test('makeReadRecord keeps the link, the publication date and the delete time', 
   );
   assert.deepEqual(record, {
     link: 'https://habr.com/ru/news/1/',
+    sourceId: 'https://habr.com/ru/news/1',
+    sourceIdType: 'link',
     pubDate: 'Tue, 01 Oct 2024 08:00:00 GMT',
     time,
   });
   assert.equal(store.makeReadRecord({ link: '' }).link, '', 'no link, nothing to match on');
+
+  const byId = store.makeReadRecord({ link: 'https://a.b/x/', sourceId: 'guid:99', sourceIdType: 'guid' }, time);
+  assert.deepEqual(
+    { sourceId: byId.sourceId, sourceIdType: byId.sourceIdType },
+    { sourceId: 'guid:99', sourceIdType: 'guid' },
+    'the marker remembers the id the feed calls the news by: it must still match when the address moves',
+  );
 });
 
 test('isReadExpired keeps a news out for READ_TTL_DAYS from its deletion', () => {
@@ -511,6 +600,196 @@ test('capRead keeps the newest read markers', () => {
   assert.equal(kept[0].link, `l${MAX_READ_RECORDS + 4}`, 'newest first');
   assert.equal(kept.at(-1).link, 'l5', 'the 5 oldest dropped');
   assert.equal(store.capRead(read.slice(0, 10)).length, 10, 'a list under the cap is untouched');
+});
+
+/* -------------------- dedup by what the feed calls a headline -------------------- */
+
+test('a headline the feed reissues under another address stays one headline', async () => {
+  const feed = { id: 'f1', name: 'Lenta', rss_link: 'https://lenta.ru/rss' };
+  const forget = storageMemory();
+
+  try {
+    const first = store.makeItem({ feed, title: 'A', link: 'https://lenta.ru/a/1/?utm_source=rss' });
+    assert.equal((await store.addItems([first])).added, 1);
+
+    const again = store.makeItem({ feed, title: 'A', link: 'http://www.lenta.ru:443/a/1/#more' });
+    assert.deepEqual(
+      await store.addItems([again]),
+      { added: 0, skipped: 0, seen: 1 },
+      'the poll saw it and the storage already had it: not a «deleted before» skip',
+    );
+
+    const stored = await store.getItems();
+    assert.equal(stored.length, 1, 'no second copy of the same news');
+    assert.equal(
+      stored[0].link,
+      'https://lenta.ru/a/1/?utm_source=rss',
+      'the stored address is the one the reader opens, not the key it was matched by',
+    );
+
+    /* A query the site really routes on is a different news: the key drops tracking parameters, not
+     * the address. */
+    const page2 = store.makeItem({ feed, title: 'B', link: 'https://lenta.ru/a/1?page=2' });
+    assert.equal((await store.addItems([page2])).added, 1, 'a second page of the same article');
+  } finally {
+    forget();
+  }
+});
+
+test('the id a feed states recognises its news after the address moves', async () => {
+  const feed = { id: 'f1', name: 'Nnm', rss_link: 'https://nnmclub.to/rss' };
+  const id = 'nnm:396698';
+  const forget = storageMemory();
+
+  try {
+    const before = store.makeItem({
+      feed,
+      title: 'A',
+      link: 'https://nnmclub.to/forum/viewtopic.php?t=396698',
+      sourceId: id,
+      sourceIdType: 'guid',
+    });
+    await store.addItems([before]);
+
+    const moved = store.makeItem({
+      feed,
+      title: 'A, renamed by the site',
+      link: 'https://nnmclub.to/forum/viewtopic.php?p=9999999',
+      sourceId: id,
+      sourceIdType: 'guid',
+    });
+    assert.deepEqual(
+      await store.addItems([moved]),
+      { added: 0, skipped: 0, seen: 1 },
+      'the guid is the news; the address it points at is not',
+    );
+
+    const other = store.makeItem({
+      feed,
+      title: 'B',
+      link: 'https://nnmclub.to/forum/viewtopic.php?t=396698',
+      sourceId: 'nnm:396699',
+      sourceIdType: 'guid',
+    });
+    assert.equal((await store.addItems([other])).added, 1, 'another id at the same address is another news');
+  } finally {
+    forget();
+  }
+});
+
+test('a headline stored before the ids were kept is not copied by the next poll', async () => {
+  const feed = { id: 'f1', name: 'Hab', rss_link: 'https://habr.com/ru/rss/' };
+  const forget = storageMemory();
+
+  try {
+    /* A record as the older builds of this reader wrote it: `uid` built on the raw link, no
+     * `sourceId`. It must still recognise the headline it describes. */
+    await store.saveItems([
+      {
+        uid: 'f1|https://habr.com/ru/news/1/?utm_source=rss',
+        feedId: 'f1',
+        feedName: 'Hab',
+        rss_link: feed.rss_link,
+        title: 'A',
+        description: '',
+        pubDate: '',
+        link: 'https://habr.com/ru/news/1/?utm_source=rss',
+        time: 1000,
+      },
+    ]);
+
+    const candidate = store.makeItem({ feed, title: 'A', link: 'https://habr.com/ru/news/1/' });
+    assert.deepEqual(await store.addItems([candidate]), { added: 0, skipped: 0, seen: 1 });
+    assert.equal((await store.getItems()).length, 1, 'the reader did not duplicate its own stored list');
+  } finally {
+    forget();
+  }
+});
+
+test('a deleted news stays deleted when the feed ships it under another link', async () => {
+  const feed = { id: 'f1', name: 'Nnm', rss_link: 'https://nnmclub.to/rss' };
+  const id = 'nnm:396698';
+  const forget = storageMemory();
+
+  try {
+    const item = store.makeItem({
+      feed,
+      title: 'A',
+      link: 'https://nnmclub.to/forum/viewtopic.php?t=396698',
+      sourceId: id,
+      sourceIdType: 'guid',
+    });
+    await store.addItems([item]);
+    assert.equal(await store.removeItem(item.uid), true);
+
+    const reissued = store.makeItem({
+      feed,
+      title: 'A',
+      link: 'https://nnmclub.to/forum/viewtopic.php?p=9999999',
+      sourceId: id,
+      sourceIdType: 'guid',
+    });
+    const read = await store.getRead();
+    assert.equal(read.length, 1, 'the deletion left one marker');
+    assert.equal(read[0].sourceId, id, 'the marker remembers the id the feed calls the news by');
+
+    assert.deepEqual(
+      await store.addItems([reissued]),
+      { added: 0, skipped: 1, seen: 1 },
+      'skipped: it is the read marker that stopped it',
+    );
+
+    /* A marker of one kind does not match a headline the feed describes another way. */
+    const byLink = store.makeItem({ feed, title: 'A', link: 'https://nnmclub.to/forum/viewtopic.php?p=1' });
+    assert.equal((await store.addItems([byLink])).added, 1, 'a news without the guid is not the marked one');
+  } finally {
+    forget();
+  }
+});
+
+test('markRead keeps one marker for a news two feeds of one site ship twice', async () => {
+  const feed = { id: 'f1', name: 'Nnm', rss_link: 'https://nnmclub.to/rss' };
+  const forget = storageMemory();
+
+  try {
+    const first = store.makeItem({ feed, title: 'A', link: 'https://a.b/x', sourceId: 'g1', sourceIdType: 'guid' });
+    const second = store.makeItem({ feed, title: 'A', link: 'https://a.b/y', sourceId: 'g1', sourceIdType: 'guid' });
+
+    assert.equal(await store.markRead([first, second]), 1);
+    assert.equal(await store.markRead([first]), 0, 'a marker is not stored twice');
+    assert.equal((await store.getRead()).length, 1);
+  } finally {
+    forget();
+  }
+});
+
+test('the same news of two feeds stays two headlines', async () => {
+  const syndicated = 'https://a.b/news/1/?utm_source=rss';
+  const forget = storageMemory();
+
+  try {
+    const first = store.makeItem({ feed: { id: 'f1', name: 'Site', rss_link: 'https://a.b/rss' }, title: 'A', link: syndicated });
+    const second = store.makeItem({ feed: { id: 'f2', name: 'Mirror', rss_link: 'https://b.a/rss' }, title: 'A', link: 'https://www.a.b/news/1' });
+
+    assert.equal((await store.addItems([first, second])).added, 2, 'each feed keeps its own copy of a news it ships');
+    assert.equal((await store.itemsForFeed('f2'))[0].feedName, 'Mirror');
+  } finally {
+    forget();
+  }
+});
+
+test('a guid is stored short: an id of a feed is not a whole article', () => {
+  const feed = { id: 'f1', name: 'X', rss_link: 'https://a.b/rss' };
+  const item = store.makeItem({
+    feed,
+    title: 't',
+    link: 'https://a.b/x',
+    sourceId: 'x'.repeat(MAX_SOURCE_ID_CHARS + 400),
+    sourceIdType: 'guid',
+  });
+
+  assert.equal(item.sourceId.length, MAX_SOURCE_ID_CHARS);
+  assert.equal(item.uid, `f1|${item.sourceId}`);
 });
 
 /* ---------------------------- feed encoding ---------------------------- */
@@ -1363,6 +1642,99 @@ test('the feeds screen reports the health of each feed and the reader flags a fa
       assert.ok(keys.has(key), `${lang} has no ${key}, which the feeds screen asks to show`);
     }
   }
+});
+
+/* ---------------- what a feed calls a headline ---------------- */
+
+test('sourceIdentity names a headline by the id the feed states', () => {
+  assert.deepEqual(
+    rss.sourceIdentity({ guid: 'tag:example,2024:42', guidIsLink: false, link: 'https://a.b/x' }),
+    { sourceId: 'tag:example,2024:42', sourceIdType: 'guid' },
+    'isPermaLink="false" is the feed promising an id of its own, stable while its links move',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ guid: '  https://a.b/x?utm_source=rss  ', guidIsLink: false }),
+    { sourceId: 'https://a.b/x?utm_source=rss', sourceIdType: 'guid' },
+    'an id is stored as the feed wrote it: normalizing it as a link would rewrite an opaque value',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ guid: ' ', guidIsLink: false, link: 'https://a.b/x' }),
+    { sourceId: 'https://a.b/x', sourceIdType: 'link' },
+    'an empty guid is no id',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ guid: 'https://a.b/x', guidIsLink: true, link: 'https://a.b/y' }),
+    { sourceId: 'https://a.b/y', sourceIdType: 'link' },
+    'a guid that says it is an address is an address: the identity follows the link the reader keeps',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ atomId: 'tag:blog,2005:/posts/42', link: 'https://blog.example/posts/42' }),
+    { sourceId: 'tag:blog,2005:/posts/42', sourceIdType: 'atom:id' },
+    'Atom requires an <id> that outlives every link of the entry',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ atomId: 'http://www.blog.example/posts/42/', link: 'https://blog.example/posts/42' }),
+    { sourceId: 'https://blog.example/posts/42', sourceIdType: 'atom:id' },
+    'an Atom id spelled as an address is read the way a link is read',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ guid: 'g1', guidIsLink: false, atomId: 'a1' }),
+    { sourceId: 'g1', sourceIdType: 'guid' },
+    'the guid of an RSS item is asked first: an <id> inside an <item> is another vocabulary',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ link: 'not a link at all' }),
+    { sourceId: 'not a link at all', sourceIdType: 'link' },
+    'an unreadable link still identifies its headline as text',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ link: ' ' }),
+    { sourceId: '', sourceIdType: 'link' },
+    'nothing to identify: parseFeed drops such an entry',
+  );
+});
+
+test('the id a feed states makes the whole trip: parse — record — next poll', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const rssJs = read('src/lib/rss.js');
+  const worker = read('src/background.js');
+
+  const entryLoop = rssJs.match(/for \(const node of nodes\.slice[\s\S]*?return \{ feedTitle, entries \}/);
+  assert.ok(entryLoop, 'the loop that turns a feed node into an entry');
+  const loop = entryLoop[0];
+
+  assert.ok(/entryIdentity\(node\)/.test(loop), 'the guid and the Atom <id> are read off the node');
+  assert.ok(
+    /identity\.guidIsLink \? identity\.guid : ''/.test(loop),
+    'only a guid that says it is an address may stand in for a missing link',
+  );
+  assert.ok(
+    /sourceIdentity\(\{ \.\.\.identity/.test(loop),
+    'the pure rule decides what those fields mean',
+  );
+  assert.ok(
+    /const key = `\$\{sourceIdType\}:\$\{sourceId\}`;\s*\n\s*if \(seen\.has\(key\)\)/.test(loop),
+    'two nodes the feed calls the same news are one entry',
+  );
+  assert.ok(
+    /sourceId,\s*\n\s*sourceIdType,/.test(loop),
+    'the entry carries the identity to the record that stores it',
+  );
+
+  assert.ok(
+    /sourceId: entry\.sourceId,\s*\n\s*sourceIdType: entry\.sourceIdType,/.test(worker),
+    'the worker hands the identity to `store.makeItem`, where `uid` is built on it',
+  );
+
+  const storageJs = read('src/lib/storage.js');
+  assert.ok(
+    /const knownSources = new Set\(items\.map\(\(item\) => identityOf\(item\)\)\)/.test(storageJs),
+    'a stored headline is recognised by its identity, not only by the uid of the address it had',
+  );
+  assert.ok(
+    /readIdentity\(record\)/.test(storageJs),
+    'a read marker is matched the same way a candidate is',
+  );
 });
 
 /* ------------------------- conditional GET ------------------------- */
