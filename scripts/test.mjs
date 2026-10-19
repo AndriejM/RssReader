@@ -36,6 +36,7 @@ const {
   absoluteUrl,
   newId,
   normalizeFeed,
+  normalizePreviewImages,
   normalizeUid,
   toDays,
   toFlag,
@@ -290,6 +291,59 @@ test('makeItem stores feed link, headline, article link and load time', () => {
   });
   assert.equal(store.makeItem({ feed, title: 't', link: 'u' }).time > 0, true, 'time defaults to now');
   assert.equal(normalizeUid('f1', '  https://a '), 'f1|https://a');
+});
+
+/* ------------------------- preview pictures ------------------------- */
+
+test('normalizePreviewImages puts every feed picture in the same box', () => {
+  assert.equal(
+    normalizePreviewImages('<p><img src="https://lostpix.com/img/a.jpg" /></p>'),
+    '<p><img src="https://lostpix.com/img/a.jpg" width="180" height="240" /></p>',
+  );
+  // A tag the feed already sized, with its own inline style: both are replaced.
+  assert.equal(
+    normalizePreviewImages('<img width="256" src="https://a/i.php?link=%2Fx.jpg" style="margin:8px;">'),
+    '<img src="https://a/i.php?link=%2Fx.jpg" width="180" height="240">',
+  );
+  assert.equal(
+    normalizePreviewImages('<IMG SRC="https://a/b.jpg"><img src="https://a/c.jpg">'),
+    '<IMG SRC="https://a/b.jpg" width="180" height="240"><img src="https://a/c.jpg" width="180" height="240">',
+  );
+  assert.equal(normalizePreviewImages('plain text, no markup'), 'plain text, no markup');
+  assert.equal(normalizePreviewImages(''), '');
+});
+
+test('normalizePreviewImages keeps the rest of the description untouched', () => {
+  assert.equal(
+    normalizePreviewImages('<a href="https://a/1"><img src="https://a/1.jpg" /></a>Читать', {
+      width: 120,
+      height: 90,
+    }),
+    '<a href="https://a/1"><img src="https://a/1.jpg" width="120" height="90" /></a>Читать',
+  );
+  assert.equal(
+    normalizePreviewImages('<b>Жанр</b>: анимация<br />'),
+    '<b>Жанр</b>: анимация<br />',
+  );
+});
+
+test('makeItem stores the preview pictures at the size the reader sets', () => {
+  const feed = { id: 'f1', name: 'lostpix', rss_link: 'https://lostpix.com/rss' };
+  const item = store.makeItem({
+    feed,
+    title: 't',
+    link: 'https://lostpix.com/n/1',
+    // The two spellings a feed uses: a real tag (what CDATA leaves after the XML parse) and a tag
+    // written as entities — `rss.parseFeed` reads `<description>` as text, so storage sees both as
+    // this same plain HTML string.
+    description: '<img src="https://a/1.jpg" /><img width="640" height="480" src="https://a/2.jpg">',
+  });
+
+  assert.equal(
+    item.description,
+    '<img src="https://a/1.jpg" width="180" height="240" />' +
+      '<img src="https://a/2.jpg" width="180" height="240">',
+  );
 });
 
 test('sortItems is newest first, title breaks ties, input is untouched', () => {

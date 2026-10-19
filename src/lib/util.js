@@ -17,6 +17,10 @@ export const MAX_ITEMS_PER_FEED = 250;
 /** Storage guard: feed `<description>` blobs are capped so `chrome.storage.local` stays lean. */
 export const MAX_PREVIEW_CHARS = 8000;
 
+/** Uniform box (CSS pixels) given to every `<img>` a feed ships inside `<description>`. */
+export const PREVIEW_IMAGE_WIDTH = 180;
+export const PREVIEW_IMAGE_HEIGHT = 240;
+
 /**
  * Storage guard: how long a «read» marker keeps a news out of the list. Feed servers do not
  * delete their own items, so without a horizon the same news would be offered forever.
@@ -187,6 +191,37 @@ export function capPreview(text, max = MAX_PREVIEW_CHARS) {
   const value = String(text ?? '').trim();
   if (max > 0 && value.length > max) return `${value.slice(0, max)} […]`;
   return value;
+}
+
+const IMG_TAG = /<img\b[^>]*>/gi;
+const IMG_NAME = /^<img\b/i;
+/** Attributes that decide the size of the picture: the stored `width`/`height` must be the only ones. */
+const IMG_SIZE_ATTR = /\s(?:width|height|style|srcset)=("[^"]*"|'[^']*'|[^\s>]+)/gi;
+const IMG_TAG_CLOSE = /\s*\/?>$/;
+
+/**
+ * Give every `<img>` of a feed description the same box, so headlines of different feeds line up
+ * in the reader instead of keeping each feed's own sizes.
+ *
+ * Runs on the stored text, not on a DOM: the service worker has no `DOMParser`, so this is a text
+ * rewrite. Both spellings a feed uses are covered by one pass, because `rss.parseFeed` reads
+ * `<description>` as text — a tag inside CDATA and a tag written as `&lt;img&gt;` reach storage as
+ * the same plain HTML string.
+ *
+ * `width`, `height` and `srcset` the feed put on the tag are dropped along with `style`: an inline
+ * style would beat the attributes and put the picture back at the feed's size, and `srcset` would
+ * let the browser pick a source cut for that size.
+ */
+export function normalizePreviewImages(text, { width = PREVIEW_IMAGE_WIDTH, height = PREVIEW_IMAGE_HEIGHT } = {}) {
+  const w = Math.max(1, Math.round(Number(width)) || PREVIEW_IMAGE_WIDTH);
+  const h = Math.max(1, Math.round(Number(height)) || PREVIEW_IMAGE_HEIGHT);
+
+  return String(text ?? '').replace(IMG_TAG, (tag) => {
+    const name = IMG_NAME.exec(tag)?.[0] ?? '<img';
+    const rest = tag.slice(name.length).replace(IMG_SIZE_ATTR, '');
+    const closing = IMG_TAG_CLOSE.exec(rest)?.[0] ?? '>';
+    return `${name}${rest.slice(0, rest.length - closing.length)} width="${w}" height="${h}"${closing}`;
+  });
 }
 
 export function normalizeUid(feedId, link) {

@@ -14,6 +14,7 @@ import {
   isExpired,
   isReadExpired,
   itemTime,
+  normalizePreviewImages,
   normalizeUid,
   readTime,
   toDays,
@@ -139,7 +140,8 @@ export async function clearAllItems() {
 /**
  * Build the storage record for one news item from a feed `<item>`:
  * the field `title`, `description`, `pubDate`, `link` taken straight from the feed XML record —
- * `description` is kept as it often carries HTML text short news.
+ * `description` is kept as it often carries HTML text short news; its `<img>` tags are re-sized to
+ * one uniform box on the way in (see `util.normalizePreviewImages`).
  * Service keys bind item to feed and allow dedup; the `pubDate` field acts as a timestamp for
  * the `clean_timeout` expiry (`time` — actual load time — as a fallback if feed has no date).
  */
@@ -150,7 +152,7 @@ export function makeItem({ feed, title, link, description = '', pubDate = '', ti
     feedName: feed.name,
     rss_link: feed.rss_link,
     title,
-    description: capPreview(description),
+    description: capPreview(normalizePreviewImages(description)),
     pubDate: String(pubDate ?? '').trim(),
     link,
     time,

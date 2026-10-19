@@ -24,7 +24,9 @@ const PREVIEW_ALLOWED_TAGS = new Set([
 const PREVIEW_VOID_TAGS = new Set(['br', 'hr', 'img']);
 const PREVIEW_ALLOWED_ATTRS = new Map([
   ['a', new Set(['href', 'title'])],
-  ['img', new Set(['src', 'alt', 'title'])],
+  // `width`/`height` are stored on purpose: `storage.makeItem` puts one uniform box on every
+  // preview image, and dropping it here would throw that work away at render time.
+  ['img', new Set(['src', 'alt', 'title', 'width', 'height'])],
 ]);
 
 function safeExternalUrl(value) {
