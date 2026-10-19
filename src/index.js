@@ -19,8 +19,8 @@ const els = {
   totalCount: document.getElementById('total-count'),
   theme: document.getElementById('btn-theme'),
   refresh: document.getElementById('btn-refresh'),
-  refreshAll: document.getElementById('btn-refresh-all'),
-  clearAll: document.getElementById('btn-clear-all'),
+  load: document.getElementById('btn-load'),
+  clear: document.getElementById('btn-clear'),
 
   feedList: document.getElementById('feed-list'),
   feedsEmpty: document.getElementById('feeds-empty'),
@@ -185,6 +185,13 @@ function renderHeadlines() {
     : feed
       ? t('reader.headlines.emptyForFeed')
       : t('reader.headlines.emptyNoFeed');
+
+  // The load/clear buttons sit in this head and act on this very selection, so their tooltip names
+  // exactly what they now cover: a single feed, or every feed when «Все ленты» is picked.
+  els.load.title = t(all ? 'reader.refreshAll.tooltip' : 'reader.refresh.tooltip');
+  els.load.setAttribute('aria-label', t(all ? 'reader.refreshAll.aria' : 'reader.refresh.aria'));
+  els.clear.title = t(all ? 'reader.clearAll.tooltip' : 'reader.clearFeed.tooltip');
+  els.clear.setAttribute('aria-label', t(all ? 'reader.clearAll.aria' : 'reader.clearFeed.aria'));
 
   for (const item of items) {
     const li = document.createElement('li');
@@ -374,24 +381,61 @@ async function deleteItem() {
 }
 
 /**
- * The «Clear all» icon next to the header badge: it empties the headline storage in one click.
- * The storage write also makes the background worker refresh the toolbar badge, and the reader's
- * own storage.onChanged listener repaints the panels, so no extra bookkeeping is needed here.
+ * The trash icon beside the middle panel's title: it removes from storage the headlines the left
+ * column has selected — one feed's headlines, or (with «Все ленты») every headline. They are
+ * remembered as read so the next feed read does not hand them straight back. The storage write also
+ * makes the background worker refresh the badge, and this page's storage.onChanged listener repaints
+ * the panels, so no extra bookkeeping is needed.
  */
-async function clearAllHeadlines() {
-  if (state.items.length === 0) return;
+async function clearSelectionHeadlines() {
+  const targets = itemsOfSelectedFeed();
+  if (targets.length === 0) return;
 
-  els.clearAll.disabled = true;
+  els.clear.disabled = true;
   try {
-    await store.clearAllItems();
+    if (isAllFeeds()) await store.clearAllItems();
+    else await store.clearItemsForFeed(state.feedId);
     await renderAll();
   } finally {
-    els.clearAll.disabled = false;
+    els.clear.disabled = false;
+  }
+}
+
+/**
+ * The load icon beside the middle panel's title: it reads the headlines of whatever the left column
+ * has selected — a single feed, or (with «Все ленты») every feed of the list at once.
+ */
+async function refreshSelection() {
+  if (isAllFeeds()) {
+    await refreshAllFeeds(els.load);
+    return;
+  }
+
+  const feed = selectedFeed();
+  if (!feed) {
+    showPlaceholder(t('reader.refresh.noFeed'));
+    return;
+  }
+
+  const tip = els.load.title;
+  els.load.disabled = true;
+  els.load.classList.add('busy');
+  els.load.title = t('common.loading');
+  try {
+    const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_FEED, feedId: feed.id });
+    if (!response?.ok) {
+      showPlaceholder(t('reader.refresh.failed', { error: describeError(response?.error) }));
+    }
+    await renderAll();
+  } finally {
+    els.load.disabled = false;
+    els.load.classList.remove('busy');
+    els.load.title = tip;
   }
 }
 
 async function refreshSelectedFeed() {
-  // «Все ленты» is a selection too: reading it means reading every feed, as the header button does.
+  // «Все ленты» is a selection too: reading it means reading every feed, as the middle button does.
   // This button is held disabled while that read runs, so it cannot start a second one.
   if (isAllFeeds()) {
     els.refresh.disabled = true;
@@ -429,20 +473,21 @@ async function refreshSelectedFeed() {
 }
 
 /**
- * The header button that reads every feed at once, whatever is selected in the left column.
- * The worker fetches them one after another and reports per feed; a feed that failed keeps its
- * stored headlines, so a partial failure is a notice rather than an empty screen.
+ * Read every feed at once. `target` is the button that asked for it — the load icon in the middle
+ * panel head or the refresh icon in the feeds panel — so the button that was pressed is the one that
+ * spins and stays disabled while the worker fetches the feeds one after another. A feed that failed
+ * keeps its stored headlines, so a partial failure is a notice rather than an empty screen.
  */
-async function refreshAllFeeds() {
+async function refreshAllFeeds(target = els.refresh) {
   if (state.feeds.length === 0) {
     showPlaceholder(t('reader.feeds.empty'));
     return;
   }
 
-  const tip = els.refreshAll.title;
-  els.refreshAll.disabled = true;
-  els.refreshAll.classList.add('busy');
-  els.refreshAll.title = t('common.loading');
+  const tip = target.title;
+  target.disabled = true;
+  target.classList.add('busy');
+  target.title = t('common.loading');
   try {
     const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_ALL_FEEDS });
     if (!response?.ok) {
@@ -453,9 +498,9 @@ async function refreshAllFeeds() {
     }
     await renderAll();
   } finally {
-    els.refreshAll.disabled = false;
-    els.refreshAll.classList.remove('busy');
-    els.refreshAll.title = tip;
+    target.disabled = false;
+    target.classList.remove('busy');
+    target.title = tip;
   }
 }
 
@@ -526,8 +571,8 @@ wireFontScaleChanges();
 mountColumnResizers();
 wireColumnWidthChanges();
 els.refresh.addEventListener('click', () => void refreshSelectedFeed());
-els.refreshAll.addEventListener('click', () => void refreshAllFeeds());
-els.clearAll.addEventListener('click', () => void clearAllHeadlines());
+els.load.addEventListener('click', () => void refreshSelection());
+els.clear.addEventListener('click', () => void clearSelectionHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
 void wireThemeButton(els.theme);
 

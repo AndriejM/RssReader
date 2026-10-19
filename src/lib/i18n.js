@@ -58,6 +58,8 @@ const DICTIONARIES = {
     'reader.count.tooltip': 'Заголовков в хранилище',
     'reader.clearAll.tooltip': 'Удалить все заголовки из хранилище',
     'reader.clearAll.aria': 'Удалить все',
+    'reader.clearFeed.tooltip': 'Удалить заголовки этой ленты из хранилища',
+    'reader.clearFeed.aria': 'Удалить',
 
     'reader.feeds.panelAria': 'Список RSS лент',
     'reader.feeds.title': 'Ленты',
@@ -233,6 +235,8 @@ const DICTIONARIES = {
     'reader.count.tooltip': 'Headlines in storage',
     'reader.clearAll.tooltip': 'Delete every headline from storage',
     'reader.clearAll.aria': 'Delete all',
+    'reader.clearFeed.tooltip': "Delete this feed's headlines from storage",
+    'reader.clearFeed.aria': 'Delete',
 
     'reader.feeds.panelAria': 'List of RSS feeds',
     'reader.feeds.title': 'Feeds',
@@ -407,6 +411,8 @@ const DICTIONARIES = {
     'reader.count.tooltip': 'Заголовки у сховищі',
     'reader.clearAll.tooltip': 'Видалити всі заголовки зі сховища',
     'reader.clearAll.aria': 'Видалити всі',
+    'reader.clearFeed.tooltip': 'Видалити заголовки цієї стрічки зі сховища',
+    'reader.clearFeed.aria': 'Видалити',
 
     'reader.feeds.panelAria': 'Список RSS-стрічок',
     'reader.feeds.title': 'Стрічки',
@@ -579,6 +585,8 @@ const DICTIONARIES = {
     'reader.count.tooltip': 'Nagłówki w pamięci',
     'reader.clearAll.tooltip': 'Usuń wszystkie nagłówki z pamięci',
     'reader.clearAll.aria': 'Usuń wszystkie',
+    'reader.clearFeed.tooltip': 'Usuń nagłówki tego kanału z pamięci',
+    'reader.clearFeed.aria': 'Usuń',
 
     'reader.feeds.panelAria': 'Lista kanałów RSS',
     'reader.feeds.title': 'Kanały',
@@ -751,6 +759,8 @@ const DICTIONARIES = {
     'reader.count.tooltip': 'Überschriften im Speicher',
     'reader.clearAll.tooltip': 'Alle Überschriften aus dem Speicher löschen',
     'reader.clearAll.aria': 'Alle löschen',
+    'reader.clearFeed.tooltip': 'Überschriften dieses Feeds aus dem Speicher löschen',
+    'reader.clearFeed.aria': 'Löschen',
 
     'reader.feeds.panelAria': 'Liste der RSS-Feeds',
     'reader.feeds.title': 'Feeds',
@@ -923,6 +933,8 @@ const DICTIONARIES = {
     'reader.count.tooltip': 'Titres dans le stockage',
     'reader.clearAll.tooltip': 'Supprimer tous les titres du stockage',
     'reader.clearAll.aria': 'Tout supprimer',
+    'reader.clearFeed.tooltip': 'Supprimer les titres de ce flux du stockage',
+    'reader.clearFeed.aria': 'Supprimer',
 
     'reader.feeds.panelAria': 'Liste des flux RSS',
     'reader.feeds.title': 'Flux',
@@ -1095,6 +1107,8 @@ const DICTIONARIES = {
     'reader.count.tooltip': 'Titulares en el almacenamiento',
     'reader.clearAll.tooltip': 'Eliminar todos los titulares del almacenamiento',
     'reader.clearAll.aria': 'Eliminar todo',
+    'reader.clearFeed.tooltip': 'Eliminar los titulares de esta fuente del almacenamiento',
+    'reader.clearFeed.aria': 'Eliminar',
 
     'reader.feeds.panelAria': 'Lista de fuentes RSS',
     'reader.feeds.title': 'Fuentes',

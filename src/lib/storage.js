@@ -138,6 +138,18 @@ export async function clearAllItems() {
 }
 
 /**
+ * Wipe one feed's stored headlines (the reader's per-feed «Clear» button) and remember them as
+ * read, otherwise the next read of that feed would hand them all back. Other feeds stay.
+ */
+export async function clearItemsForFeed(feedId) {
+  const items = await getItems();
+  const removed = items.filter((item) => item.feedId === feedId);
+  if (removed.length === 0) return;
+  await saveItems(items.filter((item) => item.feedId !== feedId));
+  await markRead(removed);
+}
+
+/**
  * Build the storage record for one news item from a feed `<item>`:
  * the field `title`, `description`, `pubDate`, `link` taken straight from the feed XML record —
  * `description` is kept as it often carries HTML text short news; its `<img>` tags are re-sized to

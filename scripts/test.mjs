@@ -946,13 +946,13 @@ test('the header reads every feed and a picked feed opens on its first headline'
   const page = read('src/index.js');
   const worker = read('src/background.js');
 
-  assert.ok(html.includes('id="btn-refresh-all"'), 'the reader header has no button that reads every feed');
+  assert.ok(html.includes('id="btn-load"'), 'the middle column head has no button that reads feeds');
   assert.ok(
-    page.includes("document.getElementById('btn-refresh-all')"),
-    'the page does not know the button the header declares',
+    page.includes("document.getElementById('btn-load')"),
+    'the page does not know the button the markup declares',
   );
   assert.ok(
-    page.includes('els.refreshAll.addEventListener'),
+    page.includes('els.load.addEventListener'),
     'that button is looked up but wired to nothing',
   );
   assert.ok(

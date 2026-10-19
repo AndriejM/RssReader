@@ -169,15 +169,19 @@ opting out of auto-selection: returning from a settings screen in the same tab r
 the feed and precisely the headline you were on (more on this below).
 
 At the top of the reader there is a counter: the total number of headlines of all feeds in
-storage. Next to it an RSS-icon button (“Refresh all”) — one click reads every feed of the list,
-one after another in the order of that list, without waiting for the period of each; it spins
-while the feeds are read, a feed that refuses to be read does not stop the others (the reader says
-how many failed and keeps the headlines those feeds already have), and — as with a single refresh
-— no sound plays. Next to that button a trash-icon button (“Delete all”) — one click removes all
-headlines from storage (the feeds themselves remain); in the top-right corner sit the
-screen-switcher icons and the theme toggle (the reader icon is the highlighted one). The counters
-update when the background downloads or cleans up headlines, so an open reader never shows stale
-data.
+storage; in the top-right corner sit the screen-switcher icons and the theme toggle (the reader
+icon is the highlighted one).
+
+The head of the middle column holds two icons to the right of the feed's name, and both follow
+whatever the left column has selected. An RSS-icon button loads headlines: with one feed selected
+it reads just that feed; with «Все ленты» it reads every feed of the list one after another in the
+order of that list, without waiting for the period of each. It spins while the feeds are read, a
+feed that refuses to be read does not stop the others (the reader says how many failed and keeps the
+headlines those feeds already have), and — as with a single refresh — no sound plays. A trash-icon
+button then removes from storage exactly what is selected: a single feed's headlines, or (with
+«Все ленты») every headline, remembering them as read so the next load does not bring them back
+(the feeds themselves remain). The counters update when the background downloads or cleans up
+headlines, so an open reader never shows stale data.
 
 The “Feed settings” icon opens the settings in the same tab — no second tab appears — and the
 reader icon on a settings screen returns the same way: to the same feed and the same
@@ -359,8 +363,8 @@ Other storage properties:
 
 - The order in `items` is freshest-first (`store.sortItems`; for equal `time` the order is
   stabilized by the headline).
-- Only headlines the user deleted personally (the delete icon in the reader and “Delete all”)
-  get into `read`. A headline expired by `clean_timeout` is not written to `read`: its term
+- Only headlines the user deleted personally (the delete icon in the reader and the clear icon in
+  the middle panel head, for one feed or for all) get into `read`. A headline expired by `clean_timeout` is not written to `read`: its term
   expired not by the user's will. A mark lives `read_ttl_days` days (7 by default; set on the
   global settings screen), counted from the later of `pubDate` and the deletion moment
   (`util.readTime`), so a recently deleted news item does not “come back to life” early even if
@@ -384,8 +388,8 @@ communicate like this:
 
 | Message | From where | What the background does |
 |---|---|---|
-| `MSG_REFRESH_FEED` (`feedId`) | reader “Refresh”, settings screen “Load now” | reads the feed and saves the headlines; replies `{ok, added, skipped, seen}`, where `skipped` is how many headlines were rejected as already read; no sound |
-| `MSG_REFRESH_ALL_FEEDS` | reader “Refresh all” (the RSS icon next to the headline counter) | reads every feed of the list one after another, in the order of that list; replies `{ok, results, failed}`, where `results` is one `{feedId, ok, …}` per feed and `failed` counts the feeds that refused; no sound |
+| `MSG_REFRESH_FEED` (`feedId`) | reader "Refresh" and the middle-column load icon (with one feed selected), settings screen "Load now" | reads the feed and saves the headlines; replies `{ok, added, skipped, seen}`, where `skipped` is how many headlines were rejected as already read; no sound |
+| `MSG_REFRESH_ALL_FEEDS` | reader "Refresh all": the middle-column load icon or the feeds-panel refresh icon, each with «Все ленты» selected | reads every feed of the list one after another, in the order of that list; replies `{ok, results, failed}`, where `results` is one `{feedId, ok, …}` per feed and `failed` counts the feeds that refused; no sound |
 | `MSG_FEEDS_CHANGED` | reader (on opening), settings screen (after save/delete) | rebuilds alarms from the feed list, clears expired items, updates the badge |
 | `MSG_COUNT` | not used by pages yet (reserved) | replies `{ok, count}` — the number of headlines in storage |
 | `MSG_PLAY_SOUND` (`src`) | only `sound.playSound` from the background | the offscreen document plays the audio file selected on the settings screen from `src/media` |
@@ -565,8 +569,10 @@ that is checked in the browser after loading the extension.
    and storage, and the reader immediately opens the next headline of the same feed.
 6. Switch the theme on one screen → the other screen repaints without a reload.
 7. Hover the reader icon → a tooltip explains what it does.
-8. Click the “Delete all” button next to the counter → all headlines vanish from storage, the
-   number in the header resets to zero, the icon badge empties. The feeds themselves remain.
+8. Click the trash icon in the head of the middle panel while «All feeds» is selected → all
+   headlines vanish from storage, the number in the header resets to zero, the icon badge empties.
+   Select one feed and press it again → only that feed's headlines are removed. The feeds
+   themselves remain.
 9. Click the plugin icon twice → there is no second reader tab: Chrome activated the already open
    one (and its window). Same for a reader open in another window.
 10. In the reader select a feed and a headline → the “Feed settings” icon → the settings open in
@@ -616,16 +622,18 @@ that is checked in the browser after loading the extension.
     and the article text keep their size. Close the reader and open it again → the middle panel is
     large again. In a second reader tab change the size of the right column → the open first tab
     repaints without a reload.
-21. Press the RSS icon next to the counter → every feed of the list is re-read one after another,
-    the icon spins while it works, the counter and the panels refresh, and no sound plays. A feed
-    that answers nothing does not stop the others: they are read, and the middle panel says how
-    many feeds failed.
+21. Press the RSS icon in the head of the middle panel while «All feeds» is selected → every feed
+    of the list is re-read one after another, the icon spins while it works, the counter and the
+    panels refresh, and no sound plays. A feed that answers nothing does not stop the others: they
+    are read, and the middle panel says how many feeds failed. With a single feed selected, the same
+    icon reads only that feed.
 22. Click another feed in the left column → the middle panel stands on that feed's first (freshest)
     headline and its text is already open in the right panel; no second click is needed.
 23. Click the “All feeds” row → the middle panel holds the headlines of every feed, freshest on
-    top, each labelled with the name of its own feed; the cursor moves to the freshest of them.
-    With “All feeds” selected, press the refresh icon at the top of the feeds panel → every feed is
-    re-read, as the “Refresh all” button in the header does.
+    top, each labelled with the name of its own feed; the cursor moves to the freshest of them. With
+    “All feeds” selected, the load icon in the middle head (or the refresh icon at the top of the
+    feeds panel) reads every feed at once; with a single feed selected those same icons read only
+    that feed.
 
 ## Limitations
 

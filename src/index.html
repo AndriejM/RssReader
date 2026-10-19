@@ -78,13 +78,6 @@
     <div class="brand">
       <span data-i18n="app.name"></span>
       <span class="badge" id="total-count" data-i18n-title="reader.count.tooltip">0</span>
-      <!-- Reading every feed of the list at once, without waiting for its own alarm. -->
-      <button id="btn-refresh-all" class="icon-btn" type="button" data-i18n-title="reader.refreshAll.tooltip" data-i18n-aria="reader.refreshAll.aria">
-        <svg class="icon" aria-hidden="true"><use href="#icon-rss"></use></svg>
-      </button>
-      <button id="btn-clear-all" class="icon-btn danger" type="button" data-i18n-title="reader.clearAll.tooltip" data-i18n-aria="reader.clearAll.aria">
-        <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
-      </button>
     </div>
     <div class="actions">
       <!-- The switcher `lib/nav.js` fills with the three screen icons, current screen marked. -->
@@ -123,6 +116,16 @@
       <div class="panel-head">
         <h2 id="headlines-title" data-i18n="reader.headlines.title"></h2>
         <span class="muted" id="headlines-count"></span>
+        <!--
+          Load / clear sit beside the feed name and follow the left column's selection: a single
+          feed loads/cleans just that feed, «Все ленты» does it for every feed at once.
+        -->
+        <button id="btn-load" class="icon-btn" type="button" data-i18n-title="reader.refresh.tooltip" data-i18n-aria="reader.refresh.aria">
+          <svg class="icon" aria-hidden="true"><use href="#icon-rss"></use></svg>
+        </button>
+        <button id="btn-clear" class="icon-btn danger" type="button" data-i18n-title="reader.clearAll.tooltip" data-i18n-aria="reader.clearAll.aria">
+          <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
+        </button>
         <div class="font-scale" data-font-scale="headlines"></div>
       </div>
       <div class="panel-scroll">
