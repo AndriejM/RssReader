@@ -90,8 +90,9 @@ function actionButton(icon, caption, { danger = false, disabled = false } = {}) 
 
 /**
  * Что экран настроек знает о последней попытке прочесть ленту: когда её читали, когда следующая,
- * и — если лента сейчас сломана — почему и сколько отказов подряд. Отказ подписывается тем же
- * `describeError`, что и ошибка загрузки, поэтому код отказа не остаётся сырым ключом словаря.
+ * и — если лента сейчас сломана — почему, сколько отказов подряд и когда её попробуют снова.
+ * Отказ подписывается тем же `describeError`, что и ошибка загрузки, поэтому код отказа не
+ * остаётся сырым ключом словаря.
  */
 function feedHealthLine(feed) {
   const labels = unitLabels();
@@ -116,6 +117,13 @@ function feedHealthLine(feed) {
     });
     parts.push(t('feeds.health.error', { error }));
     parts.push(t('feeds.health.streak', { count: failures }));
+  }
+
+  /* Отказ назначает паузу, растущую с каждым сбоем: будильник ленты остаётся своим, но попытка
+   * во время паузы пропускается (`background.js`), поэтому строка называет именно её срок. */
+  const retryAt = Number(feed.nextRetryAt);
+  if (retryAt > Date.now()) {
+    parts.push(t('feeds.health.pause', { until: formatUntil(retryAt, Date.now(), labels) }));
   }
 
   return parts.join(' · ');

@@ -119,7 +119,8 @@ upper right of the table.
 
 Under every saved feed a quieter line carries its health record (see the storage section): when the
 feed was last read, when its next check is due, and — while it is currently failing — the reason in
-the interface language and how many failures ran in a row. It stays put while the load message above
+the interface language, how many failures ran in a row and how long an automatic read leaves the
+feed alone before asking it again. It stays put while the load message above
 it comes and goes, and a healthy feed that was read cleanly shows only the check and the next one.
 A manual “Load now” refreshes this line with the attempt that just happened.
 
@@ -140,7 +141,8 @@ Three vertical panels:
    feeds” puts it on the freshest headline there is, whichever feed it came from. A feed whose last
    read failed is set apart: a warning glyph stands beside its name, the number of its failures runs
    under the name in the colour of a failure; the tooltip of that row names when the feed was last
-   read and what the last attempt answered.
+   read, what the last attempt answered and — while the feed is in its pause — how much longer it is
+   left alone.
 2. **Headlines** — headlines of the selected feed from storage, freshest on top, with a
    “loaded N min ago” label and a storage time counted down from `clean_timeout`. When “All feeds”
    is selected, the headlines of all the feeds stand here, also freshest on top, and each one is
@@ -369,18 +371,22 @@ row and the line under a feed row on the “Feed settings” screen are where it
   "lastCheckedAt": 1760000000000,   // the last read, automatic or by hand, ms
   "lastOkAt": 1760000000000,        // the last read that worked, ms
   "lastErrorAt": 1759998200000,     // the last read that failed, ms
-  "lastErrorCode": "httpStatus",    // key errors.<code> of `lib/i18n.js`, when the failure is coded
-  "lastErrorParams": { "status": 404 },
-  "lastErrorMessage": "HTTP 404",   // kept under 300 characters
+  "lastErrorCode": "feedTimeout",   // key errors.<code> of `lib/i18n.js`, when the failure is coded
+  "lastErrorParams": { "seconds": 15 },
+  "lastErrorMessage": "fetch failed", // kept under 300 characters
   "fetchFailureCount": 2,           // failures in a row; a read that worked sets it back to 0
-  "nextAlarmAt": 1760001800000      // when the next check is due: the last read + delay_timeout
+  "nextAlarmAt": 1760001800000,     // when the next check is due: the last read + delay_timeout
+  "nextRetryAt": 1760003600000      // when an automatic read may ask this feed again
 }
 ```
 
 None of these fields exists until the feed has actually been read, and changing the feed's
 `rss_link` clears them: the failures described the old address. `nextAlarmAt` is what the reader
 names as “next check”, the feed's own poll period (`alarmPeriodMinutes(delay_timeout)`, the same
-formula `syncAlarms` uses) counted from the last read.
+formula `syncAlarms` uses) counted from the last read. `nextRetryAt` is set only by a read that
+failed and is the later of the two: it names the moment an *automatic* read may ask the feed again
+(see “Implementation notes”), which is why the health line of a failing feed shows it rather than
+the alarm time.
 
 A feed whose server answers with validators (`ETag` or `Last-Modified`) carries those answers too:
 
@@ -488,6 +494,8 @@ background.
 | `MAX_PARAGRAPHS` / `MAX_CHARACTERS` | 60 / 16000 | `extract.js` — the limit of article text in the right panel |
 | `MIN_PARAGRAPH_LENGTH` | 40 | `extract.js` — short lines (menus, captions) are not counted as article text |
 | `ALARM_PREFIX` / `CLEANUP_ALARM_NAME` | `feed:<id>` / `rss-reader:cleanup` | `util.js` |
+| `FEED_FETCH_TIMEOUT_MS` / `ARTICLE_FETCH_TIMEOUT_MS` | 15 s / 12 s | `util.js` — how long a feed read — and a page read for an icon or an article — is waited for before the request is aborted |
+| `MAX_FEED_BACKOFF_MINUTES` | 1440 min (1 day) | `util.js` — the longest pause `feedBackoffMinutes` gives a feed that keeps failing |
 
 ## Implementation notes
 
@@ -627,6 +635,23 @@ background.
   the keys are only asked with while the reader still holds the headlines they describe — once
   `clean_timeout` has purged a feed's headlines, the next read asks for the whole feed, so a polite
   `304` cannot leave the reader empty.
+- **A feed that does not answer is waited for only so long, then left alone**: every request the
+  reader makes carries an `AbortController` — `fetchFeed()` stops after `FEED_FETCH_TIMEOUT_MS`
+  (15 s), `readPage()` (an icon, a feed's self-discovery) and `fetchArticle()` after
+  `ARTICLE_FETCH_TIMEOUT_MS` (12 s). The timer is cleared only when the whole response — body
+  included — is in hand, so a server that opens the connection and then goes silent cannot hold a
+  poll open indefinitely; an abort is reported as `errors.feedTimeout` / `errors.articleTimeout`
+  naming the seconds it waited. A feed that fails is then given a pause instead of being asked
+  again every `delay_timeout`: `markFeedChecked()` stores `nextRetryAt` = now +
+  `feedBackoffMinutes(fetchFailureCount, delay_timeout)`, which doubles the feed's own period for
+  every failure in a row (1 failure → one period, 2 → two, 3 → four, …) and stops growing at
+  `MAX_FEED_BACKOFF_MINUTES` (a day). The worker skips the alarm of a feed still in its pause, and
+  the reader names the wait in the feed's health line, its tooltip and the worker log. Two things
+  keep this from turning into a feed that never comes back: the alarms themselves are not moved —
+  an extra alarm during a pause is only not answered, so a feed that recovers returns to its own
+  schedule — and a read by hand (“Load now”, `r`) is an explicit order and is never refused, so a
+  user can always force a paused feed to answer. A read that works deletes `nextRetryAt` and
+  restarts the ladder from the beginning.
 - **No third-party dependencies**: feed polling and parsing are done by `fetch` under
   `host_permissions: <all_urls>`, the manifest requires no RSS parsing library, and XML is parsed
   by the built-in `DOMParser` — but exactly where it is allowed.
@@ -635,7 +660,7 @@ background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js) and the guards over the screen markup: 65 tests
+                             # storage.js) and the guards over the screen markup: 69 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -734,16 +759,21 @@ that is checked in the browser after loading the extension.
     in the left column a warning glyph stands beside its name, under the name the number of failures
     runs; its tooltip names the last check and the last failure in the interface language. On the
     feed screen the health line under the same feed now carries that failure with the number of
-    failures in a row, and the planned next check. After a read that worked the glyph, the count and
-    the failure on the settings line disappear, the counter is back to zero and the old failure is no
-    longer shown. Change the feed's `rss_link` on the feed screen → the old failures are gone with the
-    address they described.
+    failures in a row, and the planned next check; from the second failure in a row the same line and
+    its tooltip add how much longer an automatic read leaves the feed alone, and the worker log says
+    the feed is not asked again for that long. After a read that worked the glyph, the count and
+    the failure on the settings line disappear, the counter is back to zero, the pause is over and the
+    old failure is no longer shown. Change the feed's `rss_link` on the feed screen → the old failures
+    are gone with the address they described.
 27. Add a feed whose server answers with validators (`ETag` or `Last-Modified` — many news sites do)
     and open the service worker's console → the first read brings those answers, and `feeds` in
     `chrome.storage.local` grows `etag`, `lastModified` and `lastFetchedAt`. Press “Refresh” a minute
     later → the console says `nothing new (304)`, the headlines and the badge stay exactly as they
     were, and in the Network panel the request goes out with `If-None-Match` / `If-Modified-Since`
     and comes back with an empty body.
+28. Add a feed whose address opens the connection but never answers it → after 15 seconds the read
+    fails with “the feed did not answer within 15 seconds” instead of holding the poll open, and
+    “Refresh all feeds” still gets through the rest of the feeds one by one.
 
 ## Limitations
 

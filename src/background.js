@@ -9,7 +9,7 @@ import { FeedError } from './lib/rss.js';
 import { playSound } from './lib/sound.js';
 import * as store from './lib/storage.js';
 import { READER_PAGE, focusOrCreateTab } from './lib/tabs.js';
-import { CLEANUP_ALARM_NAME, badgeText } from './lib/util.js';
+import { CLEANUP_ALARM_NAME, badgeText, feedPauseRemaining } from './lib/util.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   void bootstrap('install');
@@ -224,6 +224,18 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (!feed) {
       // The feed was removed while its alarm was still queued.
       await syncAlarms();
+      return;
+    }
+
+    /* Лента, которая читается всё хуже, ждёт между попытками дольше своего будильника
+     * (`storage.markFeedChecked` пишет `nextRetryAt`). Будильник при этом не двигается: лишняя
+     * попытка просто пропускается, поэтому одна битая лента не растягивает автоматическую загрузку
+     * на весь свой отказ и не мешает остальным. Запрошенную вручную ленту читаем всегда. */
+    const paused = feedPauseRemaining(feed);
+    if (paused > 0) {
+      console.info(
+        `feed "${feed.name}": ${feed.fetchFailureCount} failures in a row, asked again in ${Math.ceil(paused / 60000)} min`,
+      );
       return;
     }
 

@@ -2,7 +2,7 @@
 // Only text nodes are lifted out of the page and re-rendered by the reader page, so no
 // third-party markup, script or style ever reaches the extension's DOM.
 
-import { cleanTitle } from './util.js';
+import { ARTICLE_FETCH_TIMEOUT_MS, cleanTitle } from './util.js';
 
 const MAX_PARAGRAPHS = 60;
 const MAX_CHARACTERS = 16000;
@@ -48,8 +48,19 @@ export class ArticleError extends Error {
   }
 }
 
-export async function fetchArticle(url) {
+/**
+ * Load the page of a headline, but not forever: the request carries an `AbortController`. A reader
+ * that clicks a headline should get an answer — even a «this page did not answer» one — instead of a
+ * panel that waits on a site which never replies.
+ */
+export async function fetchArticle(url, { timeoutMs = ARTICLE_FETCH_TIMEOUT_MS } = {}) {
+  const limit = Number(timeoutMs) > 0 ? Number(timeoutMs) : ARTICLE_FETCH_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), limit);
+
   let response;
+  let html;
+
   try {
     response = await fetch(url, {
       method: 'GET',
@@ -57,32 +68,48 @@ export async function fetchArticle(url) {
       cache: 'no-store',
       redirect: 'follow',
       headers: { Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' },
+      signal: controller.signal,
     });
-  } catch (cause) {
-    const reason = cause?.message ?? String(cause);
+
+    if (!response.ok) {
+      throw new ArticleError(`page replied ${response.status}`, {
+        code: 'articleStatus',
+        params: { status: response.status, statusText: response.statusText },
+      });
+    }
+
+    const type = response.headers.get('content-type') ?? '';
+    if (type && !/html|xml|text/i.test(type)) {
+      throw new ArticleError(`unsupported content type: ${type}`, {
+        code: 'articleType',
+        params: { type },
+      });
+    }
+
+    html = await response.text();
+  } catch (error) {
+    if (error instanceof ArticleError) throw error;
+
+    if (controller.signal.aborted) {
+      throw new ArticleError(`page did not answer within ${Math.round(limit / 1000)}s`, {
+        code: 'articleTimeout',
+        params: { seconds: Math.round(limit / 1000) },
+        cause: error,
+      });
+    }
+
+    const reason = error?.message ?? String(error);
     throw new ArticleError(`failed to load the page: ${reason}`, {
       code: 'articleFetch',
       params: { cause: reason },
-      cause,
+      cause: error,
     });
+  } finally {
+    /* The limit is a limit on the network, not on reading it: once the bytes are here, the
+     * extraction may take as long as the page asks for. */
+    clearTimeout(timer);
   }
 
-  if (!response.ok) {
-    throw new ArticleError(`page replied ${response.status}`, {
-      code: 'articleStatus',
-      params: { status: response.status, statusText: response.statusText },
-    });
-  }
-
-  const type = response.headers.get('content-type') ?? '';
-  if (type && !/html|xml|text/i.test(type)) {
-    throw new ArticleError(`unsupported content type: ${type}`, {
-      code: 'articleType',
-      params: { type },
-    });
-  }
-
-  const html = await response.text();
   const doc = new DOMParser().parseFromString(html, 'text/html');
   if (!doc.body) throw new ArticleError('the page has no content', { code: 'articleEmpty' });
 

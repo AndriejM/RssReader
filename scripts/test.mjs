@@ -17,9 +17,12 @@ import * as store from '../src/lib/storage.js';
 import * as util from '../src/lib/util.js';
 
 const {
+  ARTICLE_FETCH_TIMEOUT_MS,
   DEFAULT_CLEAN_TIMEOUT,
   DEFAULT_DELAY_TIMEOUT,
   DEFAULT_SOUND_VOLUME,
+  FEED_FETCH_TIMEOUT_MS,
+  MAX_FEED_BACKOFF_MINUTES,
   MAX_ITEMS_PER_FEED,
   MAX_READ_RECORDS,
   MAX_READ_TTL_DAYS,
@@ -30,6 +33,8 @@ const {
   alarmPeriodMinutes,
   badgeText,
   cleanTitle,
+  feedBackoffMinutes,
+  feedPauseRemaining,
   formatSince,
   humanDuration,
   isExpired,
@@ -113,6 +118,33 @@ test('alarmPeriodMinutes never asks Chrome for less than a minute', () => {
   assert.equal(alarmPeriodMinutes(1), 1);
   assert.equal(alarmPeriodMinutes(90), 90);
   assert.equal(alarmPeriodMinutes('bogus'), DEFAULT_DELAY_TIMEOUT);
+});
+
+test('feedBackoffMinutes doubles the period of a feed that keeps failing', () => {
+  assert.equal(feedBackoffMinutes(1, 30), 30, 'one failure only makes the feed miss its next check');
+  assert.equal(feedBackoffMinutes(2, 30), 60);
+  assert.equal(feedBackoffMinutes(3, 30), 120);
+  assert.equal(feedBackoffMinutes(5, 30), 480, 'a feed that keeps failing is asked every 8 hours');
+  assert.equal(
+    feedBackoffMinutes(50, 30),
+    MAX_FEED_BACKOFF_MINUTES,
+    'the pause stops growing at a day: a feed is never dropped for good',
+  );
+
+  assert.equal(feedBackoffMinutes(0, 30), 30, 'a feed nobody failed to read waits exactly its period');
+  assert.equal(feedBackoffMinutes('bogus', 30), 30, 'a streak that is not a number is one failure');
+  assert.equal(feedBackoffMinutes(2, 0), 2, 'the pause is never finer than the shortest period Chrome allows');
+  assert.equal(feedBackoffMinutes(2, 'bogus'), DEFAULT_DELAY_TIMEOUT * 2);
+});
+
+test('feedPauseRemaining names the wait left, and none at all for a feed that never failed', () => {
+  const now = 10 * MINUTE;
+  assert.equal(feedPauseRemaining({ nextRetryAt: now + 5 * MINUTE }, now), 5 * MINUTE);
+  assert.equal(feedPauseRemaining({ nextRetryAt: now }, now), 0, 'a pause that ran out asks again');
+  assert.equal(feedPauseRemaining({ nextRetryAt: now - MINUTE }, now), 0);
+  assert.equal(feedPauseRemaining({}, now), 0, 'a healthy feed waits for nothing');
+  assert.equal(feedPauseRemaining({ nextRetryAt: 'bogus' }, now), 0);
+  assert.equal(feedPauseRemaining(undefined, now), 0);
 });
 
 test('humanDuration reads like a person wrote it', () => {
@@ -1179,18 +1211,29 @@ test('a feed remembers its own last read: the streak of failures, its reason, an
     assert.equal(feed.lastErrorCode, 'httpStatus', 'the reason stays a dictionary key, not its text');
     assert.deepEqual(feed.lastErrorParams, { status: 404 });
     assert.equal(feed.lastErrorMessage, 'HTTP 404');
+    assert.equal(
+      feed.nextRetryAt,
+      1000 + 30 * 60000,
+      'one failure only makes the feed miss its own next check',
+    );
 
     await store.markFeedChecked('health', { ok: false, error: 'no route', time: 2000 });
     feed = (await store.getFeeds())[0];
     assert.equal(feed.fetchFailureCount, 2, 'a feed that keeps failing keeps counting');
     assert.equal(feed.lastErrorCode, undefined, 'a failure with no code leaves no stale code behind');
     assert.equal(feed.lastErrorMessage, 'no route');
+    assert.equal(
+      feed.nextRetryAt,
+      2000 + 60 * 60000,
+      'the second failure in a row doubles the wait before the feed is asked again',
+    );
 
     await store.markFeedChecked('health', { ok: true, time: 3000 });
     feed = (await store.getFeeds())[0];
     assert.equal(feed.fetchFailureCount, 0, 'a read that worked closes the streak');
     assert.equal(feed.lastOkAt, 3000);
     assert.equal(feed.nextAlarmAt, 3000 + 30 * 60000, 'a healthy feed is still due for its next check');
+    assert.equal(feed.nextRetryAt, undefined, 'a feed that answered is not held in its pause');
     assert.equal(feed.lastErrorAt, undefined, 'an old failure is not shown over a feed that now works');
     assert.equal(feed.lastErrorCode, undefined);
 
@@ -1203,6 +1246,7 @@ test('a feed remembers its own last read: the streak of failures, its reason, an
     assert.equal(feed.fetchFailureCount, undefined, 'the failures of the old address are not blamed on the new one');
     assert.equal(feed.lastCheckedAt, undefined);
     assert.equal(feed.nextAlarmAt, undefined, 'a schedule kept for the old address is not carried to the new one');
+    assert.equal(feed.nextRetryAt, undefined, 'a pause made for the old address does not follow the feed');
 
     await store.markFeedChecked('health', { ok: false, error: { code: 'feedUrl', message: 'x'.repeat(900) }, time: 6000 });
     feed = (await store.getFeeds())[0];
@@ -1577,6 +1621,70 @@ test('the validators make the whole trip: storage — worker — offscreen docum
     /response\.notModified/,
     'the feed screen says «unchanged» rather than «0 headlines read»',
   );
+});
+
+/* --------------------- fetch timeouts & feed pause --------------------- */
+
+test('every request the reader waits for is waited for only so long', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+
+  for (const file of ['src/lib/rss.js', 'src/lib/extract.js', 'src/lib/favicon.js']) {
+    const source = read(file);
+    const count = (re) => [...source.matchAll(re)].length;
+    const requests = count(/await fetch\(/g);
+
+    assert.ok(requests > 0, `${file} makes no request, so nothing here was checked`);
+    assert.equal(
+      count(/new AbortController\(/g),
+      requests,
+      `${file} starts a request nobody can interrupt`,
+    );
+    assert.equal(
+      count(/signal: controller\.signal/g),
+      requests,
+      `${file} sends a request its controller does not cover`,
+    );
+    assert.equal(
+      count(/clearTimeout\(timer\)/g),
+      requests,
+      `${file} starts a timer it never cancels — one per request, not one per response`,
+    );
+  }
+
+  assert.ok(
+    FEED_FETCH_TIMEOUT_MS >= 10_000 && FEED_FETCH_TIMEOUT_MS <= 20_000,
+    'a feed read is waited for between 10 and 20 seconds',
+  );
+  assert.ok(
+    ARTICLE_FETCH_TIMEOUT_MS >= 10_000 && ARTICLE_FETCH_TIMEOUT_MS <= 15_000,
+    'a page — an icon, an article — is waited for between 10 and 15 seconds',
+  );
+});
+
+test('an automatic read waits out the pause of a failing feed, a read by hand does not', () => {
+  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+
+  const alarm = worker.match(/chrome\.alarms\.onAlarm\.addListener\([\s\S]*?\n\}\);/);
+  assert.ok(alarm, 'the worker answers no alarm');
+  assert.match(
+    alarm[0],
+    /const paused = feedPauseRemaining\(feed\)/,
+    'an automatic read does not ask how much of the pause is left',
+  );
+  assert.ok(
+    alarm[0].indexOf('feedPauseRemaining(feed)') < alarm[0].indexOf('ingestFeed(feed'),
+    'the pause is asked about before the feed is read, not after',
+  );
+
+  /* A read by hand is an explicit order: a feed in its pause is read all the same. */
+  for (const name of ['MSG_REFRESH_FEED', 'MSG_REFRESH_ALL_FEEDS']) {
+    const handler = worker.match(new RegExp(`message\\?\\.type === ${name}[\\s\\S]*?\\n  \\}`));
+    assert.ok(handler, `the worker answers ${name}`);
+    assert.ok(
+      !/feedPauseRemaining|nextRetryAt/.test(handler[0]),
+      `${name} refuses a read the user asked for by hand`,
+    );
+  }
 });
 
 /* ---------------------------- runner ---------------------------- */

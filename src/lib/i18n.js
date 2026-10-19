@@ -74,6 +74,7 @@ const DICTIONARIES = {
     'reader.feed.failedCount': 'сбоев загрузки: {count}',
     'reader.feed.lastChecked': 'последняя проверка: {since}',
     'reader.feed.lastError': 'последняя ошибка: {error}',
+    'reader.feed.nextRetry': 'следующая попытка: {until}',
 
     'reader.headlines.panelAria': 'Заголовки новостей',
     'reader.headlines.title': 'Заголовки',
@@ -149,6 +150,7 @@ const DICTIONARIES = {
     'feeds.health.next': 'следующая проверка {until}',
     'feeds.health.error': 'ошибка: {error}',
     'feeds.health.streak': 'сбоев подряд: {count}',
+    'feeds.health.pause': 'следующая попытка {until}',
 
     'settings.title': 'Глобальные настройки',
     'settings.save': 'Записать',
@@ -205,6 +207,7 @@ const DICTIONARIES = {
     'errors.feedUrl': 'Ссылка ленты должна начинаться с http:// или https://',
     'errors.feedFetch': 'Не удалось загрузить ленту: {cause}',
     'errors.feedStatus': 'Лента ответила {status} {statusText}',
+    'errors.feedTimeout': 'Лента не ответила за {seconds} с',
     'errors.feedEmpty': 'Лента вернула пустой ответ',
     'errors.feedNotXml': 'Ответ не похож на корректный XML ленты',
     'errors.feedEmptyXml': 'Пустой XML ленты',
@@ -213,6 +216,7 @@ const DICTIONARIES = {
     'errors.offscreenNoReply': 'служебная страница расширения не ответила{cause}',
     'errors.articleFetch': 'Не удалось загрузить страницу: {cause}',
     'errors.articleStatus': 'Страница ответила {status} {statusText}',
+    'errors.articleTimeout': 'Страница не ответила за {seconds} с',
     'errors.articleType': 'Неподдерживаемый тип содержимого: {type}',
     'errors.articleEmpty': 'На странице нет содержимого',
 
@@ -267,6 +271,7 @@ const DICTIONARIES = {
     'reader.feed.failedCount': 'load failures: {count}',
     'reader.feed.lastChecked': 'last checked: {since}',
     'reader.feed.lastError': 'last error: {error}',
+    'reader.feed.nextRetry': 'next attempt: {until}',
 
     'reader.headlines.panelAria': 'News headlines',
     'reader.headlines.title': 'Headlines',
@@ -342,6 +347,7 @@ const DICTIONARIES = {
     'feeds.health.next': 'next check {until}',
     'feeds.health.error': 'error: {error}',
     'feeds.health.streak': '{count} failures in a row',
+    'feeds.health.pause': 'next attempt {until}',
 
     'settings.title': 'Global settings',
     'settings.save': 'Save',
@@ -398,6 +404,7 @@ const DICTIONARIES = {
     'errors.feedUrl': 'The feed link must start with http:// or https://',
     'errors.feedFetch': 'Failed to load the feed: {cause}',
     'errors.feedStatus': 'The feed replied {status} {statusText}',
+    'errors.feedTimeout': 'The feed did not answer within {seconds} s',
     'errors.feedEmpty': 'The feed returned an empty response',
     'errors.feedNotXml': 'The response does not look like valid feed XML',
     'errors.feedEmptyXml': 'Empty feed XML',
@@ -406,6 +413,7 @@ const DICTIONARIES = {
     'errors.offscreenNoReply': 'the extension helper page did not answer{cause}',
     'errors.articleFetch': 'Failed to load the page: {cause}',
     'errors.articleStatus': 'The page replied {status} {statusText}',
+    'errors.articleTimeout': 'The page did not answer within {seconds} s',
     'errors.articleType': 'Unsupported content type: {type}',
     'errors.articleEmpty': 'The page has no content',
 
@@ -459,6 +467,7 @@ const DICTIONARIES = {
     'reader.feed.failedCount': 'помилок завантаження: {count}',
     'reader.feed.lastChecked': 'остання перевірка: {since}',
     'reader.feed.lastError': 'остання помилка: {error}',
+    'reader.feed.nextRetry': 'наступна спроба: {until}',
 
     'reader.headlines.panelAria': 'Заголовки новин',
     'reader.headlines.title': 'Заголовки',
@@ -531,6 +540,7 @@ const DICTIONARIES = {
     'feeds.health.next': 'наступна перевірка {until}',
     'feeds.health.error': 'помилка: {error}',
     'feeds.health.streak': 'подряд збоїв: {count}',
+    'feeds.health.pause': 'наступна спроба {until}',
 
     'settings.title': 'Глобальні налаштування',
     'settings.save': 'Записати',
@@ -587,6 +597,7 @@ const DICTIONARIES = {
     'errors.feedUrl': 'Посилання стрічки має починатися з http:// або https://',
     'errors.feedFetch': 'Не вдалося завантажити стрічку: {cause}',
     'errors.feedStatus': 'Стрічка відповіла {status} {statusText}',
+    'errors.feedTimeout': 'Стрічка не відповіла за {seconds} с',
     'errors.feedEmpty': 'Стрічка повернула порожню відповідь',
     'errors.feedNotXml': 'Відповідь не схожа на коректний XML стрічки',
     'errors.feedEmptyXml': 'Порожній XML стрічки',
@@ -595,6 +606,7 @@ const DICTIONARIES = {
     'errors.offscreenNoReply': 'службова сторінка розширення не відповіла{cause}',
     'errors.articleFetch': 'Не вдалося завантажити сторінку: {cause}',
     'errors.articleStatus': 'Сторінка відповіла {status} {statusText}',
+    'errors.articleTimeout': 'Сторінка не відповіла за {seconds} с',
     'errors.articleType': 'Непідтримуваний тип вмісту: {type}',
     'errors.articleEmpty': 'На сторінці немає вмісту',
 
@@ -649,6 +661,7 @@ const DICTIONARIES = {
     'reader.feed.failedCount': 'błędy pobierania: {count}',
     'reader.feed.lastChecked': 'ostatnio sprawdzono: {since}',
     'reader.feed.lastError': 'ostatni błąd: {error}',
+    'reader.feed.nextRetry': 'następna próba: {until}',
 
     'reader.headlines.panelAria': 'Nagłówki wiadomości',
     'reader.headlines.title': 'Nagłówki',
@@ -721,6 +734,7 @@ const DICTIONARIES = {
     'feeds.health.next': 'następne sprawdzenie {until}',
     'feeds.health.error': 'błąd: {error}',
     'feeds.health.streak': '{count} błędy z rzędu',
+    'feeds.health.pause': 'następna próba {until}',
 
     'settings.title': 'Ustawienia globalne',
     'settings.save': 'Zapisz',
@@ -777,6 +791,7 @@ const DICTIONARIES = {
     'errors.feedUrl': 'Link kanału musi zaczynać się od http:// lub https://',
     'errors.feedFetch': 'Nie udało się wczytać kanału: {cause}',
     'errors.feedStatus': 'Kanał odpowiedział {status} {statusText}',
+    'errors.feedTimeout': 'Kanał nie odpowiedział w ciągu {seconds} s',
     'errors.feedEmpty': 'Kanał zwrócił pustą odpowiedź',
     'errors.feedNotXml': 'Odpowiedź nie wygląda na poprawny XML kanału',
     'errors.feedEmptyXml': 'Pusty XML kanału',
@@ -785,6 +800,7 @@ const DICTIONARIES = {
     'errors.offscreenNoReply': 'pomocnicza strona rozszerzenia nie odpowiedziała{cause}',
     'errors.articleFetch': 'Nie udało się wczytać strony: {cause}',
     'errors.articleStatus': 'Strona odpowiedziała {status} {statusText}',
+    'errors.articleTimeout': 'Strona nie odpowiedziała w ciągu {seconds} s',
     'errors.articleType': 'Nieobsługiwany typ treści: {type}',
     'errors.articleEmpty': 'Strona nie ma treści',
 
@@ -839,6 +855,7 @@ const DICTIONARIES = {
     'reader.feed.failedCount': 'Abruf-Fehler: {count}',
     'reader.feed.lastChecked': 'zuletzt geprüft: {since}',
     'reader.feed.lastError': 'letzter Fehler: {error}',
+    'reader.feed.nextRetry': 'nächster Versuch: {until}',
 
     'reader.headlines.panelAria': 'Nachrichtenschlagzeilen',
     'reader.headlines.title': 'Schlagzeilen',
@@ -911,6 +928,7 @@ const DICTIONARIES = {
     'feeds.health.next': 'nächste Prüfung {until}',
     'feeds.health.error': 'Fehler: {error}',
     'feeds.health.streak': '{count} Fehler in Folge',
+    'feeds.health.pause': 'nächster Versuch {until}',
 
     'settings.title': 'Globale Einstellungen',
     'settings.save': 'Speichern',
@@ -967,6 +985,7 @@ const DICTIONARIES = {
     'errors.feedUrl': 'Der Feed-Link muss mit http:// oder https:// beginnen',
     'errors.feedFetch': 'Feed konnte nicht geladen werden: {cause}',
     'errors.feedStatus': 'Feed antwortete {status} {statusText}',
+    'errors.feedTimeout': 'Der Feed hat nicht innerhalb von {seconds} s geantwortet',
     'errors.feedEmpty': 'Feed hat eine leere Antwort zurückgegeben',
     'errors.feedNotXml': 'Die Antwort sieht nicht nach korrektem Feed-XML aus',
     'errors.feedEmptyXml': 'Leeres Feed-XML',
@@ -975,6 +994,7 @@ const DICTIONARIES = {
     'errors.offscreenNoReply': 'Die Diensthälfte der Erweiterung hat nicht geantwortet{cause}',
     'errors.articleFetch': 'Seite konnte nicht geladen werden: {cause}',
     'errors.articleStatus': 'Seite antwortete {status} {statusText}',
+    'errors.articleTimeout': 'Die Seite hat nicht innerhalb von {seconds} s geantwortet',
     'errors.articleType': 'Nicht unterstützter Inhaltstyp: {type}',
     'errors.articleEmpty': 'Die Seite hat keinen Inhalt',
 
@@ -1029,6 +1049,7 @@ const DICTIONARIES = {
     'reader.feed.failedCount': 'échecs de chargement : {count}',
     'reader.feed.lastChecked': 'dernière vérification : {since}',
     'reader.feed.lastError': 'dernière erreur : {error}',
+    'reader.feed.nextRetry': 'nouvel essai : {until}',
 
     'reader.headlines.panelAria': 'Titres des actualités',
     'reader.headlines.title': 'Titres',
@@ -1101,6 +1122,7 @@ const DICTIONARIES = {
     'feeds.health.next': 'prochaine vérification {until}',
     'feeds.health.error': 'erreur : {error}',
     'feeds.health.streak': '{count} échecs d’affilée',
+    'feeds.health.pause': 'nouvel essai {until}',
 
     'settings.title': 'Réglages globaux',
     'settings.save': 'Enregistrer',
@@ -1157,6 +1179,7 @@ const DICTIONARIES = {
     'errors.feedUrl': 'Le lien du flux doit commencer par http:// ou https://',
     'errors.feedFetch': 'Impossible de charger le flux : {cause}',
     'errors.feedStatus': 'Le flux a répondu {status} {statusText}',
+    'errors.feedTimeout': 'Le flux n’a pas répondu sous {seconds} s',
     'errors.feedEmpty': 'Le flux a renvoyé une réponse vide',
     'errors.feedNotXml': 'La réponse ne ressemble pas à un XML de flux valide',
     'errors.feedEmptyXml': 'XML de flux vide',
@@ -1165,6 +1188,7 @@ const DICTIONARIES = {
     'errors.offscreenNoReply': 'la page de service de l’extension n’a pas répondu{cause}',
     'errors.articleFetch': 'Impossible de charger la page : {cause}',
     'errors.articleStatus': 'La page a répondu {status} {statusText}',
+    'errors.articleTimeout': 'La page n’a pas répondu sous {seconds} s',
     'errors.articleType': 'Type de contenu non pris en charge : {type}',
     'errors.articleEmpty': 'La page n’a pas de contenu',
 
@@ -1219,6 +1243,7 @@ const DICTIONARIES = {
     'reader.feed.failedCount': 'fallos de carga: {count}',
     'reader.feed.lastChecked': 'última comprobación: {since}',
     'reader.feed.lastError': 'último error: {error}',
+    'reader.feed.nextRetry': 'próximo intento: {until}',
 
     'reader.headlines.panelAria': 'Titulares de noticias',
     'reader.headlines.title': 'Titulares',
@@ -1291,6 +1316,7 @@ const DICTIONARIES = {
     'feeds.health.next': 'próxima comprobación {until}',
     'feeds.health.error': 'error: {error}',
     'feeds.health.streak': '{count} fallos seguidos',
+    'feeds.health.pause': 'próximo intento {until}',
 
     'settings.title': 'Ajustes globales',
     'settings.save': 'Grabar',
@@ -1347,6 +1373,7 @@ const DICTIONARIES = {
     'errors.feedUrl': 'El enlace de la fuente debe empezar por http:// o https://',
     'errors.feedFetch': 'No se pudo cargar la fuente: {cause}',
     'errors.feedStatus': 'La fuente respondió {status} {statusText}',
+    'errors.feedTimeout': 'La fuente no respondió en {seconds} s',
     'errors.feedEmpty': 'La fuente devolvió una respuesta vacía',
     'errors.feedNotXml': 'La respuesta no parece un XML válido de fuente',
     'errors.feedEmptyXml': 'XML de fuente vacío',
@@ -1355,6 +1382,7 @@ const DICTIONARIES = {
     'errors.offscreenNoReply': 'la página de servicio de la extensión no respondió{cause}',
     'errors.articleFetch': 'No se pudo cargar la página: {cause}',
     'errors.articleStatus': 'La página respondió {status} {statusText}',
+    'errors.articleTimeout': 'La página no respondió en {seconds} s',
     'errors.articleType': 'Tipo de contenido no admitido: {type}',
     'errors.articleEmpty': 'La página no tiene contenido',
 

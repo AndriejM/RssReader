@@ -9,7 +9,7 @@ import { MSG_FEEDS_CHANGED, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from './li
 import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
 import { wireThemeButton } from './lib/theme.js';
-import { formatSince, humanDuration, itemTime } from './lib/util.js';
+import { formatSince, formatUntil, humanDuration, itemTime } from './lib/util.js';
 
 /* Synchronous first pass: the cached language (or the browser language) is known before
  * `chrome.storage` resolves, so nothing here has to wait for the async read below. */
@@ -185,6 +185,13 @@ function feedHealthTitle(feed) {
         }),
       }),
     );
+  }
+
+  /* Отказ ленты назначает паузу перед следующей автоматической попыткой: подсказка называет её
+   * срок, чтобы счётчик сбоев не выглядел как лента, которую перечитывают просто чаще. */
+  const retryAt = Number(feed.nextRetryAt);
+  if (retryAt > Date.now()) {
+    parts.push(t('reader.feed.nextRetry', { until: formatUntil(retryAt, Date.now(), unitLabels()) }));
   }
 
   return parts.join('\n');

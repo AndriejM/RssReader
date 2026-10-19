@@ -10,7 +10,7 @@
 // touches `fetch`: it runs on the feeds screen — an extension page, where `host_permissions` make the
 // site readable — and a failure there is not worth a translated message: the feed simply gets no icon.
 
-import { absoluteUrl, isValidHttpUrl } from './util.js';
+import { ARTICLE_FETCH_TIMEOUT_MS, absoluteUrl, isValidHttpUrl } from './util.js';
 
 /**
  * A `<link>` names the site icon through its `rel`. `icon` and `shortcut icon` are the favicon
@@ -118,10 +118,17 @@ export function siteRoot(feedUrl) {
 /**
  * Read one page and return its text with the URL it actually arrived from (a redirect moves the
  * icon's base). `null` for anything that cannot be read: a bad URL, a network failure, a non-2xx,
- * a body that is not text — all mean "this page tells us nothing about the icon", not an error.
+ * a body that is not text, a page that never answers — all mean "this page tells us nothing about
+ * the icon", not an error.
  */
 async function readPage(url) {
   if (!isValidHttpUrl(url)) return null;
+
+  /* The icon read is a page read of its own: a site that hangs must not keep a request that the
+   * feed was saved without waiting for hanging after it. */
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ARTICLE_FETCH_TIMEOUT_MS);
+
   try {
     const response = await fetch(url, {
       method: 'GET',
@@ -129,6 +136,7 @@ async function readPage(url) {
       cache: 'no-store',
       redirect: 'follow',
       headers: { Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.5' },
+      signal: controller.signal,
     });
     if (!response.ok) return null;
     const type = response.headers.get('content-type') ?? '';
@@ -137,6 +145,8 @@ async function readPage(url) {
     return { text: await response.text(), url: response.url || url };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

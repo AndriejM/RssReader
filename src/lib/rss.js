@@ -3,7 +3,7 @@
 // the extension that has DOMParser. `host_permissions` make the request same-
 // enough for the response to be readable (no CORS problem).
 
-import { absoluteUrl, cleanTitle, isValidHttpUrl } from './util.js';
+import { FEED_FETCH_TIMEOUT_MS, absoluteUrl, cleanTitle, isValidHttpUrl } from './util.js';
 import { decodeResponseBytes, retargetXmlDeclaration } from './encoding.js';
 
 const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5';
@@ -56,15 +56,25 @@ export class FeedError extends Error {
   }
 }
 
-export async function fetchFeed(url, validators = {}) {
+/**
+ * Fetch one feed, but not forever: the request carries an `AbortController` and the reader gives up
+ * on it after `timeoutMs`. A site that accepts the connection and never answers would otherwise sit
+ * in the middle of the background poll — feeds are read one after another — and hold every feed
+ * behind it. The limit covers the whole answer, body included: a slow body is as much a hang as a
+ * slow header.
+ */
+export async function fetchFeed(url, validators = {}, { timeoutMs = FEED_FETCH_TIMEOUT_MS } = {}) {
   // The URL comes from storage, which can also be edited by hand in the console: keep it to http(s).
   if (!isValidHttpUrl(url)) {
     throw new FeedError('feed link must be http(s)', { code: 'feedUrl' });
   }
 
-  let response;
+  const limit = Number(timeoutMs) > 0 ? Number(timeoutMs) : FEED_FETCH_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), limit);
+
   try {
-    response = await fetch(url, {
+    const response = await fetch(url, {
       method: 'GET',
       credentials: 'omit',
       /* The reader keeps its own validators in storage and asks with them; Chrome's HTTP cache would
@@ -72,45 +82,59 @@ export async function fetchFeed(url, validators = {}) {
       cache: 'no-store',
       redirect: 'follow',
       headers: conditionalHeaders(validators),
+      signal: controller.signal,
     });
-  } catch (cause) {
-    throw new FeedError(`failed to load feed: ${cause?.message ?? cause}`, {
+
+    /*
+     * For `fetch` a 304 is not `ok`, but here it is the answer we were hoping for: the feed still is
+     * the one we hold, and the server sent no body to prove otherwise. `204` says the same in its own
+     * way. Both keep the reader off the parse, the storage write and the «new headlines» count.
+     */
+    if (response.status === 304 || response.status === 204) {
+      return { feedTitle: '', entries: [], notModified: true, ...readValidators(response) };
+    }
+
+    if (!response.ok) {
+      throw new FeedError(`feed replied ${response.status}`, {
+        code: 'feedStatus',
+        params: { status: response.status, statusText: response.statusText },
+        status: response.status,
+      });
+    }
+
+    // The body is read as bytes and decoded by the encoding the feed actually uses (see
+    // `lib/encoding.js`): `response.text()` reads UTF-8, which turns a Windows-1251 feed into
+    // unreadable headlines before they ever reach storage.
+    const { text, encoding, declared } = decodeResponseBytes(
+      new Uint8Array(await response.arrayBuffer()),
+      response.headers.get('content-type') ?? '',
+    );
+    if (declared && declared !== encoding) {
+      console.warn(`feed declared ${declared}, its bytes read as ${encoding}: ${response.url || url}`);
+    }
+    if (!text.trim()) throw new FeedError('feed returned an empty response', { code: 'feedEmpty' });
+
+    return { ...parseFeed(text, response.url || url), notModified: false, ...readValidators(response) };
+  } catch (error) {
+    /* A failure we already described says its own piece: only what the timer broke needs one. */
+    if (error instanceof FeedError) throw error;
+
+    if (controller.signal.aborted) {
+      throw new FeedError(`feed did not answer within ${Math.round(limit / 1000)}s`, {
+        code: 'feedTimeout',
+        params: { seconds: Math.round(limit / 1000) },
+        cause: error,
+      });
+    }
+
+    throw new FeedError(`failed to load feed: ${error?.message ?? error}`, {
       code: 'feedFetch',
-      params: { cause: cause?.message ?? String(cause) },
-      cause,
+      params: { cause: error?.message ?? String(error) },
+      cause: error,
     });
+  } finally {
+    clearTimeout(timer);
   }
-
-  /*
-   * For `fetch` a 304 is not `ok`, but here it is the answer we were hoping for: the feed still is
-   * the one we hold, and the server sent no body to prove otherwise. `204` says the same in its own
-   * way. Both keep the reader off the parse, the storage write and the «new headlines» count.
-   */
-  if (response.status === 304 || response.status === 204) {
-    return { feedTitle: '', entries: [], notModified: true, ...readValidators(response) };
-  }
-
-  if (!response.ok) {
-    throw new FeedError(`feed replied ${response.status}`, {
-      code: 'feedStatus',
-      params: { status: response.status, statusText: response.statusText },
-      status: response.status,
-    });
-  }
-
-  // The body is read as bytes and decoded by the encoding the feed actually uses (see
-  // `lib/encoding.js`): `response.text()` reads UTF-8, which turns a Windows-1251 feed into
-  // unreadable headlines before they ever reach storage.
-  const { text, encoding, declared } = decodeResponseBytes(
-    new Uint8Array(await response.arrayBuffer()),
-    response.headers.get('content-type') ?? '',
-  );
-  if (declared && declared !== encoding) {
-    console.warn(`feed declared ${declared}, its bytes read as ${encoding}: ${response.url || url}`);
-  }
-  if (!text.trim()) throw new FeedError('feed returned an empty response', { code: 'feedEmpty' });
-
-  return { ...parseFeed(text, response.url || url), notModified: false, ...readValidators(response) };
 }
 
 /**

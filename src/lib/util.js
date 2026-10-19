@@ -11,6 +11,16 @@ export const CLEANUP_PERIOD_MINUTES = 1;
 export const DEFAULT_DELAY_TIMEOUT = 30;
 export const DEFAULT_CLEAN_TIMEOUT = 1440; // 1 day
 
+/**
+ * How long the reader waits for an answer before it gives up on it. A site that hangs would
+ * otherwise hold the whole background poll (feeds are read one after another) hostage.
+ */
+export const FEED_FETCH_TIMEOUT_MS = 15000;
+export const ARTICLE_FETCH_TIMEOUT_MS = 12000;
+
+/** The pause of a feed whose reads keep failing stops growing here: one day. */
+export const MAX_FEED_BACKOFF_MINUTES = 1440; // 1 day
+
 /** Storage guard: newest headlines kept per feed. */
 export const MAX_ITEMS_PER_FEED = 250;
 
@@ -83,6 +93,29 @@ export function toDays(value, fallback = READ_TTL_DAYS) {
 /** The shortest alarm period Chrome may schedule for a feed, in minutes. */
 export function alarmPeriodMinutes(delayTimeout) {
   return Math.max(MIN_ALARM_PERIOD_MINUTES, toMinutes(delayTimeout, DEFAULT_DELAY_TIMEOUT));
+}
+
+/**
+ * How long a feed that keeps failing waits before it is asked again: its own poll period doubled
+ * for every failure in a row (1, 2, 4, 8 …), capped at `MAX_FEED_BACKOFF_MINUTES`. One failure is
+ * therefore no extra wait at all — the feed simply misses its next checks — and a feed that reads
+ * cleanly waits exactly `delay_timeout`.
+ */
+export function feedBackoffMinutes(failures, delayTimeout = DEFAULT_DELAY_TIMEOUT) {
+  const streak = Math.max(1, Math.round(Number(failures)) || 1);
+  // Enough doublings to reach the cap for any period a feed may be given; keeps the product finite.
+  const period = alarmPeriodMinutes(delayTimeout);
+  return Math.min(MAX_FEED_BACKOFF_MINUTES, period * 2 ** Math.min(streak - 1, 11));
+}
+
+/**
+ * How long a feed is still on pause: 0 when it is due to be read. `nextRetryAt` is written by
+ * `storage.markFeedChecked`; a feed nobody has failed to read has no pause at all.
+ */
+export function feedPauseRemaining(feed, now = Date.now()) {
+  const until = Number(feed?.nextRetryAt);
+  if (!Number.isFinite(until) || until <= 0) return 0;
+  return Math.max(0, until - Number(now));
 }
 
 function round2(value) {

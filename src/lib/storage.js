@@ -12,6 +12,7 @@ import {
   READ_TTL_DAYS,
   alarmPeriodMinutes,
   capPreview,
+  feedBackoffMinutes,
   isExpired,
   isReadExpired,
   itemTime,
@@ -117,6 +118,7 @@ const FEED_DIAGNOSTIC_KEYS = [
   'lastErrorMessage',
   'fetchFailureCount',
   'nextAlarmAt',
+  'nextRetryAt',
 ];
 
 /**
@@ -143,6 +145,8 @@ function clearFeedValidators(feed) {
  * Записать в строку ленты её «состояние здоровья»: когда её читали последний раз, чем закончилась
  * эта попытка и сколько отказов подряд накопилось. Успех обнуляет счётчик и стирает прошлый отказ,
  * отказ — копит их, чтобы лента с постоянно недоступной адресной строкой была видна сразу.
+ * Отказ заодно назначает, когда ленту можно спросить снова (`nextRetryAt`): пауза растёт
+ * экспоненциально (`util.feedBackoffMinutes`), чтобы одна битая лента не съедала каждую загрузку.
  * @param {{ ok?: boolean, error?: unknown, time?: number }} options
  */
 export async function markFeedChecked(feedId, { ok = true, error = null, time = Date.now() } = {}) {
@@ -161,6 +165,7 @@ export async function markFeedChecked(feedId, { ok = true, error = null, time = 
   if (ok) {
     feed.lastOkAt = checkedAt;
     feed.fetchFailureCount = 0;
+    delete feed.nextRetryAt;
     delete feed.lastErrorAt;
     delete feed.lastErrorCode;
     delete feed.lastErrorParams;
@@ -179,6 +184,12 @@ export async function markFeedChecked(feedId, { ok = true, error = null, time = 
     else delete feed.lastErrorMessage;
 
     feed.fetchFailureCount = Math.max(1, (Number(feed.fetchFailureCount) || 0) + 1);
+
+    /* Когда задать следующий вопрос: с каждой неудачей всё позже, но не позже
+     * `MAX_FEED_BACKOFF_MINUTES`. Будильник ленты при этом остаётся своим — лишние попытки просто
+     * пропускаются (см. `background.js`), поэтому пауза не сбивает расписание остальных лент. */
+    feed.nextRetryAt =
+      checkedAt + feedBackoffMinutes(feed.fetchFailureCount, feed.delay_timeout) * 60000;
   }
 
   await saveFeeds(feeds);
