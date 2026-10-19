@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import * as encoding from '../src/lib/encoding.js';
+import * as favicon from '../src/lib/favicon.js';
 import * as i18n from '../src/lib/i18n.js';
 import { SCREENS } from '../src/lib/nav.js';
 import * as store from '../src/lib/storage.js';
@@ -1069,6 +1070,73 @@ test('units follow the language, but the pure helpers keep their own default', (
   assert.equal(formatSince(now - 2 * DAY, now, en), '2 d ago');
 
   assert.equal(humanDuration(90), '1.5 ч', 'no labels: the base language is used');
+});
+
+/* ---------------------------- site icon (favicon) ---------------------------- */
+
+test('iconLinkCandidates reads the favicon a page declares and resolves it against the page', () => {
+  const html = `
+    <head>
+      <link rel="shortcut icon" href="/favicon.ico">
+      <link rel="icon" type="image/png" href="/assets/site.png">
+      <link rel="apple-touch-icon" sizes="180x180" href="../touch.png">
+      <link rel="alternate" href="/other">
+      <link rel="icon" href="data:image/png;base64,AAAA">
+    </head>`;
+
+  const found = favicon.iconLinkCandidates(html, 'https://example.com/news/rss');
+  const byUrl = new Map(found.map((c) => [c.url, c.score]));
+
+  assert.ok(byUrl.get('https://example.com/favicon.ico'), 'a root-relative favicon is put on the site host');
+  assert.equal(byUrl.get('https://example.com/assets/site.png'), 3, 'rel="icon" outranks the variants');
+  assert.ok(byUrl.has('https://example.com/touch.png'), 'a relative apple-touch-icon resolves too');
+  assert.equal(byUrl.get('https://example.com/other'), undefined, 'rel="alternate" is not an icon');
+  assert.ok(
+    ![...byUrl.keys()].some((url) => url.startsWith('data:')),
+    'a data: URI is dropped: only an http(s) link can be drawn from another page',
+  );
+});
+
+test('feedImageCandidates reads the picture a feed ships in its own XML', () => {
+  const xml = `
+    <rss><channel>
+      <image><url>https://example.com/img/channel.png</url></image>
+    </channel></rss>`;
+  const atom = `
+    <feed>
+      <icon><![CDATA[/feed-icon.png]]></icon>
+    </feed>`;
+
+  const rss = favicon.feedImageCandidates(xml, 'https://example.com/rss.xml');
+  const atomFound = favicon.feedImageCandidates(atom, 'https://example.com/feed.atom');
+
+  assert.deepEqual(
+    rss.map((c) => c.url),
+    ['https://example.com/img/channel.png'],
+    'the RSS channel image is read',
+  );
+  assert.deepEqual(
+    atomFound.map((c) => c.url),
+    ['https://example.com/feed-icon.png'],
+    'an Atom icon is unwrapped from CDATA and resolved',
+  );
+});
+
+test('pickIcon prefers the plain favicon, then the feed image, then the fancy variants', () => {
+  const best = favicon.pickIcon([
+    { score: 2, url: 'https://example.com/touch.png' },
+    { score: 3, url: 'https://example.com/favicon.ico' },
+    { score: 3, url: 'https://example.com/channel.png' },
+  ]);
+  assert.equal(best, 'https://example.com/favicon.ico', 'the highest score wins');
+  assert.equal(favicon.pickIcon([]), null, 'a page that names no icon has none');
+  assert.equal(favicon.pickIcon(null), null, 'no candidates at all is still no icon');
+});
+
+test('siteRoot is the site root an icon fallback hangs off', () => {
+  assert.equal(favicon.siteRoot('https://example.com/deep/rss.xml'), 'https://example.com/');
+  assert.equal(favicon.siteRoot('http://a.b:8080/x'), 'http://a.b:8080/');
+  assert.equal(favicon.siteRoot('not a url'), null, 'a link with no origin offers no fallback');
 });
 
 /* ---------------------------- runner ---------------------------- */

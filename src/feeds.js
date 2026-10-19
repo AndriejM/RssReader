@@ -1,6 +1,7 @@
 // Configuration screen: add / edit / delete feeds and their timeouts, as rows of one table.
 
 import { describeError } from './lib/errors.js';
+import { discoverFeedIcon } from './lib/favicon.js';
 import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import { mountNav } from './lib/nav.js';
@@ -202,6 +203,13 @@ async function saveRow(rowRecord) {
   feed.id = rowRecord.feed.id ?? newId();
   await store.upsertFeed(feed);
 
+  /*
+   * Reading the site icon is a request of its own, kept out of the save's way: the feed is saved and
+   * its headlines load whether or not the icon read finishes, and the reader takes the icon from the
+   * storage write `attachFeedIcon` makes (see `lib/favicon.js`).
+   */
+  void attachFeedIcon(feed.id, feed.rss_link, rowRecord.feed);
+
   if (rowRecord.draft) state.drafts.delete(rowRecord.feed);
   setStatus(rowRecord, t('feeds.status.saved'), 'ok');
 
@@ -210,6 +218,30 @@ async function saveRow(rowRecord) {
   // Re-fetch the new/edited feed right away so the reader is not left empty.
   await refreshRow({ ...rowRecord, feed, draft: false });
   await render();
+}
+
+/**
+ * Read the icon of the site the feed points at and store a link to it on the feed (`lib/favicon.js`).
+ * A fresh icon is written only when it differs from the one already stored, so re-saving a feed that
+ * already has its icon does not rewrite storage for nothing. A read that names no icon keeps the
+ * feed's old one when the link is unchanged (the read simply failed) and drops it when the link moved
+ * to a site that could not be read — a foreign icon is not kept for a feed that is no longer there.
+ */
+async function attachFeedIcon(feedId, newLink, previousFeed) {
+  const previousIcon = previousFeed?.icon ?? null;
+  const sameLink = Boolean(previousFeed) && previousFeed.rss_link === newLink;
+
+  let iconUrl = null;
+  try {
+    iconUrl = await discoverFeedIcon(newLink);
+    if (iconUrl) {
+      if (iconUrl !== previousIcon) await store.upsertFeed({ id: feedId, icon: iconUrl });
+      return;
+    }
+    if (previousIcon && !sameLink) await store.upsertFeed({ id: feedId, icon: null });
+  } catch (error) {
+    console.warn(`could not store the icon for feed ${feedId}:`, error?.message ?? error);
+  }
 }
 
 async function removeRow(rowRecord) {

@@ -256,6 +256,9 @@ src/lib/rss.js                loading and parsing RSS 2.0 / Atom / RDF (runs ins
 src/lib/encoding.js           response bytes → text: find the feed's encoding (BOM, `Content-Type`,
                               the XML declaration) and decode it with it (covered by tests)
 src/lib/extract.js            article text extraction on a headline click
+src/lib/favicon.js            read a feed's site page and find the favicon it declares: the link is
+                              stored on the feed when the feed is added (the pure reading is covered
+                              by tests)
 src/lib/sound.js              whether to play the alert at all (the «Sound» flag) and which
                               signal file to play (reads the choice from the settings screen)
 src/lib/notify.js             the system popup about headlines an automatic load brought: silent
@@ -300,6 +303,7 @@ examples/                     example_rss.xml — a sample feed; neither the rea
 | 7 | Sound when an automatic load brings more than 0 headlines | `store.addItems` returns the number of new items → `sound.playSound` checks the «Sound» checkbox from the settings screen and reads the file selected there → the offscreen document plays it (`playSound` does nothing when the flag is off); manual “Refresh”/“Load now” produce no sound |
 | 8 | A separate global settings screen (the same icon in the top-right corner of all three screens, the last of the three, before the theme toggle): `read_ttl_days` — how many days to forget read items, and a signal-file combobox with its on/off checkbox (all saved via the “Write” button), plus a button that fully clears the read list | `src/settings.html`, `src/settings.js`, `store.getReadTtlDays` / `store.setReadTtlDays` / `store.setSoundChoice` / `store.setSoundEnabled` / `store.clearRead` |
 | 9 | Labels, messages and tooltips are factored into one configuration, from which the English one is derived; on the global settings screen a language combobox that is saved to storage; on load the reader takes the saved language, otherwise the browser language, otherwise English | `src/lib/i18n.js` (`ru` / `en` / `uk` / `pl` / `de` / `fr` / `es` dictionaries), `store.getLanguage` / `store.setLanguage`, `src/lib/i18n-boot.js`, `src/lib/errors.js`, `language-file` combobox in `src/settings.html` |
+| 10 | When a feed URL is added its site page is read, the favicon it declares is found (or the site's `favicon.ico` is used), and a link to it is stored on the feed; the icon is shown in the left column next to the feed name, and in the middle column — in «All feeds» — next to every headline of that feed | `src/lib/favicon.js`, `attachFeedIcon` in `src/feeds.js`, `feedIconImg` in `src/index.js`, `.item-icon` in `src/styles/reader.css` |
 
 ## Data schema
 
@@ -315,7 +319,8 @@ Four keys:
   "name": "Хабр",
   "rss_link": "https://habr.com/ru/rss/all/all/",
   "delay_timeout": 30,        // minutes
-  "clean_timeout": 1440       // minutes
+  "clean_timeout": 1440,      // minutes
+  "icon": "https://habr.com/favicon.ico" // site icon link (lib/favicon.js), read when the feed is added
 }
 ```
 

@@ -109,16 +109,25 @@ function renderAllFeedsRow() {
 
   const button = document.createElement('button');
   button.type = 'button';
-  button.innerHTML =
-    '<span class="item-title"></span>' +
-    '<span class="item-meta muted"></span>';
-  button.querySelector('.item-title').textContent = t('reader.feeds.all');
+  // Not a feed, so it has no site icon of its own; the RSS glyph in the same box keeps every row of
+  // the column on one grid.
+  const box = document.createElement('span');
+  box.className = 'item-icon';
+  box.append(icon('rss'));
+
+  const body = document.createElement('span');
+  body.className = 'item-body';
+  const title = document.createElement('span');
+  title.className = 'item-title';
+  title.textContent = t('reader.feeds.all');
   // Its meta line counts the headlines of every feed; the feeds themselves are named in the middle
   // column, where each headline carries the feed it came from.
-  button.querySelector('.item-meta').textContent = t('reader.feeds.allMeta', {
-    count: state.items.length,
-  });
+  const meta = document.createElement('span');
+  meta.className = 'item-meta muted';
+  meta.textContent = t('reader.feeds.allMeta', { count: state.items.length });
+  body.append(title, meta);
 
+  button.append(box, body);
   button.addEventListener('click', () => selectFeed(ALL_FEEDS_ID));
   li.append(button);
   els.feedList.append(li);
@@ -137,14 +146,21 @@ function renderFeeds() {
 
     const button = document.createElement('button');
     button.type = 'button';
-    button.innerHTML =
-      '<span class="item-title"></span>' +
-      '<span class="item-meta muted"></span>';
-    button.querySelector('.item-title').textContent = feed.name || feed.rss_link;
-    button.querySelector('.item-meta').textContent = t('reader.feed.itemMeta', {
+    button.append(feedIconImg(feed.id));
+
+    const body = document.createElement('span');
+    body.className = 'item-body';
+    const title = document.createElement('span');
+    title.className = 'item-title';
+    title.textContent = feed.name || feed.rss_link;
+    const meta = document.createElement('span');
+    meta.className = 'item-meta muted';
+    meta.textContent = t('reader.feed.itemMeta', {
       count: countForFeed(feed.id),
       duration: humanDuration(feed.delay_timeout, unitLabels()),
     });
+    body.append(title, meta);
+    button.append(body);
 
     button.addEventListener('click', () => selectFeed(feed.id));
     li.append(button);
@@ -176,20 +192,30 @@ function renderHeadlines() {
 
     const button = document.createElement('button');
     button.type = 'button';
-    button.innerHTML =
-      '<span class="item-title"></span>' +
-      '<span class="item-meta muted"></span>';
+    // Only «Все ленты» needs a feed to stand beside the headline, so only there does the headline
+    // carry its feed's icon; a single feed's list names that feed in the panel title instead.
+    if (all) button.append(feedIconImg(item.feedId));
+
+    const body = document.createElement('span');
+    body.className = 'item-body';
+    const title = document.createElement('span');
+    title.className = 'item-title';
     // A headline the feed gave no title is labelled here, in the reader's language.
-    button.querySelector('.item-title').textContent = item.title || t('common.untitled');
+    title.textContent = item.title || t('common.untitled');
+
+    const meta = document.createElement('span');
+    meta.className = 'item-meta muted';
     // In «Все ленты» the meta line names the feed the headline came from; a single feed's list
     // needs no such tag.
     const when = itemTime(item);
-    button.querySelector('.item-meta').textContent = [
+    meta.textContent = [
       all ? item.feedName || item.rss_link : '',
       when ? t('reader.published', { since: formatSince(when, Date.now(), unitLabels()) }) : '',
     ]
       .filter(Boolean)
       .join(' · ');
+    body.append(title, meta);
+    button.append(body);
     button.title = item.link;
 
     button.addEventListener('click', () => openItem(item));
@@ -237,6 +263,31 @@ function icon(name) {
   use.setAttribute('href', `#icon-${name}`);
   svg.append(use);
   return svg;
+}
+
+/** The stored link to a feed's site icon (`lib/favicon.js`), or null when the feed has none. */
+function feedIconUrl(feedId) {
+  return state.feeds.find((feed) => feed.id === feedId)?.icon || null;
+}
+
+/**
+ * The site icon of a feed: the stored link drawn at its own size in a fixed square. A feed whose
+ * icon never loaded keeps the empty box, so every feed row stays as wide as its neighbour and the
+ * missing picture is a hole, not a missing column.
+ */
+function feedIconImg(feedId) {
+  const box = document.createElement('span');
+  box.className = 'item-icon';
+  const url = feedIconUrl(feedId);
+  if (url) {
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.addEventListener('error', () => img.remove());
+    box.append(img);
+  }
+  return box;
 }
 
 /**

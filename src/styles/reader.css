@@ -195,9 +195,11 @@
 }
 
 .list-item > button {
+  align-items: center;
   background: transparent;
   border: none;
-  display: block;
+  display: flex;
+  gap: 8px;
   padding: 8px 10px;
   text-align: left;
   width: 100%;
@@ -249,6 +251,37 @@
   display: block;
   font-size: 0.85em;
   margin-top: 3px;
+}
+
+/*
+  A row is the site icon of its feed and, beside it, the title and meta line. `item-body` is the column
+  that holds the text and takes what is left of the row, so the fixed icon square never squeezes the
+  title; `min-width: 0` lets a long title wrap instead of pushing the row wider than the panel.
+*/
+.item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+  The feed's icon is a fixed box every row reserves, whether or not the feed has one: the stored link
+  is drawn inside it (see `index.js`), and a feed with no icon keeps the box empty, so the titles of
+  all feeds line up. `item-icon` holds the RSS glyph of the «Все ленты» row just as well.
+*/
+.item-icon {
+  align-items: center;
+  display: flex;
+  flex: 0 0 24px;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.item-icon img {
+  border-radius: 3px;
+  height: 24px;
+  object-fit: contain;
+  width: 24px;
 }
 
 .empty {
