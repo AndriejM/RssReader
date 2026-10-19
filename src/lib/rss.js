@@ -9,6 +9,40 @@ import { decodeResponseBytes, retargetXmlDeclaration } from './encoding.js';
 const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5';
 const MAX_ENTRIES = 250;
 
+/**
+ * `If-Modified-Since` understands one format: an HTTP-date. Anything else is not sent at all — a
+ * validator the server cannot read often costs a 400 instead of the feed itself.
+ */
+const HTTP_DATE = /^[A-Za-z]{3}, \d{1,2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+
+/** A `Last-Modified` we may answer with: only a real HTTP-date, written the one way it is written. */
+export function httpDate(value) {
+  if (typeof value !== 'string') return '';
+  const raw = value.trim();
+  if (!HTTP_DATE.test(raw)) return '';
+
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? new Date(at).toUTCString() : '';
+}
+
+/**
+ * Validators of the last read of this feed (`store.rememberFeedValidators`): what the server asked us
+ * to send back so it can answer «nothing changed» with an empty 304 instead of the whole feed.
+ */
+export function conditionalHeaders(validators = {}) {
+  const headers = { Accept: ACCEPT };
+
+  /* A weak validator (`W/"…"`) only promises the content is *semantically* equivalent. A GET wants
+   * the exact bytes, so the reader does not claim a match it was never promised. */
+  const tag = typeof validators.etag === 'string' ? validators.etag.trim() : '';
+  if (tag && !tag.startsWith('W/')) headers['If-None-Match'] = tag;
+
+  const since = httpDate(validators.lastModified);
+  if (since) headers['If-Modified-Since'] = since;
+
+  return headers;
+}
+
 export class FeedError extends Error {
   constructor(message, { status, code, params, cause } = {}) {
     super(message);
@@ -22,7 +56,7 @@ export class FeedError extends Error {
   }
 }
 
-export async function fetchFeed(url) {
+export async function fetchFeed(url, validators = {}) {
   // The URL comes from storage, which can also be edited by hand in the console: keep it to http(s).
   if (!isValidHttpUrl(url)) {
     throw new FeedError('feed link must be http(s)', { code: 'feedUrl' });
@@ -33,9 +67,11 @@ export async function fetchFeed(url) {
     response = await fetch(url, {
       method: 'GET',
       credentials: 'omit',
+      /* The reader keeps its own validators in storage and asks with them; Chrome's HTTP cache would
+       * only hold a second, invisible copy of the same answer next to them. */
       cache: 'no-store',
       redirect: 'follow',
-      headers: { Accept: ACCEPT },
+      headers: conditionalHeaders(validators),
     });
   } catch (cause) {
     throw new FeedError(`failed to load feed: ${cause?.message ?? cause}`, {
@@ -45,10 +81,20 @@ export async function fetchFeed(url) {
     });
   }
 
+  /*
+   * For `fetch` a 304 is not `ok`, but here it is the answer we were hoping for: the feed still is
+   * the one we hold, and the server sent no body to prove otherwise. `204` says the same in its own
+   * way. Both keep the reader off the parse, the storage write and the «new headlines» count.
+   */
+  if (response.status === 304 || response.status === 204) {
+    return { feedTitle: '', entries: [], notModified: true, ...readValidators(response) };
+  }
+
   if (!response.ok) {
     throw new FeedError(`feed replied ${response.status}`, {
       code: 'feedStatus',
       params: { status: response.status, statusText: response.statusText },
+      status: response.status,
     });
   }
 
@@ -64,7 +110,18 @@ export async function fetchFeed(url) {
   }
   if (!text.trim()) throw new FeedError('feed returned an empty response', { code: 'feedEmpty' });
 
-  return parseFeed(text, response.url || url);
+  return { ...parseFeed(text, response.url || url), notModified: false, ...readValidators(response) };
+}
+
+/**
+ * Validators of *this* answer. A server that stopped sending `ETag` clears the old one: a validator
+ * it no longer recognises is a question it can only answer with the whole feed.
+ */
+export function readValidators(response) {
+  return {
+    etag: response.headers.get('etag')?.trim() ?? '',
+    lastModified: httpDate(response.headers.get('last-modified')),
+  };
 }
 
 /** Children of `parent` whose local name matches, ignoring namespaces. */

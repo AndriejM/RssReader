@@ -74,13 +74,21 @@ async function updateBadge() {
 /**
  * Read a feed through the offscreen document: a service worker has no DOMParser, so the XML is
  * loaded and parsed there and the parsed item fields (title, description, pubDate, link) come back.
+ * `validators` are the answers the last read of this feed left behind: the document may answer them
+ * with an empty 304 instead of the whole feed.
  */
-async function readFeed(url) {
-  const response = await requestOffscreen({ type: MSG_FETCH_FEED, url });
+async function readFeed(feed, validators = {}) {
+  const response = await requestOffscreen({
+    type: MSG_FETCH_FEED,
+    url: feed.rss_link,
+    etag: validators.etag,
+    lastModified: validators.lastModified,
+  });
   if (!response?.ok) {
     const err = response?.error;
     if (err && typeof err === 'object' && err.code) {
-      throw new FeedError(err.code, { code: err.code, params: err.params });
+      // `status` comes along: it is what tells a refused validator apart from a dead feed.
+      throw new FeedError(err.code, { code: err.code, params: err.params, status: err.status });
     }
     const message = typeof err === 'string' ? err : (err?.message ?? 'feed could not be read');
     throw new FeedError(message, { code: 'feedUnknown', params: { message } });
@@ -93,7 +101,9 @@ async function readFeed(url) {
  * `{ code, params }`, чтобы страница подписала его на своём языке; всё остальное — как есть.
  */
 function errorPayload(error) {
-  if (error?.code) return { code: error.code, params: error.params, message: error.message };
+  if (error?.code) {
+    return { code: error.code, params: error.params, message: error.message, status: error.status };
+  }
   return error?.message ?? String(error);
 }
 
@@ -110,6 +120,23 @@ async function reportFeedHealth(feedId, health) {
 }
 
 /**
+ * Сервер отверг наш ключ: та же адресная строка отвечает не лентой, а 412 / 404 / 410. Чаще всего
+ * причина — валидатор, который лента уже не узнаёт, поэтому следующая попытка идёт без него: упрямый
+ * сервер не должен превращать каждую загрузку в отказ.
+ */
+async function forgetValidators(feed, error) {
+  const status = Number(error?.status);
+  if (!(feed.etag || feed.lastModified) || ![404, 410, 412].includes(status)) return;
+
+  try {
+    await store.rememberFeedValidators(feed.id, {});
+    console.info(`feed "${feed.name}": ${status} — the reader stops asking with the answers it no longer gets`);
+  } catch (storageError) {
+    console.warn(`could not forget the validators of feed ${feed.id}:`, storageError?.message ?? storageError);
+  }
+}
+
+/**
  * Fetch one feed and write the new headlines to storage.
  * @param {{ notify?: boolean }} options - `notify` marks an alarm-driven (automatic) read,
  *   which is the only case that plays the sound.
@@ -119,22 +146,48 @@ async function ingestFeed(feed, { notify = false } = {}) {
   let result;
 
   try {
-    const fetched = await readFeed(feed.rss_link);
-    const now = Date.now();
-    const candidates = fetched.entries.map((entry) =>
-      store.makeItem({
-        feed,
-        title: entry.title,
-        description: entry.description,
-        pubDate: entry.pubDate,
-        link: entry.link,
-        time: now,
-      }),
-    );
+    /* Ключи описывают те заголовки, которые у нас лежат. Если их уже нет — ленту вычистил
+     * `clean_timeout`, их удалили, хранилище очистили, — спрашивать по ним значит получить пустой
+     * ответ вместо ленты и оставить читалку пустой до первой правки на сервере. Без ключей ленту
+     * просят целиком, как раньше. */
+    const held = await store.getItems();
+    const validators = held.some((item) => item.feedId === feed.id)
+      ? { etag: feed.etag, lastModified: feed.lastModified }
+      : {};
 
-    const { added, skipped } = await store.addItems(candidates);
-    result = { added, skipped, seen: fetched.entries.length };
+    const fetched = await readFeed(feed, validators);
+
+    /* Ответ сервера — это и ключи следующей загрузки: их записываем до того, как разберёмся с
+     * заголовками, чтобы отказ ленты не обнулил то, что она только что подтвердила. 304 обновляет
+     * ключ, но не возраст заголовков, которые этот ключ описывает. */
+    await store.rememberFeedValidators(feed.id, {
+      etag: fetched.etag,
+      lastModified: fetched.lastModified,
+      fetchedAt: fetched.notModified ? 0 : Date.now(),
+    });
+
+    if (fetched.notModified) {
+      /* «Не изменилось»: заголовки те же, что уже лежат в хранилище. Нечего ни парсить, ни
+       * добавлять — а значит, и считать «новыми». */
+      result = { added: 0, skipped: 0, seen: 0, notModified: true };
+    } else {
+      const now = Date.now();
+      const candidates = fetched.entries.map((entry) =>
+        store.makeItem({
+          feed,
+          title: entry.title,
+          description: entry.description,
+          pubDate: entry.pubDate,
+          link: entry.link,
+          time: now,
+        }),
+      );
+
+      const { added, skipped } = await store.addItems(candidates);
+      result = { added, skipped, seen: fetched.entries.length, notModified: false };
+    }
   } catch (error) {
+    await forgetValidators(feed, error);
     /* Диагноз пишется именно здесь: иначе отказ ленты не отличить от сбоя бейджа или сигнала, а
      * экран настроек показал бы здоровую ленту сломанной. */
     await reportFeedHealth(feed.id, { ok: false, error, time: startedAt });
@@ -175,6 +228,11 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
 
     const result = await ingestFeed(feed, { notify: true });
+    if (result.notModified) {
+      // A 304: the reader asked, the server sent no body, nothing in the reader changed.
+      console.info(`feed "${feed.name}": nothing new (304)`);
+      return;
+    }
     console.info(
       `feed "${feed.name}": new ${result.added}, parsed ${result.seen}, already read ${result.skipped}`,
     );

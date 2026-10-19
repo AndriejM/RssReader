@@ -64,13 +64,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === MSG_FETCH_FEED) {
     (async () => {
       try {
-        const result = await fetchFeed(message.url);
+        /* The worker hands over the validators it kept for this address: the request goes out as a
+         * conditional one and may come back an empty 304. */
+        const result = await fetchFeed(message.url, {
+          etag: message.etag,
+          lastModified: message.lastModified,
+        });
         sendResponse({ ok: true, result });
       } catch (error) {
         // A feed failure carries an i18n `code`/`params`: hand them to the caller so the page can
         // render the failure in its own language; otherwise fall back to the raw message.
         const payload = error?.code
-          ? { code: error.code, params: error.params, message: error.message }
+          ? { code: error.code, params: error.params, message: error.message, status: error.status }
           : error?.message ?? String(error);
         sendResponse({ ok: false, error: payload });
       }

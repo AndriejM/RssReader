@@ -309,16 +309,22 @@ async function refreshRow(rowRecord) {
       feedId: rowRecord.feed.id,
     });
     if (response?.ok) {
-      setStatus(
-        rowRecord,
-        t('feeds.result', {
-          added: response.added,
-          seen: response.seen,
-          read:
-            response.skipped > 0 ? t('feeds.resultRead', { skipped: response.skipped }) : '',
-        }),
-        response.added > 0 ? 'ok' : '',
-      );
+      if (response.notModified) {
+        /* Сервер ответил пустым 304: лента ровно та, что уже лежит в хранилище. «считано: 0»
+         * выглядело бы как пустая лента, поэтому строка говорит прямо, что не изменилось ничего. */
+        setStatus(rowRecord, t('feeds.resultUnchanged'));
+      } else {
+        setStatus(
+          rowRecord,
+          t('feeds.result', {
+            added: response.added,
+            seen: response.seen,
+            read:
+              response.skipped > 0 ? t('feeds.resultRead', { skipped: response.skipped }) : '',
+          }),
+          response.added > 0 ? 'ok' : '',
+        );
+      }
     } else {
       setStatus(
         rowRecord,

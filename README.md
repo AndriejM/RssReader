@@ -382,6 +382,21 @@ None of these fields exists until the feed has actually been read, and changing 
 names as “next check”, the feed's own poll period (`alarmPeriodMinutes(delay_timeout)`, the same
 formula `syncAlarms` uses) counted from the last read.
 
+A feed whose server answers with validators (`ETag` or `Last-Modified`) carries those answers too:
+
+```json
+{
+  "etag": "\"6f1a-2c9\"",                  // the `ETag` the server last answered with
+  "lastModified": "Mon, 07 Oct 2024 09:30:00 GMT", // its `Last-Modified`, kept as an HTTP-date
+  "lastFetchedAt": 1759857000000           // when the headlines these keys describe arrived, ms
+}
+```
+
+They are the feed's side of a conditional GET (see “Implementation notes”): the next read asks with
+them, and a server that answers `304` gets nothing parsed and nothing written. Like the health
+record they belong to one address, so changing `rss_link` clears them too — an `ETag` of the old
+feed would answer `304` for a different one.
+
 **`items`** — an array of headlines. The fields from the assignment are `rss_link`, `title`,
 `link`, `time`; `uid`/`feedId`/`feedName` were added internally: to identify a headline and avoid
 duplicates.
@@ -447,7 +462,7 @@ communicate like this:
 | `MSG_FEEDS_CHANGED` | reader (on opening), settings screen (after save/delete) | rebuilds alarms from the feed list, clears expired items, updates the badge |
 | `MSG_COUNT` | not used by pages yet (reserved) | replies `{ok, count}` — the number of headlines in storage |
 | `MSG_PLAY_SOUND` (`src`) | only `sound.playSound` from the background | the offscreen document plays the audio file selected on the settings screen from `src/media` |
-| `MSG_FETCH_FEED` (`url`) | only the background (`background.readFeed`) | the offscreen document reads the feed and parses it, replies `{ok, result}` or `{ok:false, error}` |
+| `MSG_FETCH_FEED` (`url`, `etag`, `lastModified`) | only the background (`background.readFeed`) | the offscreen document reads the feed conditionally and parses it, replies `{ok, result}` — where `result.notModified` says the server answered `304`, and `result.etag` / `result.lastModified` are the validators of the next read — or `{ok:false, error}` |
 
 Additionally, pages and the background listen to `chrome.storage.onChanged`: a change in `feeds`
 rebuilds alarms, a change in `items` updates the badge and the lists, a change in `settings`
@@ -595,6 +610,23 @@ background.
   is stored empty, and the reader substitutes `common.untitled` (the test `an error thrown for a
   page names a key every language translates` makes sure every code has a translation in every
   language).
+- **Conditional GET: the feed is asked whether it changed**: `ETag` and `Last-Modified` of the last
+  read are stored on the feed and sent back as `If-None-Match` / `If-Modified-Since`. A server that
+  answers `304` (or `204`) sends no body: `rss.js` returns it as `notModified` without decoding or
+  parsing anything, and `ingestFeed` writes no headlines, so the read costs one empty response
+  instead of the whole feed and cannot invent “new” headlines that are not new. `cache: 'no-store'`
+  stays: the reader keeps its own validators, and Chrome's HTTP cache would only hold a second,
+  invisible copy of the same answer. The details that make this safe: a weak validator (`W/"…"`)
+  is not sent, since it promises meaning rather than the bytes a GET wants; `Last-Modified` is only
+  kept when it really is an HTTP-date, because a validator the server cannot read often buys a 400;
+  a `304` may carry a fresher `ETag` than the body it refused to send, so the keys are rewritten
+  while `lastFetchedAt` — the age of the headlines those keys describe — is not; a server that
+  stops sending validators is not asked with the old ones any more, and a `404` / `410` / `412` on a
+  feed that had them makes the worker forget them, so one stubborn server cannot turn every poll
+  into a failure. A read that fails does not lose its keys: the next poll still asks politely. And
+  the keys are only asked with while the reader still holds the headlines they describe — once
+  `clean_timeout` has purged a feed's headlines, the next read asks for the whole feed, so a polite
+  `304` cannot leave the reader empty.
 - **No third-party dependencies**: feed polling and parsing are done by `fetch` under
   `host_permissions: <all_urls>`, the manifest requires no RSS parsing library, and XML is parsed
   by the built-in `DOMParser` — but exactly where it is allowed.
@@ -603,7 +635,7 @@ background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js) and the guards over the screen markup: 58 tests
+                             # storage.js) and the guards over the screen markup: 65 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -706,6 +738,12 @@ that is checked in the browser after loading the extension.
     the failure on the settings line disappear, the counter is back to zero and the old failure is no
     longer shown. Change the feed's `rss_link` on the feed screen → the old failures are gone with the
     address they described.
+27. Add a feed whose server answers with validators (`ETag` or `Last-Modified` — many news sites do)
+    and open the service worker's console → the first read brings those answers, and `feeds` in
+    `chrome.storage.local` grows `etag`, `lastModified` and `lastFetchedAt`. Press “Refresh” a minute
+    later → the console says `nothing new (304)`, the headlines and the badge stay exactly as they
+    were, and in the Network panel the request goes out with `If-None-Match` / `If-Modified-Since`
+    and comes back with an empty body.
 
 ## Limitations
 

@@ -12,6 +12,7 @@ import * as encoding from '../src/lib/encoding.js';
 import * as favicon from '../src/lib/favicon.js';
 import * as i18n from '../src/lib/i18n.js';
 import { SCREENS } from '../src/lib/nav.js';
+import * as rss from '../src/lib/rss.js';
 import * as store from '../src/lib/storage.js';
 import * as util from '../src/lib/util.js';
 
@@ -1318,6 +1319,264 @@ test('the feeds screen reports the health of each feed and the reader flags a fa
       assert.ok(keys.has(key), `${lang} has no ${key}, which the feeds screen asks to show`);
     }
   }
+});
+
+/* ------------------------- conditional GET ------------------------- */
+
+/** An answer of a feed server without the network: only the parts the reader of a feed reads. */
+function feedResponse({ status = 200, headers = {}, body = '' } = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: '',
+    url: '',
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
+    async arrayBuffer() {
+      return new TextEncoder().encode(body).buffer;
+    },
+  };
+}
+
+/** `chrome.storage.local` without Chrome: enough for the feed row one read writes. */
+function storageMemory() {
+  const memory = {};
+  globalThis.chrome = {
+    storage: {
+      local: {
+        async get(key) {
+          return key in memory ? { [key]: structuredClone(memory[key]) } : {};
+        },
+        async set(patch) {
+          for (const [key, value] of Object.entries(patch)) memory[key] = structuredClone(value);
+        },
+      },
+    },
+  };
+  return () => delete globalThis.chrome;
+}
+
+test('httpDate keeps a real HTTP-date and refuses anything else', () => {
+  assert.equal(rss.httpDate('Mon, 07 Oct 2024 09:30:00 GMT'), 'Mon, 07 Oct 2024 09:30:00 GMT');
+  assert.equal(rss.httpDate('  Mon, 7 Oct 2024 09:30:00 GMT  '), 'Mon, 07 Oct 2024 09:30:00 GMT');
+  assert.equal(rss.httpDate(''), '');
+  assert.equal(rss.httpDate(null), '');
+  assert.equal(
+    rss.httpDate('sometime last Tuesday'),
+    '',
+    'a validator the server cannot read would buy a 400 instead of a feed',
+  );
+});
+
+test('the next read asks with exactly the validators the feed gave us', () => {
+  const plain = rss.conditionalHeaders();
+  assert.deepEqual(Object.keys(plain), ['Accept'], 'a feed nobody has read is asked for plainly');
+
+  const asked = rss.conditionalHeaders({
+    etag: '"abc123"',
+    lastModified: 'Mon, 07 Oct 2024 09:30:00 GMT',
+  });
+  assert.equal(asked['If-None-Match'], '"abc123"');
+  assert.equal(asked['If-Modified-Since'], 'Mon, 07 Oct 2024 09:30:00 GMT');
+  assert.ok(asked.Accept.includes('application/rss+xml'), 'the read still names what it can read');
+
+  assert.equal(
+    rss.conditionalHeaders({ etag: 'W/"abc123"' })['If-None-Match'],
+    undefined,
+    'a weak validator promises meaning, not the bytes a GET wants',
+  );
+  assert.equal(
+    rss.conditionalHeaders({ lastModified: 'yesterday' })['If-Modified-Since'],
+    undefined,
+    'a date the server cannot parse is not sent at all',
+  );
+  assert.equal(rss.conditionalHeaders({ etag: '  "abc123"  ' })['If-None-Match'], '"abc123"');
+});
+
+test('the validators travel with the answer, and a server that stops sending them clears them', () => {
+  const answered = rss.readValidators(
+    feedResponse({ headers: { etag: '"abc123"', 'last-modified': 'Mon, 07 Oct 2024 09:30:00 GMT' } }),
+  );
+  assert.deepEqual(answered, { etag: '"abc123"', lastModified: 'Mon, 07 Oct 2024 09:30:00 GMT' });
+
+  assert.deepEqual(rss.readValidators(feedResponse({})), {
+    etag: '',
+    lastModified: '',
+  });
+
+  assert.deepEqual(
+    rss.readValidators(feedResponse({ status: 304, headers: { etag: '"newer"' } })),
+    { etag: '"newer"', lastModified: '' },
+    'a 304 may carry a fresher key than the body it refuses to send',
+  );
+});
+
+test('a 304 is an answer, not a failure: nothing is read, nothing is parsed', async () => {
+  const requests = [];
+  const realFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url, init });
+    return feedResponse({
+      status: 304,
+      headers: { etag: '"second"', 'last-modified': 'Tue, 08 Oct 2024 10:00:00 GMT' },
+    });
+  };
+
+  try {
+    const result = await rss.fetchFeed('https://a.b/rss', {
+      etag: '"first"',
+      lastModified: 'Mon, 07 Oct 2024 09:30:00 GMT',
+    });
+
+    assert.equal(requests.length, 1);
+    const sent = requests[0].init;
+    assert.deepEqual(
+      Object.keys(sent.headers).sort(),
+      ['Accept', 'If-Modified-Since', 'If-None-Match'],
+      'the read goes out with both validators and nothing else',
+    );
+    assert.equal(sent.headers['If-None-Match'], '"first"');
+    assert.equal(sent.headers['If-Modified-Since'], 'Mon, 07 Oct 2024 09:30:00 GMT');
+    assert.equal(sent.cache, 'no-store', "the reader keeps its own validators, not Chrome's cache");
+
+    assert.equal(result.notModified, true);
+    assert.deepEqual(result.entries, []);
+    assert.equal(result.feedTitle, '');
+    assert.deepEqual(
+      { etag: result.etag, lastModified: result.lastModified },
+      { etag: '"second"', lastModified: 'Tue, 08 Oct 2024 10:00:00 GMT' },
+      'the keys of the next read are the ones this answer gave',
+    );
+  } finally {
+    if (realFetch) globalThis.fetch = realFetch;
+    else delete globalThis.fetch;
+  }
+});
+
+test('a status that is not a feed is a failure that carries its number', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => feedResponse({ status: 429 });
+
+  try {
+    const error = await rss.fetchFeed('https://a.b/rss').then(
+      () => null,
+      (caught) => caught,
+    );
+
+    assert.ok(error instanceof rss.FeedError);
+    assert.equal(error.code, 'feedStatus', 'the page still gets a key it can translate');
+    assert.equal(error.status, 429, 'the number travels, so the worker can tell a dead feed from a refused key');
+    assert.deepEqual(error.params, { status: 429, statusText: '' });
+  } finally {
+    if (realFetch) globalThis.fetch = realFetch;
+    else delete globalThis.fetch;
+  }
+});
+
+test('a feed remembers the answers it was given, and forgets them with the address they describe', async () => {
+  const forget = storageMemory();
+
+  try {
+    const base = { id: 'cond', name: 'Conditional', rss_link: 'https://a.b/rss' };
+    await store.upsertFeed(base);
+
+    await store.rememberFeedValidators('cond', {
+      etag: '"first"',
+      lastModified: 'Mon, 07 Oct 2024 09:30:00 GMT',
+      fetchedAt: 1000,
+    });
+    let feed = (await store.getFeeds())[0];
+    assert.equal(feed.etag, '"first"');
+    assert.equal(feed.lastModified, 'Mon, 07 Oct 2024 09:30:00 GMT');
+    assert.equal(feed.lastFetchedAt, 1000, 'the date belongs to the headlines these keys describe');
+
+    // A 304 refreshes the keys without making the headlines it did not send any fresher.
+    await store.rememberFeedValidators('cond', { etag: '"second"', fetchedAt: 0 });
+    feed = (await store.getFeeds())[0];
+    assert.equal(feed.etag, '"second"');
+    assert.equal(feed.lastFetchedAt, 1000, 'a 304 sends no headlines, so nothing became newer');
+
+    // The server stopped answering with keys: the next read must ask plainly.
+    await store.rememberFeedValidators('cond', {});
+    feed = (await store.getFeeds())[0];
+    assert.equal(feed.etag, undefined);
+    assert.equal(feed.lastModified, undefined);
+    assert.equal(feed.lastFetchedAt, undefined);
+
+    assert.equal(await store.rememberFeedValidators('gone', { etag: '"x"' }), false, 'a deleted feed writes nothing');
+
+    await store.rememberFeedValidators('cond', { etag: '"first"', lastModified: 'Mon, 07 Oct 2024 09:30:00 GMT', fetchedAt: 2000 });
+    await store.markFeedChecked('cond', { ok: false, error: { code: 'feedStatus', message: 'HTTP 500' }, time: 3000 });
+    feed = (await store.getFeeds())[0];
+    assert.equal(feed.etag, '"first"', 'a feed that failed is not punished by forgetting the key it still has');
+
+    await store.upsertFeed({ ...base, rss_link: 'https://a.b/new' });
+    feed = (await store.getFeeds())[0];
+    assert.equal(feed.rss_link, 'https://a.b/new');
+    assert.equal(feed.etag, undefined, 'a key of the old address could answer 304 for a different feed');
+    assert.equal(feed.lastModified, undefined);
+    assert.equal(feed.lastFetchedAt, undefined);
+    assert.equal(feed.lastErrorCode, undefined);
+
+    assert.deepEqual(
+      Object.keys(store.emptyFeed()),
+      ['id', 'name', 'rss_link', 'delay_timeout', 'clean_timeout'],
+      'a feed nobody has read still describes only its settings',
+    );
+  } finally {
+    forget();
+  }
+});
+
+/**
+ * A validator is worth nothing if it never reaches the request that is made in another part of the
+ * extension. This guard follows the keys over that route: the worker hands them to the offscreen
+ * document, the document hands them to `fetchFeed`, and what comes back is written to storage.
+ */
+test('the validators make the whole trip: storage — worker — offscreen document — request', () => {
+  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+  const offscreen = fs.readFileSync(new URL('../src/offscreen.js', import.meta.url), 'utf8');
+
+  const readCall = worker.match(/async function readFeed\(feed, validators = \{\}\)[\s\S]*?\n}/);
+  assert.ok(readCall, 'the worker reads a feed through the offscreen document');
+  assert.match(readCall[0], /url: feed\.rss_link/);
+  assert.match(readCall[0], /etag: validators\.etag/, 'the stored key is handed to the document');
+  assert.match(readCall[0], /lastModified: validators\.lastModified/);
+
+  const fetchMessage = offscreen.match(/message\?\.type === MSG_FETCH_FEED[\s\S]*?\n  \}/);
+  assert.ok(fetchMessage, 'the document answers the read request');
+  assert.match(
+    fetchMessage[0],
+    /fetchFeed\(message\.url,\s*\{[^}]*etag: message\.etag[^}]*lastModified: message\.lastModified/s,
+    'the document does not drop the keys on its way to the request',
+  );
+
+  const ingest = worker.match(/async function ingestFeed\([\s\S]*?\n  \} catch \(error\)/);
+  assert.ok(ingest, 'the worker writes one feed read to storage');
+  assert.match(
+    ingest[0],
+    /store\.rememberFeedValidators\(feed\.id,\s*\{[^}]*etag: fetched\.etag[^}]*lastModified: fetched\.lastModified/s,
+    'what the answer gave back is written back to storage',
+  );
+
+  /* A 304 only makes sense while the reader still holds what the keys describe: with the feed's
+   * headlines purged by `clean_timeout`, asking politely would leave the reader empty. */
+  assert.match(
+    ingest[0],
+    /held\.some\(\(item\) => item\.feedId === feed\.id\)\s*\?\s*\{ etag: feed\.etag, lastModified: feed\.lastModified \}\s*:\s*\{\}/,
+    'a feed whose headlines are gone is asked for plainly, not with keys that answer 304',
+  );
+
+  const unchanged = ingest[0].match(/if \(fetched\.notModified\) \{[\s\S]*?\n    \} else \{/);
+  assert.ok(unchanged, 'a 304 has its own branch apart from a feed that came through');
+  assert.ok(!/addItems|makeItem/.test(unchanged[0]), 'a 304 writes no headlines');
+
+  const feedsScreen = fs.readFileSync(new URL('../src/feeds.js', import.meta.url), 'utf8');
+  assert.match(
+    feedsScreen,
+    /response\.notModified/,
+    'the feed screen says «unchanged» rather than «0 headlines read»',
+  );
 });
 
 /* ---------------------------- runner ---------------------------- */

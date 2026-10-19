@@ -91,8 +91,12 @@ export async function upsertFeed(feed) {
     const previous = feeds[index];
     const next = { ...previous, ...feed };
     /* Сбои описывают тот адрес, по которому ленту читали. Когда адрес меняют, прошлые сбои
-     * относятся к другому URL и больше ничего не объясняют, поэтому они сбрасываются. */
-    if (feed.rss_link && feed.rss_link !== previous.rss_link) clearFeedDiagnostics(next);
+     * относятся к другому URL и больше ничего не объясняют, поэтому они сбрасываются. Тот же
+     * смысл у ответов сервера: ключ `ETag` с другого адреса — готовый ответ 304 на чужую ленту. */
+    if (feed.rss_link && feed.rss_link !== previous.rss_link) {
+      clearFeedDiagnostics(next);
+      clearFeedValidators(next);
+    }
     feeds[index] = next;
   }
   await saveFeeds(feeds);
@@ -115,11 +119,23 @@ const FEED_DIAGNOSTIC_KEYS = [
   'nextAlarmAt',
 ];
 
+/**
+ * Ответы ленты на прошлую загрузку, по которым следующая может спросить «не изменилось ли что»:
+ * `ETag` и `Last-Modified` сервера и момент, когда их получили. Как и диагноз, они описывают тот
+ * адрес, по которому ленту читали: смена `rss_link` стирает их вместе с ним.
+ */
+const FEED_CACHE_KEYS = ['etag', 'lastModified', 'lastFetchedAt'];
+
 /** Текст отказа хранится коротким: он нужен для подписи в интерфейсе, а не как журнал. */
 const MAX_FEED_ERROR_MESSAGE = 300;
 
 function clearFeedDiagnostics(feed) {
   for (const key of FEED_DIAGNOSTIC_KEYS) delete feed[key];
+  return feed;
+}
+
+function clearFeedValidators(feed) {
+  for (const key of FEED_CACHE_KEYS) delete feed[key];
   return feed;
 }
 
@@ -164,6 +180,39 @@ export async function markFeedChecked(feedId, { ok = true, error = null, time = 
 
     feed.fetchFailureCount = Math.max(1, (Number(feed.fetchFailureCount) || 0) + 1);
   }
+
+  await saveFeeds(feeds);
+  return true;
+}
+
+/**
+ * Записать в строку ленты ответы сервера на эту загрузку — те самые `ETag` и `Last-Modified`, с которыми
+ * следующий запрос может спросить «не изменилось ли что» вместо того, чтобы просить всю ленту заново.
+ * Пустой ответ сервера стирает прежний ключ: тот, чего сервер больше не присылает, он и не примет.
+ * @param {{ etag?: string, lastModified?: string, fetchedAt?: number }} answer - `fetchedAt` is the
+ *   moment the server last sent the headlines these validators describe. Empty for a 304: the key is
+ *   newer, the content is the same age it already was.
+ */
+export async function rememberFeedValidators(
+  feedId,
+  { etag = '', lastModified = '', fetchedAt = 0 } = {},
+) {
+  const feeds = await getFeeds();
+  const feed = feeds.find((candidate) => candidate.id === feedId);
+  if (!feed) return false;
+
+  const tag = typeof etag === 'string' ? etag.trim() : '';
+  if (tag) feed.etag = tag;
+  else delete feed.etag;
+
+  if (lastModified) feed.lastModified = lastModified;
+  else delete feed.lastModified;
+
+  /* Момент получения заголовков живёт вместе с ними: 304 обновляет ключ, но не возраст того, что
+   * эти ключи описывают. Когда сервер перестал их присылать, дату стираем вместе с ними. */
+  const at = Number(fetchedAt);
+  if (at > 0) feed.lastFetchedAt = at;
+  else if (!(tag || lastModified)) delete feed.lastFetchedAt;
 
   await saveFeeds(feeds);
   return true;
