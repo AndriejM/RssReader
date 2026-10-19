@@ -284,14 +284,15 @@ src/lib/i18n.js              every label, message and tooltip: the `ru`, `en`, `
                               `applyI18n()`, units, browser language
 src/lib/i18n-boot.js         apply the stored language before the page is drawn by its module
 src/lib/errors.js             turn a feed error (`{code, params}`) into text in the page's language
-src/offscreen.html|js         offscreen document: the extension's only context with a DOM — feed
-                              XML is parsed and sound is played here
+src/offscreen.html|js         offscreen document: the extension's only context with a DOM — the
+                              feed answers are read here (XML with DOMParser, JSON Feed as JSON) and
+                              sound is played here
 src/lib/messages.js           message names between pages and the service worker
 src/lib/storage.js            feeds, headlines, read list, settings, feed read locks, automatic cleanup
 src/lib/alarms.js             an alarm per feed + a periodic-cleanup alarm
 src/lib/offscreen.js          creating the offscreen document and exchanging messages with it
-src/lib/rss.js                loading and parsing RSS 2.0 / Atom / RDF (runs inside the
-                              offscreen document)
+src/lib/rss.js                loading and parsing RSS 2.0 / Atom / RDF / JSON Feed (runs inside
+                              the offscreen document)
 src/lib/encoding.js           response bytes → text: find the feed's encoding (BOM, `Content-Type`,
                               the XML declaration) and decode it with it (covered by tests)
 src/lib/extract.js            article text extraction on a headline click
@@ -326,7 +327,8 @@ scripts/make_icons.mjs        regenerate the icons without dependencies
 scripts/check_icons.mjs       verify the result of make_icons.mjs
 examples/                     example_rss.xml — a sample feed; neither the reader code nor the
                               tests reference it; nnm_example_rss_item.xml — a sample feed in
-                              Windows-1251: the decoding tests rely on it
+                              Windows-1251: the decoding tests rely on it; example_json_feed.json —
+                              a JSON Feed 1.1 sample: the JSON parsing tests rely on it
 ```
 
 ## How the requirements are met
@@ -415,8 +417,8 @@ identify a headline and avoid duplicates.
   "rss_link": "https://habr.com/ru/rss/all/all/",  // link to the feed
   "title": "Заголовок новости",
   "link": "https://habr.com/ru/news/…/",            // http link to the news, as the feed wrote it
-  "sourceId": "https://habr.com/ru/news/1",         // what the feed calls this news: its guid / Atom <id>, else its link
-  "sourceIdType": "link",                          // 'link' | 'guid' | 'atom:id'
+  "sourceId": "https://habr.com/ru/news/1",         // what the feed calls this news: its guid / Atom <id> / JSON Feed id, else its link
+  "sourceIdType": "link",                          // 'link' | 'guid' | 'atom:id' | 'json:id'
   "time": 1760000000000                             // headline loading time, ms
 }
 ```
@@ -430,7 +432,7 @@ so a mark survives both a feed edit and the server reissuing the news under anot
 {
   "link": "https://habr.com/ru/news/…/",              // the address the news had when it was deleted
   "sourceId": "https://habr.com/ru/news/1",           // the identity the marker is matched by
-  "sourceIdType": "link",                            // 'link' | 'guid' | 'atom:id'
+  "sourceIdType": "link",                            // 'link' | 'guid' | 'atom:id' | 'json:id'
   "pubDate": "Tue, 01 Oct 2024 08:00:00 GMT",        // the list is cleaned by this field's age
   "time": 1760000000000                              // deletion moment, if pubDate is absent
 }
@@ -551,6 +553,21 @@ background.
   against the feed URL; up to 250 entries per response. The RSS `guid` (an `isPermaLink="false"`
   one, above all) and the Atom `<id>` are kept as `sourceId` — the name the feed gives its news,
   which is what the dedup matches on.
+- **JSON Feed is supported too** (`application/feed+json`, and the `application/json` many sites
+  serve it under): the answer is read as the object it is — its `title` and its `items[]` — with no
+  DOM involved, so its rules are held by `scripts/test.mjs`. An item's `url` (or its `id`, when it is
+  itself an address) becomes the `link` resolved against the feed URL; `content_html` is kept
+  verbatim like `<description>` is, while plain `content_text` becomes one paragraph with its markup
+  characters escaped; the item's `image` and its image `attachments` become an `<img>` tag in front of
+  that text — the only shape a preview picture of this reader takes — where an attachment the feed
+  marks `in_feed`, one whose address the text already carries, and one that is no image (audio, video)
+  are left out, and `title_text` becomes the alternative text; `date_published` (or `date_modified`)
+  becomes `pubDate`; the item's `id` is
+  kept as `sourceId` under the `json:id` type, so the dedup works over a JSON Feed exactly as it
+  does over XML. Which format an answer is in is decided by the response type and, when it says
+  nothing useful, by how the body opens: a body that opens with `{` is read as JSON even under
+  `text/html`, and an ordinary RSS document served under `application/json` is still read as RSS. A
+  JSON answer that turns out to be no feed fails as `errors.feedNotJson`.
 - **The feed encoding is determined before writing to storage**: the response body is read as
   bytes (`response.arrayBuffer()`) rather than `response.text()` — the latter reads everything as
   UTF-8, which made a Windows-1251 feed (still served by Russian-language sites) land in
@@ -696,20 +713,21 @@ background.
   `busy` — that request fetched nothing and has no numbers of its own, and the most such a ticket
   can cost its feed is `FETCH_LOCK_TTL_MS`.
 - **No third-party dependencies**: feed polling and parsing are done by `fetch` under
-  `host_permissions: <all_urls>`, the manifest requires no RSS parsing library, and XML is parsed
-  by the built-in `DOMParser` — but exactly where it is allowed.
+  `host_permissions: <all_urls>`, the manifest requires no RSS parsing library: XML is parsed
+  by the built-in `DOMParser` — but exactly where it is allowed — and JSON Feed by `JSON.parse`.
 
 ## Validation
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js) and the guards over the screen markup: 73 tests
+                             # storage.js and rss.js) and the guards over the screen markup: 93 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
 
 The tests do not cover `chrome.*` code (alarms, action, offscreen, messages) or XML parsing —
-that is checked in the browser after loading the extension.
+that is checked in the browser after loading the extension. JSON Feed parsing needs no DOM, so its
+rules are covered by the tests.
 
 ### What to check in the browser
 

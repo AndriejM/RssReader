@@ -1,5 +1,6 @@
-// Runs in the offscreen document: the only extension context with a DOM, so it is where the
-// feed XML is parsed and where audio is allowed to play.
+// Runs in the offscreen document: the only extension context with a DOM, so it is where the feed
+// answers are read — XML parsed with DOMParser, JSON Feed read as an object — and where audio is
+// allowed to play.
 
 import { MSG_FETCH_FEED, MSG_PLAY_SOUND } from './lib/messages.js';
 import { fetchFeed } from './lib/rss.js';

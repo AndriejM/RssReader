@@ -1,4 +1,4 @@
-// RSS / Atom / RDF fetching and parsing.
+// RSS / Atom / RDF / JSON Feed fetching and parsing.
 // Runs inside the offscreen document, not in the service worker: this is the only context of
 // the extension that has DOMParser. `host_permissions` make the request same-
 // enough for the response to be readable (no CORS problem).
@@ -6,8 +6,16 @@
 import { FEED_FETCH_TIMEOUT_MS, absoluteUrl, cleanTitle, isValidHttpUrl, linkKey } from './util.js';
 import { decodeResponseBytes, retargetXmlDeclaration } from './encoding.js';
 
-const ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5';
+const ACCEPT =
+  'application/feed+json, application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, application/json;q=0.7, */*;q=0.5';
 const MAX_ENTRIES = 250;
+
+/**
+ * The media types a JSON Feed is served under. `application/feed+json` is the one the format
+ * registers for itself; `application/json` is what a good part of the sites serving it actually
+ * write in the header.
+ */
+const JSON_TYPES = new Set(['application/feed+json', 'application/json', 'application/x-jsonfeed', 'text/json']);
 
 /**
  * `If-Modified-Since` understands one format: an HTTP-date. Anything else is not sent at all — a
@@ -41,6 +49,43 @@ export function conditionalHeaders(validators = {}) {
   if (since) headers['If-Modified-Since'] = since;
 
   return headers;
+}
+
+/** The media type of a response, without its `; charset=…`. */
+function mediaType(contentType) {
+  return String(contentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Did the server answer that this is JSON? A type is matched whole: `application/jsonfeed` is not
+ * `application/json`, and a site that writes `application/xml` means XML even when its body starts
+ * with a brace.
+ */
+export function isJsonType(contentType) {
+  return JSON_TYPES.has(mediaType(contentType));
+}
+
+/**
+ * Does the body open like a JSON object? JSON Feed says nothing about the type a site must write in
+ * its header, only that the document is JSON — so a site that answers `text/html` over a JSON body
+ * is still read as JSON.
+ */
+export function looksLikeJson(text) {
+  return String(text ?? '').trimStart().startsWith('{');
+}
+
+/**
+ * Is this answer a JSON Feed? The body decides first: an object is JSON whatever the header called
+ * it. A header that names a JSON type counts too — until the body opens with markup, because a
+ * misconfigured site answering `application/json` over an ordinary RSS document is a feed to be read,
+ * not a failure to be reported.
+ */
+export function isJsonFeed(text, contentType) {
+  if (looksLikeJson(text)) return true;
+  return isJsonType(contentType) && !String(text ?? '').trimStart().startsWith('<');
 }
 
 export class FeedError extends Error {
@@ -102,19 +147,25 @@ export async function fetchFeed(url, validators = {}, { timeoutMs = FEED_FETCH_T
       });
     }
 
+    const contentType = response.headers.get('content-type') ?? '';
+
     // The body is read as bytes and decoded by the encoding the feed actually uses (see
     // `lib/encoding.js`): `response.text()` reads UTF-8, which turns a Windows-1251 feed into
     // unreadable headlines before they ever reach storage.
     const { text, encoding, declared } = decodeResponseBytes(
       new Uint8Array(await response.arrayBuffer()),
-      response.headers.get('content-type') ?? '',
+      contentType,
     );
     if (declared && declared !== encoding) {
       console.warn(`feed declared ${declared}, its bytes read as ${encoding}: ${response.url || url}`);
     }
     if (!text.trim()) throw new FeedError('feed returned an empty response', { code: 'feedEmpty' });
 
-    return { ...parseFeed(text, response.url || url), notModified: false, ...readValidators(response) };
+    return {
+      ...parseFeed(text, response.url || url, contentType),
+      notModified: false,
+      ...readValidators(response),
+    };
   } catch (error) {
     /* A failure we already described says its own piece: only what the timer broke needs one. */
     if (error instanceof FeedError) throw error;
@@ -181,11 +232,20 @@ function entryLink(entry) {
 }
 
 /**
- * Needs a DOM: call it only from a context where DOMParser exists (the offscreen document).
+ * Needs a DOM for the XML formats: call it only from a context where DOMParser exists (the offscreen
+ * document). JSON Feed is read from the same place, but needs no DOM: it is a plain object.
  * Fields of entries reflect storage record: { title, description, pubDate, link, sourceId,
  * sourceIdType }.
+ *
+ * Which format the answer is in is decided here, from the type the server wrote and — when it said
+ * nothing useful — from how the body opens.
  */
-export function parseFeed(xml, baseUrl) {
+export function parseFeed(text, baseUrl, contentType = '') {
+  if (isJsonFeed(text, contentType)) return parseJsonFeed(text, baseUrl);
+  return parseXmlFeed(text, baseUrl);
+}
+
+function parseXmlFeed(xml, baseUrl) {
   // The text is already decoded by `lib/encoding.js`; the declaration inside it must not invite an
   // XML processor to decode the same bytes a second time, in an encoding they are no longer in.
   const doc = new DOMParser().parseFromString(retargetXmlDeclaration(xml, 'utf-8'), 'application/xml');
@@ -246,6 +306,141 @@ export function parseFeed(xml, baseUrl) {
 }
 
 /**
+ * JSON Feed (https://www.jsonfeed.org/version/1.1/): the document is one object and its `items` are
+ * the headlines. Read as an object, not as markup — and, unlike the XML formats, with no DOM, which
+ * is what lets the rules below be held by the tests (scripts/test.mjs).
+ *
+ * A JSON document that turns out to be no feed is a failure the reader reports rather than a feed
+ * with no headlines: it was read as JSON, and the answer did not agree.
+ */
+export function parseJsonFeed(text, baseUrl) {
+  let feed;
+  try {
+    feed = JSON.parse(text);
+  } catch (error) {
+    throw new FeedError('not valid feed JSON', { code: 'feedNotJson', cause: error });
+  }
+
+  if (!feed || typeof feed !== 'object' || Array.isArray(feed) || !Array.isArray(feed.items)) {
+    throw new FeedError('feed JSON has no `items` array', { code: 'feedNotJson' });
+  }
+
+  const feedTitle = cleanTitle(jsonText(feed.title), '');
+
+  const entries = [];
+  const seen = new Set();
+
+  for (const item of feed.items.slice(0, MAX_ENTRIES)) {
+    if (!item || typeof item !== 'object') continue;
+
+    const rawId = jsonText(item.id);
+    // `url` is the address of the news; an `id` that is itself an address opens when the item has no
+    // url — the same rule a permalink `<guid>` follows in RSS.
+    const rawLink = jsonText(item.url) || (isValidHttpUrl(rawId) ? rawId : '');
+    // Without a link there is nothing to open later, and absoluteUrl('') would resolve to
+    // the feed URL itself.
+    if (!rawLink) continue;
+
+    const link = absoluteUrl(rawLink, baseUrl);
+    if (!link) continue;
+
+    const { sourceId, sourceIdType } = sourceIdentity({ link, jsonId: rawId });
+    if (!sourceId) continue;
+
+    // Two `items` of one feed that the feed calls the same news are one headline here.
+    const key = `${sourceIdType}:${sourceId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const text = jsonText(item.content_html) || paragraph(jsonText(item.content_text));
+
+    entries.push({
+      title: cleanTitle(jsonText(item.title), ''),
+      // `content_html` is HTML and is kept verbatim, like `<description>` is. `content_text` is plain
+      // text: it becomes one paragraph, with its own angle brackets escaped so a plain text item is
+      // not read as markup by the panel that shows it.
+      // The pictures the item states outside its text lead the description, the way the picture of a
+      // usual `<description>` leads it.
+      description: `${jsonImages(item, baseUrl, text)}${text}`,
+      // `date_published` is the format's own publication date; `date_modified` stands in when the
+      // feed states only that.
+      pubDate: jsonText(item.date_published) || jsonText(item.date_modified),
+      link,
+      // What the feed calls this news: kept beside the link so a headline is still recognised when
+      // the address it points at has moved (see `storage.makeItem`).
+      sourceId,
+      sourceIdType,
+    });
+  }
+
+  return { feedTitle, entries };
+}
+
+/** A field of a JSON feed as text: a number or a boolean (a numeric `id`, a `title` of one digit) is still readable. */
+function jsonText(value) {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
+/** Plain text of a JSON Feed item, made into one paragraph. */
+function paragraph(text) {
+  if (!text) return '';
+  return `<p>${escapeText(text)}</p>`;
+}
+
+/** Markup characters of a value written into the description — as text or as an attribute value. */
+function escapeText(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * The pictures a JSON Feed item states beside its text — its `image` and its image `attachments` —
+ * as `<img>` tags. A preview picture of this reader is an `<img>` inside `description` and nothing
+ * else: that is the tag `storage.makeItem` puts in one uniform box and `extract.sanitizePreview`
+ * is willing to render, so the fields have to become tags here, in the parser.
+ *
+ * Two kinds of attachment are left out on purpose. One the feed marks `in_feed` — the feed says the
+ * picture already stands in its `content_html`, and putting it twice is not an improvement — and one
+ * of another kind than an image: an audio or video attachment has nothing to show in a preview.
+ */
+function jsonImages(item, baseUrl, content) {
+  const candidates = [
+    // `image` is either the address of the picture or an attachment object of the same shape as the
+    // ones in `attachments`.
+    typeof item.image === 'string' ? { url: item.image } : item.image,
+    ...(Array.isArray(item.attachments) ? item.attachments : []),
+  ];
+
+  const tags = [];
+  const used = new Set();
+
+  for (const attachment of candidates) {
+    if (!attachment || typeof attachment !== 'object') continue;
+    if (attachment.in_feed === true) continue;
+
+    const mime = jsonText(attachment.mime_type).toLowerCase();
+    // An attachment that names no type is an image: `image/jpeg` is the default JSON Feed gives it.
+    if (mime && !mime.startsWith('image/')) continue;
+
+    const src = absoluteUrl(jsonText(attachment.url), baseUrl);
+    // A relative address is resolved from the feed, as a relative `<link>` is. The reader previews
+    // only http(s) pictures, so anything else (`data:`, `mailto:`) is not worth a tag.
+    if (!src || !isValidHttpUrl(src)) continue;
+    if (used.has(src) || content.includes(src)) continue;
+
+    used.add(src);
+    tags.push(`<img src="${src}" alt="${escapeText(jsonText(attachment.title_text))}" />`);
+  }
+
+  return tags.length ? `<p>${tags.join('')}</p>` : '';
+}
+
+/**
  * The id fields of one entry, read straight from the XML: the RSS `<guid>` with its `isPermaLink`
  * spelling, and the Atom `<id>`.
  */
@@ -267,18 +462,28 @@ function entryIdentity(node) {
  *
  * The feed's own id wins over its link, because that is the field a feed keeps stable while it
  * rewrites the address: an opaque RSS `<guid>`, then the Atom `<id>` (required by the Atom spec to
- * be unique and stable for the life of the entry). With neither, the identity *is* the link — read
- * the way `util.linkKey` reads it, so the copy of the next poll matches the one in storage.
+ * be unique and stable for the life of the entry), then the `id` of a JSON Feed item (required by
+ * JSON Feed to be unique and stable for the life of the item). With none of them, the identity *is*
+ * the link — read the way `util.linkKey` reads it, so the copy of the next poll matches the one in
+ * storage.
  *
- * @param {{ link?: string, guid?: string, guidIsLink?: boolean, atomId?: string }} entry
- * @returns {{ sourceId: string, sourceIdType: 'link' | 'guid' | 'atom:id' }}
+ * @param {{ link?: string, guid?: string, guidIsLink?: boolean, atomId?: string, jsonId?: string }} entry
+ * @returns {{ sourceId: string, sourceIdType: 'link' | 'guid' | 'atom:id' | 'json:id' }}
  */
-export function sourceIdentity({ link = '', guid = '', guidIsLink = true, atomId = '' } = {}) {
+export function sourceIdentity({
+  link = '',
+  guid = '',
+  guidIsLink = true,
+  atomId = '',
+  jsonId = '',
+} = {}) {
   const rawGuid = String(guid ?? '').trim();
   const rawId = String(atomId ?? '').trim();
+  const rawJson = String(jsonId ?? '').trim();
 
   if (rawGuid && !guidIsLink) return { sourceId: rawGuid, sourceIdType: 'guid' };
   if (rawId) return { sourceId: isValidHttpUrl(rawId) ? linkKey(rawId) : rawId, sourceIdType: 'atom:id' };
+  if (rawJson) return { sourceId: isValidHttpUrl(rawJson) ? linkKey(rawJson) : rawJson, sourceIdType: 'json:id' };
 
   /* A permalink guid is the address of the news — `parseFeed` opens it when the entry has no other
    * link — so such a guid is not an id of its own: the identity is the link the reader keeps. */

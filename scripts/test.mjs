@@ -2,8 +2,10 @@
 //
 //   node scripts/test.mjs
 //
-// Only the chrome-free logic is covered (src/lib/util.js, src/lib/storage.js, src/lib/i18n.js), plus the guards that read the pages themselves. The chrome.*-dependent code is exercised in the
-// browser.
+// Only the chrome-free logic is covered (src/lib/util.js, src/lib/storage.js, src/lib/i18n.js, the
+// decoding rules of src/lib/encoding.js, the JSON Feed parsing of src/lib/rss.js), plus the guards
+// that read the pages themselves. The chrome.*-dependent code and the XML parsing are exercised in
+// the browser.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -949,6 +951,284 @@ test('the XML declaration states the encoding the text really arrived in', () =>
     '<rss version="2.0"><channel/></rss>',
     'a document that declares nothing is returned as it is',
   );
+});
+
+test('a JSON body is not read as a page that declares a charset inside it', () => {
+  // Cyrillic spelled the way UTF-8 spells it, inside a JSON string that talks about a Windows-1251 page.
+  const json = `{"title":"${CYRILLIC_HEADLINE}","content_html":"<meta charset=\"windows-1251\">"}`;
+  const read = encoding.decodeResponseBytes(new TextEncoder().encode(json), 'application/json');
+
+  assert.equal(read.declared, null, 'JSON declares no encoding of its bytes');
+  assert.equal(read.encoding, 'utf-8');
+  assert.ok(read.text.includes(CYRILLIC_HEADLINE), 'the headline is not read through someone else\'s charset');
+});
+
+/* ---------------------------- JSON Feed ---------------------------- */
+
+/** The sample of the format the reader meets: JSON Feed 1.1, written the way a real one is written. */
+const JSON_FEED = fs.readFileSync(new URL('../examples/example_json_feed.json', import.meta.url), 'utf8');
+
+/** What a call throws, instead of what it returns. */
+function thrownBy(fn) {
+  try {
+    fn();
+    return null;
+  } catch (error) {
+    return error;
+  }
+}
+
+/** An answer of a feed server that is JSON: `feedResponse` with the type the site really writes. */
+async function readAnswer(contentType, body) {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    feedResponse({ headers: { 'content-type': contentType }, body });
+  try {
+    return await rss.fetchFeed('https://a.b/feed');
+  } finally {
+    if (realFetch) globalThis.fetch = realFetch;
+    else delete globalThis.fetch;
+  }
+}
+
+test('the reader asks for JSON Feed and tells it from an XML feed', () => {
+  const asked = rss.conditionalHeaders();
+  assert.ok(asked.Accept.includes('application/feed+json'), 'the read names the format it can read');
+  assert.ok(asked.Accept.includes('application/json'), 'and the type many sites serve it under');
+
+  assert.ok(rss.isJsonType('application/feed+json'), 'the type the format registers for itself');
+  assert.ok(rss.isJsonType('application/feed+json; charset=utf-8'), 'the charset does not hide it');
+  assert.ok(rss.isJsonType('  Application/JSON  '), 'a header is matched whatever its case');
+  assert.ok(!rss.isJsonType('application/jsonfeed'), 'a type is matched whole, not by prefix');
+  assert.ok(!rss.isJsonType('application/rss+xml'), 'XML stays XML');
+  assert.ok(!rss.isJsonType(''), 'an answer that names nothing is not JSON');
+
+  assert.ok(rss.looksLikeJson('  \n{"items":[]}'), 'a body that opens like an object');
+  assert.ok(!rss.looksLikeJson('[{"id": 1}]'), 'an array is not a feed: JSON Feed puts its items in an object');
+  assert.ok(!rss.looksLikeJson('<?xml version="1.0"?><rss/>'));
+
+  assert.ok(rss.isJsonFeed('{"items": []}', 'text/html'), 'the body decides whatever the header says');
+  assert.ok(rss.isJsonFeed('{"items": []}', ''), 'and an answer that names nothing is read by its body');
+  assert.ok(rss.isJsonFeed('{"items": []}', 'application/rss+xml'), 'even against a header that says XML');
+  assert.ok(
+    !rss.isJsonFeed('<rss><channel/></rss>', 'application/json'),
+    'a site answering `application/json` over an ordinary RSS document is a feed, not a failure',
+  );
+  assert.ok(!rss.isJsonFeed('<?xml version="1.0"?><rss/>', 'application/feed+json'));
+});
+
+test('a JSON Feed item becomes the same entry an <item> becomes', () => {
+  const feed = rss.parseJsonFeed(JSON_FEED, 'https://multfilmy.example/feed.json');
+
+  assert.equal(feed.feedTitle, 'Короткометражные мультфильмы');
+  assert.equal(feed.entries.length, 3);
+
+  const [html, text, noTitle] = feed.entries;
+
+  assert.deepEqual(
+    {
+      title: html.title,
+      pubDate: html.pubDate,
+      link: html.link,
+      sourceId: html.sourceId,
+      sourceIdType: html.sourceIdType,
+    },
+    {
+      title: 'Коллекция короткометражных мультфильмов (1984-2011) BDRip',
+      pubDate: '2026-10-12T09:32:48+03:00',
+      link: 'https://multfilmy.example/news/1041',
+      sourceId: 'https://multfilmy.example/news/1041',
+      sourceIdType: 'json:id',
+    },
+  );
+  assert.ok(
+    html.description.includes('<img src="https://multfilmy.example/img/pixarddda35886b18e856.jpg"'),
+    'content_html is kept as it is written: the preview picture of the item survives',
+  );
+
+  // An `id` that is not an address is kept the way the feed wrote it; a relative `url` is resolved
+  // from the feed address, exactly as a relative `<link>` is.
+  assert.deepEqual(
+    { sourceId: text.sourceId, sourceIdType: text.sourceIdType, link: text.link },
+    { sourceId: '1042', sourceIdType: 'json:id', link: 'https://multfilmy.example/news/1042' },
+  );
+  assert.equal(text.pubDate, '2026-10-11T21:04:00Z', 'date_modified stands in for a date_published the feed omits');
+  assert.equal(
+    text.description,
+    '<p><img src="https://multfilmy.example/img/multfilm-goda.jpg" alt="" /></p><p>Обычный текст без разметки: он становится одним абзацем, а его &lt;угловые скобки&gt; не читаются как HTML.</p>',
+    'content_text is plain text: it is put in a paragraph, its markup characters stay text, and the picture the item states leads it',
+  );
+
+  // An item with no title is still a headline: the reader labels an empty one in its own language.
+  assert.equal(noTitle.title, '');
+  assert.ok(
+    noTitle.description.includes('<p>Заголовок без title: читалка подписывает его своим словом.</p>'),
+    'the text of the item is still there, behind its picture',
+  );
+});
+
+test('the pictures a JSON Feed item states outside its text become its preview picture', () => {
+  const [html, image, poster] = rss.parseJsonFeed(JSON_FEED, 'https://multfilmy.example/feed.json').entries;
+
+  // `image` written as a plain address: it becomes the tag a preview picture has to be, and it leads
+  // the description the way the picture of a usual <description> leads it.
+  assert.ok(
+    image.description.startsWith('<p><img src="https://multfilmy.example/img/multfilm-goda.jpg" alt="" /></p>'),
+    'the item that ships no picture in its text is not left without one',
+  );
+
+  // An attachment that names no `mime_type` is an image — `image/jpeg` is the default JSON Feed gives
+  // it — and its relative `url` is resolved from the feed, as a relative `<link>` is. `title_text`
+  // becomes the alternative text of the picture, with its own ampersand escaped.
+  assert.ok(
+    poster.description.includes('<img src="https://multfilmy.example/img/poster-1043.jpg" alt="Постер &amp; кадр" />'),
+    'an image attachment of an item that states no image is a preview picture too',
+  );
+  assert.ok(!poster.description.includes('audio/1043.mp3'), 'an audio attachment has nothing to show in a preview');
+
+  // The picture the item already ships inside its `content_html` is not shipped a second time.
+  assert.equal((html.description.match(/<img\b/g) ?? []).length, 1, 'one picture of one news, however the feed spelled it');
+
+  const once = rss.parseJsonFeed(
+    JSON.stringify({
+      items: [
+        {
+          id: 'tag:7',
+          url: 'https://a.b/x',
+          content_html: '<p><img src="https://a.b/i.jpg" /></p>',
+          attachments: [
+            // The feed says this one already stands in the content.
+            { url: 'https://a.b/i.jpg', mime_type: 'image/jpeg', in_feed: true },
+            // And this one repeats the address without saying so.
+            { url: 'https://a.b/i.jpg', mime_type: 'image/jpeg' },
+            { url: 'mailto:someone@a.b', title_text: 'not a picture at all' },
+          ],
+        },
+      ],
+    }),
+    'https://a.b/feed.json',
+  );
+  assert.equal((once.entries[0].description.match(/<img\b/g) ?? []).length, 1, 'neither an `in_feed` attachment nor a repeated address adds a picture');
+  assert.ok(!once.entries[0].description.includes('mailto:'), 'only a picture the reader can load is worth a tag');
+
+  const record = store.makeItem({
+    feed: { id: 'jf', name: 'JSON', rss_link: 'https://multfilmy.example/feed.json' },
+    title: 'Картинка',
+    link: 'https://multfilmy.example/news/1042',
+    description: image.description,
+  });
+  assert.ok(
+    record.description.includes('<img src="https://multfilmy.example/img/multfilm-goda.jpg" alt="" width="180" height="240"'),
+    'the picture a JSON Feed stated reaches storage in the same box the reader gives every other one',
+  );
+});
+
+test('sourceIdentity names a JSON Feed headline by the id the feed states', () => {
+  assert.deepEqual(
+    rss.sourceIdentity({ link: 'https://a.b/x', jsonId: 'tag:42' }),
+    { sourceId: 'tag:42', sourceIdType: 'json:id' },
+    'an opaque id is kept whole',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ link: 'https://a.b/x', jsonId: 'http://www.a.b/x?utm_source=feed#1' }),
+    { sourceId: 'https://a.b/x', sourceIdType: 'json:id' },
+    'an id that is an address is read the way a link is read',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ link: 'https://a.b/x', jsonId: '' }),
+    { sourceId: 'https://a.b/x', sourceIdType: 'link' },
+    'an item with no id is its link',
+  );
+  assert.deepEqual(
+    rss.sourceIdentity({ link: 'https://a.b/x', guid: 'g1', guidIsLink: false, jsonId: 'j1' }),
+    { sourceId: 'g1', sourceIdType: 'guid' },
+    'the id of the format the document is written in wins; JSON Feed has no guid to win with',
+  );
+
+  const item = store.makeItem({
+    feed: { id: 'jf', name: 'JSON', rss_link: 'https://a.b/feed.json' },
+    title: 't',
+    link: 'https://a.b/x',
+    sourceId: 'tag:42',
+    sourceIdType: 'json:id',
+  });
+  assert.deepEqual(
+    { sourceId: item.sourceId, sourceIdType: item.sourceIdType },
+    { sourceId: 'tag:42', sourceIdType: 'json:id' },
+    'the record keeps the id the JSON Feed gave its news',
+  );
+});
+
+test('two items one JSON Feed calls the same news are one headline, and a long feed is capped', () => {
+  const repeated = rss.parseJsonFeed(
+    JSON.stringify({
+      title: 'Repeated',
+      items: [
+        { id: 'tag:42', url: 'https://a.b/one', title: 'A' },
+        { id: 'tag:42', url: 'https://a.b/two', title: 'A, once more' },
+        { id: 43, url: 'https://a.b/three', title: 'B' },
+        { id: 'tag:42', url: 'https://a.b/one', title: 'A, again' },
+        { id: 'no url, no id', title: 'nothing to open' },
+        null,
+      ],
+    }),
+    'https://a.b/feed.json',
+  );
+
+  assert.deepEqual(
+    repeated.entries.map((entry) => entry.link),
+    ['https://a.b/one', 'https://a.b/three'],
+    'the dedup of one response is the same rule the XML loop applies',
+  );
+  assert.deepEqual(
+    repeated.entries.map((entry) => entry.sourceIdType),
+    ['json:id', 'json:id'],
+    'a numeric id is kept as the feed wrote it',
+  );
+
+  const many = { title: 'Many', items: [] };
+  for (let i = 0; i < 260; i += 1) many.items.push({ id: `item-${i}`, url: `https://a.b/${i}` });
+  assert.equal(rss.parseJsonFeed(JSON.stringify(many), 'https://a.b/feed.json').entries.length, 250);
+});
+
+test('a JSON document that is not a feed fails with a code every language translates', () => {
+  for (const body of ['{ not json', '{"title": "no items"}', '{"items": {}}', '[{"id": 1}]']) {
+    const error = thrownBy(() => rss.parseJsonFeed(body, 'https://a.b/feed.json'));
+    assert.ok(error instanceof rss.FeedError, body);
+    assert.equal(error.code, 'feedNotJson', body);
+  }
+
+  assert.deepEqual(
+    rss.parseJsonFeed('{"title": "Empty", "items": []}', 'https://a.b/feed.json').entries,
+    [],
+    'a feed that ships nothing right now is a feed, not a failure',
+  );
+});
+
+test('the type of the answer decides the parser: JSON Feed, and a site that lies about its type', async () => {
+  const declared = await readAnswer('application/feed+json; charset=utf-8', JSON_FEED);
+  assert.equal(declared.feedTitle, 'Короткометражные мультфильмы');
+  assert.equal(declared.entries.length, 3);
+  assert.equal(declared.entries[0].sourceIdType, 'json:id');
+  assert.equal(declared.notModified, false, 'a body was read, so the read is not a «nothing changed»');
+
+  const mislabeled = await readAnswer('text/html', JSON_FEED);
+  assert.equal(mislabeled.entries.length, 3, 'a body that opens with a brace is read as JSON anyway');
+});
+
+test('an answer that is JSON but no feed fails with a code of its own', async () => {
+  const broken = await readAnswer('application/feed+json', '{ "items": [').then(
+    () => null,
+    (caught) => caught,
+  );
+  assert.ok(broken instanceof rss.FeedError);
+  assert.equal(broken.code, 'feedNotJson', 'the page is told the answer was not a feed, in its own language');
+
+  const error = await readAnswer('application/feed+json', '{"title": "an API answer, not a feed"}').then(
+    () => null,
+    (caught) => caught,
+  );
+  assert.equal(error.code, 'feedNotJson', 'a JSON object with no `items` is not read as an empty feed');
 });
 
 /* ---------------------------- language ---------------------------- */

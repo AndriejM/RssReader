@@ -68,6 +68,8 @@ const CHARSET_TOKEN = /\bcharset\s*=\s*["']?\s*([\w][\w.+-]*)/i;
 const XML_DECLARATION = /^\s*<\?xml\b[^>]*?\bencoding\s*=\s*["']\s*([\w][\w.+-]*)/i;
 const META_HTTP_CHARSET = /<meta[^>]*?http-equiv\s*=\s*["']?content-type["']?[^>]*?\bcharset\s*=\s*([\w][\w.+-]*)/i;
 const META_CHARSET = /<meta[^>]*?\bcharset\s*=\s*["']?\s*([\w][\w.+-]*)/i;
+/** JSON has no way to declare the encoding of its bytes: a `<meta charset>` inside it is text about some page, not a claim about the body. */
+const JSON_BODY = /^\s*\{/;
 
 /** The Cyrillic letters Russian text is written with. Windows-1251 maps them at 0xC0–0xDF, 0xE0–0xFF. */
 const RUSSIAN = /[А-Яа-я]/g;
@@ -219,7 +221,10 @@ export function decodeResponseBytes(bytes, contentType = '') {
   const body = bom ? bytes.subarray(mark) : bytes;
 
   const inHeader = normalizeCharset(charsetFromHeader(contentType));
-  const inMarkup = normalizeCharset(charsetFromMarkup(headAsLatin1(body)));
+  const head = headAsLatin1(body);
+  const inMarkup = JSON_BODY.test(head)
+    ? null
+    : normalizeCharset(charsetFromMarkup(head));
   const declared = inHeader ?? inMarkup;
 
   const claims = [bom, inHeader, inMarkup].filter(Boolean);

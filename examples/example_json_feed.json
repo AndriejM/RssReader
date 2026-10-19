@@ -1,0 +1,42 @@
+{
+  "version": "https://www.jsonfeed.org/version/1.1/",
+  "title": "Короткометражные мультфильмы",
+  "home_page_url": "https://multfilmy.example/",
+  "feed_url": "https://multfilmy.example/feed.json",
+  "description": "JSON Feed 1.1: the same headlines an RSS feed would ship, as one JSON object.",
+  "items": [
+    {
+      "id": "https://multfilmy.example/news/1041",
+      "url": "https://multfilmy.example/news/1041",
+      "title": "Коллекция короткометражных мультфильмов (1984-2011) BDRip",
+      "content_html": "<p><img src=\"https://multfilmy.example/img/pixarddda35886b18e856.jpg\" alt=\"\" /></p>\n<p>Подборка короткометражек и их создателей: <b>Blue Sky Studios</b>, Dreamworks, Pixar.</p>",
+      "attachments": [
+        {
+          "url": "https://multfilmy.example/img/pixarddda35886b18e856.jpg",
+          "mime_type": "image/jpeg",
+          "title_text": "Кадр из подборки"
+        }
+      ],
+      "date_published": "2026-10-12T09:32:48+03:00",
+      "tags": ["мультфильмы", "сборник"]
+    },
+    {
+      "id": "1042",
+      "url": "/news/1042",
+      "title": "Мультфильм года",
+      "content_text": "Обычный текст без разметки: он становится одним абзацем, а его <угловые скобки> не читаются как HTML.",
+      "image": "https://multfilmy.example/img/multfilm-goda.jpg",
+      "date_modified": "2026-10-11T21:04:00Z"
+    },
+    {
+      "id": "1043",
+      "url": "https://multfilmy.example/news/1043",
+      "date_published": "2026-10-10T06:00:00Z",
+      "content_text": "Заголовок без title: читалка подписывает его своим словом.",
+      "attachments": [
+        { "url": "/img/poster-1043.jpg", "title_text": "Постер & кадр" },
+        { "url": "https://multfilmy.example/audio/1043.mp3", "mime_type": "audio/mpeg", "title_text": "Аудиоверсия" }
+      ]
+    }
+  ]
+}

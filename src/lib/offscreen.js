@@ -7,7 +7,7 @@ const REASONS = ['AUDIO_PLAYBACK', 'DOM_PARSER'];
 // Chrome shows this justification in its own extensions UI, so it does not follow the interface
 // language of the reader.
 const JUSTIFICATION =
-  'Parses feed XML responses and plays a short signal: the service worker has no DOM access.';
+  'Parses feed responses (XML with DOMParser, JSON Feed as JSON) and plays a short signal: the service worker has no DOM access.';
 
 let creationPromise = null;
 
