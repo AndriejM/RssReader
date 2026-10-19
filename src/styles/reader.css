@@ -176,6 +176,17 @@
   white-space: nowrap;
 }
 
+/*
+  The search field belongs to the middle column and sits in its head between the name of the feed and
+  the two icons. It takes what is left of the row but never crowds them out: the name keeps its own
+  ellipsis, the icons and the size switcher keep their fixed width.
+*/
+.panel-search {
+  flex: 1 1 120px;
+  font-size: 0.85em;
+  min-width: 80px;
+}
+
 .panel-scroll {
   flex: 1;
   min-height: 0;
@@ -251,6 +262,20 @@
   display: block;
   font-size: 0.85em;
   margin-top: 3px;
+}
+
+/*
+  A feed that refuses to be read carries its failure count under its name, in the colour of a
+  failure. Selected, the row is filled with the accent, where red is barely legible, so there the
+  line keeps the colour of the row and stays readable.
+*/
+.feed-health {
+  color: var(--danger);
+}
+
+.list-item.selected .feed-health {
+  color: var(--text-on-selected);
+  opacity: 0.85;
 }
 
 /*

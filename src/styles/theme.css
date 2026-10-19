@@ -103,7 +103,8 @@ button.danger:hover:not(:disabled) {
 
 input[type="text"],
 input[type="number"],
-input[type="url"] {
+input[type="url"],
+input[type="search"] {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

@@ -117,6 +117,19 @@
         <h2 id="headlines-title" data-i18n="reader.headlines.title"></h2>
         <span class="muted" id="headlines-count"></span>
         <!--
+          One field filters the middle column: it keeps the headlines whose title or feed name
+          contains what is typed, and it follows the same selection as the two icons beside it.
+        -->
+        <input
+          id="headline-search"
+          class="panel-search"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          data-i18n-placeholder="reader.search.placeholder"
+          data-i18n-aria="reader.search.aria"
+        />
+        <!--
           Load / clear sit beside the feed name and follow the left column's selection: a single
           feed loads/cleans just that feed, «Все ленты» does it for every feed at once.
         -->

@@ -1139,12 +1139,136 @@ test('siteRoot is the site root an icon fallback hangs off', () => {
   assert.equal(favicon.siteRoot('not a url'), null, 'a link with no origin offers no fallback');
 });
 
+/* ------------------------- feed health ------------------------- */
+
+/**
+ * A feed carries its own record of the last read: when it was read, whether the read worked, and how
+ * many failures ran in a row. `chrome.storage.local` is stood in for here — the fields and their
+ * reset are the part a wrong reader display could not be blamed for.
+ */
+test('a feed remembers its own last read: the streak of failures, its reason, and its reset', async () => {
+  const memory = {};
+  globalThis.chrome = {
+    storage: {
+      local: {
+        async get(key) {
+          return key in memory ? { [key]: structuredClone(memory[key]) } : {};
+        },
+        async set(patch) {
+          for (const [key, value] of Object.entries(patch)) memory[key] = structuredClone(value);
+        },
+      },
+    },
+  };
+
+  try {
+    const base = { id: 'health', name: 'Health', rss_link: 'https://a.b/rss' };
+    const [fresh] = await store.upsertFeed(base);
+    assert.equal(fresh.lastCheckedAt, undefined, 'a feed nobody has read reports a check it never had');
+
+    await store.markFeedChecked('health', {
+      ok: false,
+      error: { code: 'httpStatus', params: { status: 404 }, message: 'HTTP 404' },
+      time: 1000,
+    });
+    let feed = (await store.getFeeds())[0];
+    assert.equal(feed.lastCheckedAt, 1000, 'the read is dated by the read itself');
+    assert.equal(feed.fetchFailureCount, 1);
+    assert.equal(feed.lastErrorCode, 'httpStatus', 'the reason stays a dictionary key, not its text');
+    assert.deepEqual(feed.lastErrorParams, { status: 404 });
+    assert.equal(feed.lastErrorMessage, 'HTTP 404');
+
+    await store.markFeedChecked('health', { ok: false, error: 'no route', time: 2000 });
+    feed = (await store.getFeeds())[0];
+    assert.equal(feed.fetchFailureCount, 2, 'a feed that keeps failing keeps counting');
+    assert.equal(feed.lastErrorCode, undefined, 'a failure with no code leaves no stale code behind');
+    assert.equal(feed.lastErrorMessage, 'no route');
+
+    await store.markFeedChecked('health', { ok: true, time: 3000 });
+    feed = (await store.getFeeds())[0];
+    assert.equal(feed.fetchFailureCount, 0, 'a read that worked closes the streak');
+    assert.equal(feed.lastOkAt, 3000);
+    assert.equal(feed.lastErrorAt, undefined, 'an old failure is not shown over a feed that now works');
+    assert.equal(feed.lastErrorCode, undefined);
+
+    assert.equal(await store.markFeedChecked('gone', { ok: true, time: 4000 }), false, 'a deleted feed writes nothing');
+
+    await store.markFeedChecked('health', { ok: false, error: { code: 'feedUrl', message: 'bad link' }, time: 5000 });
+    await store.upsertFeed({ ...base, rss_link: 'https://a.b/new' });
+    feed = (await store.getFeeds())[0];
+    assert.equal(feed.rss_link, 'https://a.b/new');
+    assert.equal(feed.fetchFailureCount, undefined, 'the failures of the old address are not blamed on the new one');
+    assert.equal(feed.lastCheckedAt, undefined);
+
+    await store.markFeedChecked('health', { ok: false, error: { code: 'feedUrl', message: 'x'.repeat(900) }, time: 6000 });
+    feed = (await store.getFeeds())[0];
+    assert.ok(feed.lastErrorMessage.length <= 300, 'a stored failure is kept short');
+  } finally {
+    delete globalThis.chrome;
+  }
+});
+
+/* ------------------------- reader search & keys ------------------------- */
+
+/**
+ * The middle column filters its headlines and the reader answers to the keyboard. Both live only in
+ * the page script, so the field the markup declares, the filter that narrows the selection, the keys
+ * that move the cursor and the captions they need are kept in step here.
+ */
+test('the middle column filters its headlines, and the reader answers to the keyboard', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const html = read('src/index.html');
+  const page = read('src/index.js');
+  const css = read('src/styles/reader.css');
+  const dictionary = read('src/lib/i18n.js');
+
+  assert.ok(html.includes('id="headline-search"'), 'the middle column declares no search field');
+  assert.ok(page.includes("document.getElementById('headline-search')"), 'the page does not know the field the markup declares');
+  assert.ok(page.includes("els.headlineSearch.addEventListener('input'"), 'what is typed in that field is read by nobody');
+
+  /* A search narrows the selection of the left column; it must not replace it, or «Все ленты» would
+   * stop being the whole stored list. */
+  assert.ok(
+    page.includes('state.items.filter(inSelection).filter(matchesQuery)'),
+    'the search is not a filter over the headlines of the current selection',
+  );
+  /* The search belongs to the reading position, so it travels with it back from a settings screen. */
+  assert.ok(page.includes('query: state.query'), 'the search is not kept with the selection');
+  assert.ok(page.includes('els.headlineSearch.value = state.query'), 'the field is left empty of what it filtered by');
+
+  assert.ok(dictionary.includes("querySelectorAll('[data-i18n-placeholder]')"), 'a placeholder no dictionary re-applies stays in one language');
+  assert.ok(css.includes('.panel-search'), 'the search field the markup declares is not styled');
+
+  assert.ok(page.includes("document.addEventListener('keydown'"), 'the reader answers to no keys');
+  for (const key of ["'ArrowDown'", "'ArrowUp'", "'/'", "'Enter'", "'Escape'"]) {
+    assert.ok(page.includes(`case ${key}:`) || page.includes(`${key} &&`), `no key handler for ${key}`);
+  }
+  assert.ok(page.includes('isTypingTarget'), 'the keys are taken from the field being typed in');
+
+  const captions = [
+    'reader.search.placeholder',
+    'reader.search.aria',
+    'reader.headlines.emptySearch',
+    'reader.feed.failedCount',
+    'reader.feed.lastChecked',
+    'reader.feed.lastError',
+  ];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the reader asks to show`);
+    }
+  }
+
+  assert.ok(css.includes('.feed-health'), 'a feed that fails to load is not set apart from the others');
+});
+
 /* ---------------------------- runner ---------------------------- */
 
 let failures = 0;
 for (const { name, fn } of tests) {
   try {
-    fn();
+    await fn();
     console.log(`ok   ${name}`);
   } catch (error) {
     failures += 1;

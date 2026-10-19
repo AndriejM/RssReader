@@ -71,12 +71,18 @@ const DICTIONARIES = {
     'reader.refreshAll.tooltip': 'Загрузить заголовки всех лент сейчас',
     'reader.refreshAll.aria': 'Обновить все ленты',
     'reader.feed.itemMeta': '{count} загол. · обновл. каждые {duration}',
+    'reader.feed.failedCount': 'сбоев загрузки: {count}',
+    'reader.feed.lastChecked': 'последняя проверка: {since}',
+    'reader.feed.lastError': 'последняя ошибка: {error}',
 
     'reader.headlines.panelAria': 'Заголовки новостей',
     'reader.headlines.title': 'Заголовки',
     'reader.headlines.emptyNoFeed': 'Выберите ленту слева.',
     'reader.headlines.emptyForFeed': 'Для этой ленты пока нет заголовков в хранилище.',
     'reader.headlines.emptyAllFeeds': 'Ни в одной ленте пока нет заголовков в хранилище.',
+    'reader.headlines.emptySearch': 'Ни один заголовок не подходит к поиску.',
+    'reader.search.placeholder': 'Поиск по заголовкам',
+    'reader.search.aria': 'Поиск по заголовкам',
     'reader.published': 'опубл. {since}',
 
     'reader.content.panelAria': 'Содержание новости',
@@ -248,12 +254,18 @@ const DICTIONARIES = {
     'reader.refreshAll.tooltip': 'Load headlines of every feed now',
     'reader.refreshAll.aria': 'Refresh all feeds',
     'reader.feed.itemMeta': '{count} headlines · refresh every {duration}',
+    'reader.feed.failedCount': 'load failures: {count}',
+    'reader.feed.lastChecked': 'last checked: {since}',
+    'reader.feed.lastError': 'last error: {error}',
 
     'reader.headlines.panelAria': 'News headlines',
     'reader.headlines.title': 'Headlines',
     'reader.headlines.emptyNoFeed': 'Select a feed on the left.',
     'reader.headlines.emptyForFeed': 'This feed has no headlines in storage yet.',
     'reader.headlines.emptyAllFeeds': 'No feed has any headlines in storage yet.',
+    'reader.headlines.emptySearch': 'No headline matches this search.',
+    'reader.search.placeholder': 'Search headlines',
+    'reader.search.aria': 'Search headlines',
     'reader.published': 'pub. {since}',
 
     'reader.content.panelAria': 'News content',
@@ -424,12 +436,18 @@ const DICTIONARIES = {
     'reader.refreshAll.tooltip': 'Завантажити заголовки всіх стрічок зараз',
     'reader.refreshAll.aria': 'Оновити всі стрічки',
     'reader.feed.itemMeta': '{count} загол. · оновл. кожні {duration}',
+    'reader.feed.failedCount': 'помилок завантаження: {count}',
+    'reader.feed.lastChecked': 'остання перевірка: {since}',
+    'reader.feed.lastError': 'остання помилка: {error}',
 
     'reader.headlines.panelAria': 'Заголовки новин',
     'reader.headlines.title': 'Заголовки',
     'reader.headlines.emptyNoFeed': 'Оберіть стрічку ліворуч.',
     'reader.headlines.emptyForFeed': 'Для цієї стрічки ще немає заголовків у сховищі.',
     'reader.headlines.emptyAllFeeds': 'У жодній стрічці ще немає заголовків у сховищі.',
+    'reader.headlines.emptySearch': 'Жоден заголовок не відповідає пошуку.',
+    'reader.search.placeholder': 'Пошук заголовків',
+    'reader.search.aria': 'Пошук заголовків',
     'reader.published': 'опубл. {since}',
 
     'reader.content.panelAria': 'Зміст новини',
@@ -598,12 +616,18 @@ const DICTIONARIES = {
     'reader.refreshAll.tooltip': 'Wczytaj nagłówki wszystkich kanałów teraz',
     'reader.refreshAll.aria': 'Odśwież wszystkie kanały',
     'reader.feed.itemMeta': '{count} nagłów. · odśwież. co {duration}',
+    'reader.feed.failedCount': 'błędy pobierania: {count}',
+    'reader.feed.lastChecked': 'ostatnio sprawdzono: {since}',
+    'reader.feed.lastError': 'ostatni błąd: {error}',
 
     'reader.headlines.panelAria': 'Nagłówki wiadomości',
     'reader.headlines.title': 'Nagłówki',
     'reader.headlines.emptyNoFeed': 'Wybierz kanał po lewej stronie.',
     'reader.headlines.emptyForFeed': 'Ten kanał nie ma jeszcze nagłówków w pamięci.',
     'reader.headlines.emptyAllFeeds': 'Żaden kanał nie ma jeszcze nagłówków w pamięci.',
+    'reader.headlines.emptySearch': 'Żaden nagłówek nie pasuje do wyszukiwania.',
+    'reader.search.placeholder': 'Szukaj wśród nagłówków',
+    'reader.search.aria': 'Szukaj wśród nagłówków',
     'reader.published': 'opubl. {since}',
 
     'reader.content.panelAria': 'Treść wiadomości',
@@ -772,12 +796,18 @@ const DICTIONARIES = {
     'reader.refreshAll.tooltip': 'Überschriften aller Feeds jetzt laden',
     'reader.refreshAll.aria': 'Alle Feeds aktualisieren',
     'reader.feed.itemMeta': '{count} Überschr. · Aktualisierung alle {duration}',
+    'reader.feed.failedCount': 'Abruf-Fehler: {count}',
+    'reader.feed.lastChecked': 'zuletzt geprüft: {since}',
+    'reader.feed.lastError': 'letzter Fehler: {error}',
 
     'reader.headlines.panelAria': 'Nachrichtenschlagzeilen',
     'reader.headlines.title': 'Schlagzeilen',
     'reader.headlines.emptyNoFeed': 'Wählen Sie links einen Feed aus.',
     'reader.headlines.emptyForFeed': 'Für diesen Feed liegen noch keine Schlagzeilen im Speicher.',
     'reader.headlines.emptyAllFeeds': 'Für keinen Feed liegen noch Schlagzeilen im Speicher.',
+    'reader.headlines.emptySearch': 'Keine Schlagzeile passt zu dieser Suche.',
+    'reader.search.placeholder': 'Schlagzeilen durchsuchen',
+    'reader.search.aria': 'Schlagzeilen durchsuchen',
     'reader.published': 'veröff. {since}',
 
     'reader.content.panelAria': 'Inhalt der Nachricht',
@@ -946,12 +976,18 @@ const DICTIONARIES = {
     'reader.refreshAll.tooltip': 'Charger maintenant les titres de tous les flux',
     'reader.refreshAll.aria': 'Actualiser tous les flux',
     'reader.feed.itemMeta': '{count} titres · actualisation toutes les {duration}',
+    'reader.feed.failedCount': 'échecs de chargement : {count}',
+    'reader.feed.lastChecked': 'dernière vérification : {since}',
+    'reader.feed.lastError': 'dernière erreur : {error}',
 
     'reader.headlines.panelAria': 'Titres des actualités',
     'reader.headlines.title': 'Titres',
     'reader.headlines.emptyNoFeed': 'Sélectionnez un flux à gauche.',
     'reader.headlines.emptyForFeed': 'Ce flux n’a encore aucun titre dans le stockage.',
     'reader.headlines.emptyAllFeeds': 'Aucun flux n’a encore de titre dans le stockage.',
+    'reader.headlines.emptySearch': 'Aucun titre ne correspond à cette recherche.',
+    'reader.search.placeholder': 'Rechercher dans les titres',
+    'reader.search.aria': 'Rechercher dans les titres',
     'reader.published': 'publ. {since}',
 
     'reader.content.panelAria': 'Contenu de l’actualité',
@@ -1120,12 +1156,18 @@ const DICTIONARIES = {
     'reader.refreshAll.tooltip': 'Cargar ahora los titulares de todas las fuentes',
     'reader.refreshAll.aria': 'Actualizar todas las fuentes',
     'reader.feed.itemMeta': '{count} titul. · actualización cada {duration}',
+    'reader.feed.failedCount': 'fallos de carga: {count}',
+    'reader.feed.lastChecked': 'última comprobación: {since}',
+    'reader.feed.lastError': 'último error: {error}',
 
     'reader.headlines.panelAria': 'Titulares de noticias',
     'reader.headlines.title': 'Titulares',
     'reader.headlines.emptyNoFeed': 'Seleccione una fuente a la izquierda.',
     'reader.headlines.emptyForFeed': 'Esta fuente aún no tiene titulares en el almacenamiento.',
     'reader.headlines.emptyAllFeeds': 'Ninguna fuente tiene todavía titulares en el almacenamiento.',
+    'reader.headlines.emptySearch': 'Ningún titular coincide con esta búsqueda.',
+    'reader.search.placeholder': 'Buscar titulares',
+    'reader.search.aria': 'Buscar titulares',
     'reader.published': 'publ. {since}',
 
     'reader.content.panelAria': 'Contenido de la noticia',
@@ -1353,8 +1395,8 @@ export function unitLabels(lang = currentLanguage()) {
 
 /**
  * Применить словарь к странице: текст или атрибут элемента берутся из i18n-атрибутов
- * (`data-i18n`, `data-i18n-title`, `data-i18n-aria`), а `<html lang>` приводится к выбранному
- * языку. Вызывается после загрузки языка и при каждом его изменении.
+ * (`data-i18n`, `data-i18n-title`, `data-i18n-aria`, `data-i18n-placeholder`), а `<html lang>`
+ * приводится к выбранному языку. Вызывается после загрузки языка и при каждом его изменении.
  */
 export function applyI18n(root = document) {
   document.documentElement.lang = LOCALES[currentLanguage()] ?? currentLanguage();
@@ -1367,6 +1409,9 @@ export function applyI18n(root = document) {
   }
   for (const el of root.querySelectorAll('[data-i18n-aria]')) {
     el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
+  }
+  for (const el of root.querySelectorAll('[data-i18n-placeholder]')) {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
   }
 }
 

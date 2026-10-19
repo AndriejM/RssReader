@@ -84,10 +84,82 @@ export async function getFeed(feedId) {
 export async function upsertFeed(feed) {
   const feeds = await getFeeds();
   const index = feeds.findIndex((candidate) => candidate.id === feed.id);
-  if (index === -1) feeds.push(feed);
-  else feeds[index] = { ...feeds[index], ...feed };
+  if (index === -1) {
+    feeds.push(feed);
+  } else {
+    const previous = feeds[index];
+    const next = { ...previous, ...feed };
+    /* Сбои описывают тот адрес, по которому ленту читали. Когда адрес меняют, прошлые сбои
+     * относятся к другому URL и больше ничего не объясняют, поэтому они сбрасываются. */
+    if (feed.rss_link && feed.rss_link !== previous.rss_link) clearFeedDiagnostics(next);
+    feeds[index] = next;
+  }
   await saveFeeds(feeds);
   return feeds;
+}
+
+/**
+ * Диагностические поля строки ленты: они описывают последнюю попытку её прочесть, а не её
+ * настройки. Появляются только после первой загрузки, поэтому строка ещё не читанной ленты остаётся
+ * чистой, а `emptyFeed()` — ровно тем набором полей, что задаёт экран настроек.
+ */
+const FEED_DIAGNOSTIC_KEYS = [
+  'lastCheckedAt',
+  'lastOkAt',
+  'lastErrorAt',
+  'lastErrorCode',
+  'lastErrorParams',
+  'lastErrorMessage',
+  'fetchFailureCount',
+];
+
+/** Текст отказа хранится коротким: он нужен для подписи в интерфейсе, а не как журнал. */
+const MAX_FEED_ERROR_MESSAGE = 300;
+
+function clearFeedDiagnostics(feed) {
+  for (const key of FEED_DIAGNOSTIC_KEYS) delete feed[key];
+  return feed;
+}
+
+/**
+ * Записать в строку ленты её «состояние здоровья»: когда её читали последний раз, чем закончилась
+ * эта попытка и сколько отказов подряд накопилось. Успех обнуляет счётчик и стирает прошлый отказ,
+ * отказ — копит их, чтобы лента с постоянно недоступной адресной строкой была видна сразу.
+ * @param {{ ok?: boolean, error?: unknown, time?: number }} options
+ */
+export async function markFeedChecked(feedId, { ok = true, error = null, time = Date.now() } = {}) {
+  const feeds = await getFeeds();
+  const feed = feeds.find((candidate) => candidate.id === feedId);
+  if (!feed) return false;
+
+  const checkedAt = Number(time) || Date.now();
+  feed.lastCheckedAt = checkedAt;
+
+  if (ok) {
+    feed.lastOkAt = checkedAt;
+    feed.fetchFailureCount = 0;
+    delete feed.lastErrorAt;
+    delete feed.lastErrorCode;
+    delete feed.lastErrorParams;
+    delete feed.lastErrorMessage;
+  } else {
+    const message = typeof error === 'string' ? error : error?.message;
+
+    feed.lastErrorAt = checkedAt;
+    if (error?.code) feed.lastErrorCode = String(error.code);
+    else delete feed.lastErrorCode;
+
+    if (error?.params && typeof error.params === 'object') feed.lastErrorParams = error.params;
+    else delete feed.lastErrorParams;
+
+    if (message) feed.lastErrorMessage = String(message).slice(0, MAX_FEED_ERROR_MESSAGE);
+    else delete feed.lastErrorMessage;
+
+    feed.fetchFailureCount = Math.max(1, (Number(feed.fetchFailureCount) || 0) + 1);
+  }
+
+  await saveFeeds(feeds);
+  return true;
 }
 
 /** Deleting a feed also drops the headlines that belong to it. */

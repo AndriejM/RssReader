@@ -98,36 +98,62 @@ function errorPayload(error) {
 }
 
 /**
+ * Записать диагноз ленты. Он второстепенен: его собственный сбой (например, хранилище переполнено)
+ * не должен подменять собой настоящую причину, по которую загрузку не удалось дочитать.
+ */
+async function reportFeedHealth(feedId, health) {
+  try {
+    await store.markFeedChecked(feedId, health);
+  } catch (diagnosticError) {
+    console.warn(`could not record the health of feed ${feedId}:`, diagnosticError?.message ?? diagnosticError);
+  }
+}
+
+/**
  * Fetch one feed and write the new headlines to storage.
  * @param {{ notify?: boolean }} options - `notify` marks an alarm-driven (automatic) read,
  *   which is the only case that plays the sound.
  */
 async function ingestFeed(feed, { notify = false } = {}) {
-  const fetched = await readFeed(feed.rss_link);
-  const now = Date.now();
-  const candidates = fetched.entries.map((entry) =>
-    store.makeItem({
-      feed,
-      title: entry.title,
-      description: entry.description,
-      pubDate: entry.pubDate,
-      link: entry.link,
-      time: now,
-    }),
-  );
+  const startedAt = Date.now();
+  let result;
 
-  const { added, skipped } = await store.addItems(candidates);
+  try {
+    const fetched = await readFeed(feed.rss_link);
+    const now = Date.now();
+    const candidates = fetched.entries.map((entry) =>
+      store.makeItem({
+        feed,
+        title: entry.title,
+        description: entry.description,
+        pubDate: entry.pubDate,
+        link: entry.link,
+        time: now,
+      }),
+    );
+
+    const { added, skipped } = await store.addItems(candidates);
+    result = { added, skipped, seen: fetched.entries.length };
+  } catch (error) {
+    /* Диагноз пишется именно здесь: иначе отказ ленты не отличить от сбоя бейджа или сигнала, а
+     * экран настроек показал бы здоровую ленту сломанной. */
+    await reportFeedHealth(feed.id, { ok: false, error, time: startedAt });
+    throw error;
+  }
+
+  await reportFeedHealth(feed.id, { ok: true, time: Date.now() });
+
   await updateBadge();
 
-  if (added > 0 && notify) {
+  if (result.added > 0 && notify) {
     // The two notifications of the same automatic event answer to their own flags on the
     // settings screen: «Звук» gates the signal, «Показывать сообщение» gates the popup that
     // names how many headlines came in. Neither one looks at the other's setting.
     await playSound();
-    await notifyIngest(added);
+    await notifyIngest(result.added);
   }
 
-  return { added, skipped, seen: fetched.entries.length };
+  return result;
 }
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {

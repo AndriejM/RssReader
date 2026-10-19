@@ -131,7 +131,9 @@ Three vertical panels:
    top of the panel re-reads the selected feed once — “All feeds” makes it read every feed at once
    (no sound at that moment) — and spins while loading. Clicking a feed puts the middle panel on
    its first (freshest) headline, and its text opens in the right panel right away; clicking “All
-   feeds” puts it on the freshest headline there is, whichever feed it came from.
+   feeds” puts it on the freshest headline there is, whichever feed it came from. A feed whose last
+   read failed carries the number of its failures under its name, in the colour of a failure; the
+   tooltip of that row names when the feed was last read and what the last attempt answered.
 2. **Headlines** — headlines of the selected feed from storage, freshest on top, with a
    “loaded N min ago” label and a storage time counted down from `clean_timeout`. When “All feeds”
    is selected, the headlines of all the feeds stand here, also freshest on top, and each one is
@@ -187,6 +189,30 @@ The “Feed settings” icon opens the settings in the same tab — no second ta
 reader icon on a settings screen returns the same way: to the same feed and the same
 open headline. The “Global settings” icon (the last of the three, before the theme toggle) opens
 the global settings screen the same way.
+
+Beside the name of the feed, the head of the middle column holds a search field. It narrows the
+headlines of whatever is selected — one feed, or all of them — to those whose title or feed name
+carries every word that was typed, and it changes nothing about their order; the counter beside the
+name counts what is left, and a search that matches nothing says so in both the middle and the right
+panel. Deleting a headline while the field holds words hands the reader to the next headline the
+search still shows. What is typed belongs to the reading position, so a reader that comes back from a
+settings screen comes back to the same filtered list.
+
+The reader answers to the keyboard, and its keys are held back while a field is being typed in (the
+search field holds the same letters) or while Ctrl/Meta/Alt are down:
+
+| Key | What it does |
+| --- | --- |
+| `/` | put the cursor in the search field |
+| `↓` or `j` | open the next headline of the current selection |
+| `↑` or `k` | open the previous headline of the current selection |
+| `Enter` | open the original of the open headline in a new tab |
+| `r` | re-read the selected feed («All feeds» — every feed) |
+| `d` | delete the open headline |
+| `Esc` (in the search field) | empty the field, keeping the open headline |
+
+The arrows work from inside the search field too: they leave the words typed and move the cursor
+through the headlines the field filters. Every move brings the row it landed on back into view.
 
 ## Global settings screen (`src/settings.html`)
 
@@ -327,6 +353,24 @@ Four keys:
   "icon": "https://habr.com/favicon.ico" // site icon link (lib/favicon.js), read when the feed is added
 }
 ```
+
+A feed that has been read carries its own health record next to those settings — the reader's feed
+row is where it is shown:
+
+```json
+{
+  "lastCheckedAt": 1760000000000,   // the last read, automatic or by hand, ms
+  "lastOkAt": 1760000000000,        // the last read that worked, ms
+  "lastErrorAt": 1759998200000,     // the last read that failed, ms
+  "lastErrorCode": "httpStatus",    // key errors.<code> of `lib/i18n.js`, when the failure is coded
+  "lastErrorParams": { "status": 404 },
+  "lastErrorMessage": "HTTP 404",   // kept under 300 characters
+  "fetchFailureCount": 2            // failures in a row; a read that worked sets it back to 0
+}
+```
+
+None of these fields exists until the feed has actually been read, and changing the feed's
+`rss_link` clears them: the failures described the old address.
 
 **`items`** — an array of headlines. The fields from the assignment are `rss_link`, `title`,
 `link`, `time`; `uid`/`feedId`/`feedName` were added internally: to identify a headline and avoid
@@ -549,7 +593,7 @@ background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js) and the guards over the screen markup: 41 tests
+                             # storage.js) and the guards over the screen markup: 57 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -634,6 +678,21 @@ that is checked in the browser after loading the extension.
     “All feeds” selected, the load icon in the middle head (or the refresh icon at the top of the
     feeds panel) reads every feed at once; with a single feed selected those same icons read only
     that feed.
+24. Type a word in the search field of the middle panel → only the headlines whose title or feed name
+    contains it stay, in the same order, and the counter beside the panel name counts those; type a
+    word nothing matches → both panels say that the search found nothing. Press `Esc` → the field is
+    empty and the whole list is back. Select a feed, type a word, press the “Feed settings” icon and
+    return to the reader → the same feed is open with the same word in the field.
+25. Press `/`, then a few letters → the search filters as you type. Press `↓` / `↑` (or `j` / `k`) →
+    the cursor moves through the headlines and the text in the right panel follows, the row staying in
+    view; `Enter` opens the original of the open headline in a new tab; `d` deletes it and opens the
+    next visible one; `r` re-reads the selected feed. None of these keys fires while the cursor stands
+    in the search field, except the arrows.
+26. Add a feed whose address answers nothing (or disconnect the network) and wait for its period →
+    under its name the row of the left column shows the number of failures, its tooltip names the
+    last check and the last failure in the interface language; after a read that worked the line
+    disappears, the counter is back to zero and the old failure is no longer shown. Change the feed's
+    `rss_link` on the feed screen → the old failures are gone with the address they described.
 
 ## Limitations
 
