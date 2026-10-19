@@ -1173,6 +1173,7 @@ test('a feed remembers its own last read: the streak of failures, its reason, an
     });
     let feed = (await store.getFeeds())[0];
     assert.equal(feed.lastCheckedAt, 1000, 'the read is dated by the read itself');
+    assert.equal(feed.nextAlarmAt, 1000 + 30 * 60000, 'the next check is one feed period after this read');
     assert.equal(feed.fetchFailureCount, 1);
     assert.equal(feed.lastErrorCode, 'httpStatus', 'the reason stays a dictionary key, not its text');
     assert.deepEqual(feed.lastErrorParams, { status: 404 });
@@ -1188,6 +1189,7 @@ test('a feed remembers its own last read: the streak of failures, its reason, an
     feed = (await store.getFeeds())[0];
     assert.equal(feed.fetchFailureCount, 0, 'a read that worked closes the streak');
     assert.equal(feed.lastOkAt, 3000);
+    assert.equal(feed.nextAlarmAt, 3000 + 30 * 60000, 'a healthy feed is still due for its next check');
     assert.equal(feed.lastErrorAt, undefined, 'an old failure is not shown over a feed that now works');
     assert.equal(feed.lastErrorCode, undefined);
 
@@ -1199,6 +1201,7 @@ test('a feed remembers its own last read: the streak of failures, its reason, an
     assert.equal(feed.rss_link, 'https://a.b/new');
     assert.equal(feed.fetchFailureCount, undefined, 'the failures of the old address are not blamed on the new one');
     assert.equal(feed.lastCheckedAt, undefined);
+    assert.equal(feed.nextAlarmAt, undefined, 'a schedule kept for the old address is not carried to the new one');
 
     await store.markFeedChecked('health', { ok: false, error: { code: 'feedUrl', message: 'x'.repeat(900) }, time: 6000 });
     feed = (await store.getFeeds())[0];
@@ -1261,6 +1264,60 @@ test('the middle column filters its headlines, and the reader answers to the key
   }
 
   assert.ok(css.includes('.feed-health'), 'a feed that fails to load is not set apart from the others');
+});
+
+/* ---------------------- feed health on the settings screen ---------------------- */
+
+/**
+ * The settings screen carries the diagnosis the worker records for each feed, and the reader marks a
+ * feed that refuses to be read. The wording lives only in the page scripts, so each caption, the glyph
+ * it draws and the stylesheet that styles it are kept in step here, alongside the keys every language
+ * must translate.
+ */
+test('the feeds screen reports the health of each feed and the reader flags a failing feed', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const feedsHtml = read('src/feeds.html');
+  const feedsJs = read('src/feeds.js');
+  const indexHtml = read('src/index.html');
+  const page = read('src/index.js');
+  const readerCss = read('src/styles/reader.css');
+  const feedsCss = read('src/styles/feeds.css');
+
+  /* The settings screen names the last read, the next one due, the reason a feed failed and the
+   * streak of failures — the reason written by `describeError`, not a raw dictionary key. */
+  for (const key of ['feeds.health.checked', 'feeds.health.next', 'feeds.health.error', 'feeds.health.streak']) {
+    assert.ok(feedsJs.includes(`t('${key}'`), `the feeds screen never shows ${key}`);
+  }
+  assert.ok(feedsJs.includes('describeError'), 'a stored failure is shown as a raw key, not in the page language');
+  assert.ok(feedsJs.includes('feedHealthLine'), 'no line gathers what the screen knows about a feed');
+
+  /* The reader sets a failing feed apart with a warning glyph and its failure count. */
+  assert.ok(page.includes("icon('warning')"), 'the reader marks no failing feed with a glyph');
+  assert.ok(page.includes('feed-warning'), 'the reader warning glyph is styled by no class');
+
+  /* The glyph each script draws must be defined by the sprite of its own screen. */
+  assert.ok(indexHtml.includes('<symbol id="icon-warning"'), 'the reader asks for a warning glyph its sprite never defines');
+  assert.ok(feedsHtml.includes('<symbol id="icon-warning"'), 'the feeds sprite names a glyph no feed row will use');
+
+  assert.ok(readerCss.includes('.feed-warning'), 'the reader warning glyph is drawn at no size of its own');
+  assert.ok(feedsCss.includes('.row-note .feed-health'), 'the diagnosis under a feed row is not styled');
+
+  const captions = [
+    'feeds.health.checked',
+    'feeds.health.next',
+    'feeds.health.error',
+    'feeds.health.streak',
+    'units.inMinutes',
+    'units.inHours',
+    'units.inDays',
+    'units.anyNow',
+  ];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the feeds screen asks to show`);
+    }
+  }
 });
 
 /* ---------------------------- runner ---------------------------- */

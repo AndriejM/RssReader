@@ -117,6 +117,12 @@ A message about the whole row (“Saved”, “Check the fields”, what a load 
 line under it, and the screen’s explanation of the fields is folded behind the “?” icon in the
 upper right of the table.
 
+Under every saved feed a quieter line carries its health record (see the storage section): when the
+feed was last read, when its next check is due, and — while it is currently failing — the reason in
+the interface language and how many failures ran in a row. It stays put while the load message above
+it comes and goes, and a healthy feed that was read cleanly shows only the check and the next one.
+A manual “Load now” refreshes this line with the attempt that just happened.
+
 Screen header: the row of screen-switcher icons (here its “Feed settings” icon is the highlighted
 one) and the theme toggle.
 
@@ -132,8 +138,9 @@ Three vertical panels:
    (no sound at that moment) — and spins while loading. Clicking a feed puts the middle panel on
    its first (freshest) headline, and its text opens in the right panel right away; clicking “All
    feeds” puts it on the freshest headline there is, whichever feed it came from. A feed whose last
-   read failed carries the number of its failures under its name, in the colour of a failure; the
-   tooltip of that row names when the feed was last read and what the last attempt answered.
+   read failed is set apart: a warning glyph stands beside its name, the number of its failures runs
+   under the name in the colour of a failure; the tooltip of that row names when the feed was last
+   read and what the last attempt answered.
 2. **Headlines** — headlines of the selected feed from storage, freshest on top, with a
    “loaded N min ago” label and a storage time counted down from `clean_timeout`. When “All feeds”
    is selected, the headlines of all the feeds stand here, also freshest on top, and each one is
@@ -355,7 +362,7 @@ Four keys:
 ```
 
 A feed that has been read carries its own health record next to those settings — the reader's feed
-row is where it is shown:
+row and the line under a feed row on the “Feed settings” screen are where it is shown:
 
 ```json
 {
@@ -365,12 +372,15 @@ row is where it is shown:
   "lastErrorCode": "httpStatus",    // key errors.<code> of `lib/i18n.js`, when the failure is coded
   "lastErrorParams": { "status": 404 },
   "lastErrorMessage": "HTTP 404",   // kept under 300 characters
-  "fetchFailureCount": 2            // failures in a row; a read that worked sets it back to 0
+  "fetchFailureCount": 2,           // failures in a row; a read that worked sets it back to 0
+  "nextAlarmAt": 1760001800000      // when the next check is due: the last read + delay_timeout
 }
 ```
 
 None of these fields exists until the feed has actually been read, and changing the feed's
-`rss_link` clears them: the failures described the old address.
+`rss_link` clears them: the failures described the old address. `nextAlarmAt` is what the reader
+names as “next check”, the feed's own poll period (`alarmPeriodMinutes(delay_timeout)`, the same
+formula `syncAlarms` uses) counted from the last read.
 
 **`items`** — an array of headlines. The fields from the assignment are `rss_link`, `title`,
 `link`, `time`; `uid`/`feedId`/`feedName` were added internally: to identify a headline and avoid
@@ -593,7 +603,7 @@ background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js) and the guards over the screen markup: 57 tests
+                             # storage.js) and the guards over the screen markup: 58 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -689,10 +699,13 @@ that is checked in the browser after loading the extension.
     next visible one; `r` re-reads the selected feed. None of these keys fires while the cursor stands
     in the search field, except the arrows.
 26. Add a feed whose address answers nothing (or disconnect the network) and wait for its period →
-    under its name the row of the left column shows the number of failures, its tooltip names the
-    last check and the last failure in the interface language; after a read that worked the line
-    disappears, the counter is back to zero and the old failure is no longer shown. Change the feed's
-    `rss_link` on the feed screen → the old failures are gone with the address they described.
+    in the left column a warning glyph stands beside its name, under the name the number of failures
+    runs; its tooltip names the last check and the last failure in the interface language. On the
+    feed screen the health line under the same feed now carries that failure with the number of
+    failures in a row, and the planned next check. After a read that worked the glyph, the count and
+    the failure on the settings line disappear, the counter is back to zero and the old failure is no
+    longer shown. Change the feed's `rss_link` on the feed screen → the old failures are gone with the
+    address they described.
 
 ## Limitations
 

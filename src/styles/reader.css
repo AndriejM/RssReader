@@ -273,6 +273,24 @@
   color: var(--danger);
 }
 
+/*
+  A warning glyph beside the name is what catches the eye first: it is the row that failed, before the
+  reader counts the failures under it. Selected, the row fills with the accent, so the glyph keeps the
+  row's own colour rather than a red that would vanish against it.
+*/
+.item-title .feed-warning {
+  color: var(--danger);
+  height: 14px;
+  margin-left: 6px;
+  vertical-align: -0.2em;
+  width: 14px;
+}
+
+.list-item.selected .item-title .feed-warning {
+  color: var(--text-on-selected);
+  opacity: 0.85;
+}
+
 .list-item.selected .feed-health {
   color: var(--text-on-selected);
   opacity: 0.85;

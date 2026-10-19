@@ -123,6 +123,27 @@ export function formatSince(time, now = Date.now(), labels) {
 }
 
 /**
+ * "через 5 мин" style label for a future timestamp (the next poll of a feed). Mirrors
+ * `formatSince`: the same steps into the future, and the same `labels` from the active language
+ * (`i18n.unitLabels`); the defaults keep the Russian wording so `util.js` stays testable as is.
+ * A time already past reads as "now", so a schedule that slipped does not name a time that has
+ * already gone by.
+ */
+export function formatUntil(time, now = Date.now(), labels) {
+  const when = Number(time);
+  if (!Number.isFinite(when)) return labels?.empty ?? '—';
+  const diff = when - Number(now);
+  if (diff <= 0) return labels?.anyNow ?? 'сейчас';
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return labels?.anyNow ?? 'сейчас';
+  if (minutes < 60) return unitFormat(labels?.inMinutes ?? 'через {n} мин', minutes);
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return unitFormat(labels?.inHours ?? 'через {n} ч', hours);
+  const days = Math.floor(hours / 24);
+  return unitFormat(labels?.inDays ?? 'через {n} дн', days);
+}
+
+/**
  * Badge text for the toolbar icon: 1..99 as a number, "*" above 99, nothing for 0.
  */
 export function badgeText(count) {

@@ -10,6 +10,7 @@ import {
   MAX_ITEMS_PER_FEED,
   MAX_READ_RECORDS,
   READ_TTL_DAYS,
+  alarmPeriodMinutes,
   capPreview,
   isExpired,
   isReadExpired,
@@ -111,6 +112,7 @@ const FEED_DIAGNOSTIC_KEYS = [
   'lastErrorParams',
   'lastErrorMessage',
   'fetchFailureCount',
+  'nextAlarmAt',
 ];
 
 /** Текст отказа хранится коротким: он нужен для подписи в интерфейсе, а не как журнал. */
@@ -134,6 +136,11 @@ export async function markFeedChecked(feedId, { ok = true, error = null, time = 
 
   const checkedAt = Number(time) || Date.now();
   feed.lastCheckedAt = checkedAt;
+
+  /* Следующая проверка — это когда сработает будильник ленты: та же формула периода, что заводит
+   * `syncAlarms`, отсчитанная от этой попытки. Храним её, чтобы экран настроек назвал срок,
+   * не догадываясь о нём по одному `delay_timeout`. */
+  feed.nextAlarmAt = checkedAt + alarmPeriodMinutes(feed.delay_timeout) * 60000;
 
   if (ok) {
     feed.lastOkAt = checkedAt;

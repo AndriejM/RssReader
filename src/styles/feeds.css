@@ -173,6 +173,21 @@
   color: var(--danger);
 }
 
+/*
+   A constant diagnosis sits under every saved feed: when it was read, when the next read is due, and
+   — while it is broken — the reason and how many failures ran in a row. It stays put while the load
+   message above it comes and goes. An empty feed (never read, healthy) leaves it out, so the note row
+   is not opened for nothing.
+*/
+.row-note .feed-health {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.row-note .feed-health:empty {
+  display: none;
+}
+
 .empty {
   color: var(--text-muted);
   font-size: 13px;

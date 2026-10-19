@@ -7,7 +7,7 @@ import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
 import { wireThemeButton } from './lib/theme.js';
-import { humanDuration, newId, normalizeFeed } from './lib/util.js';
+import { formatSince, formatUntil, humanDuration, newId, normalizeFeed } from './lib/util.js';
 
 /* Synchronous first pass: the cached language (or the browser language) is known before
  * `chrome.storage` resolves, so the markup below is not left in Russian while we wait. */
@@ -89,6 +89,39 @@ function actionButton(icon, caption, { danger = false, disabled = false } = {}) 
 }
 
 /**
+ * Что экран настроек знает о последней попытке прочесть ленту: когда её читали, когда следующая,
+ * и — если лента сейчас сломана — почему и сколько отказов подряд. Отказ подписывается тем же
+ * `describeError`, что и ошибка загрузки, поэтому код отказа не остаётся сырым ключом словаря.
+ */
+function feedHealthLine(feed) {
+  const labels = unitLabels();
+  const parts = [];
+
+  const checkedAt = Number(feed.lastCheckedAt);
+  if (Number.isFinite(checkedAt) && checkedAt > 0) {
+    parts.push(t('feeds.health.checked', { since: formatSince(checkedAt, Date.now(), labels) }));
+  }
+
+  const nextAt = Number(feed.nextAlarmAt);
+  if (Number.isFinite(nextAt) && nextAt > 0) {
+    parts.push(t('feeds.health.next', { until: formatUntil(nextAt, Date.now(), labels) }));
+  }
+
+  const failures = Number(feed.fetchFailureCount) || 0;
+  if (failures > 0 && feed.lastErrorAt) {
+    const error = describeError({
+      code: feed.lastErrorCode,
+      params: feed.lastErrorParams,
+      message: feed.lastErrorMessage || undefined,
+    });
+    parts.push(t('feeds.health.error', { error }));
+    parts.push(t('feeds.health.streak', { count: failures }));
+  }
+
+  return parts.join(' · ');
+}
+
+/**
  * Build one editable row of the feed table. `feed` may be a draft (no id yet).
  */
 function buildRow(feed, { draft }) {
@@ -129,11 +162,22 @@ function buildRow(feed, { draft }) {
 
   const noteCell = document.createElement('td');
   noteCell.colSpan = 5;
+
+  /* Здоровье ленты — отдельная строка под ней, постоянная: когда её читали, что вышло из этой
+   * попытки и когда следующая. Она живёт отдельно от `status`, куда пишут мимолётный ответ кнопки
+   * «Загрузить сейчас», чтобы диагноз не пропал, как только кончилось сообщение о загрузке. */
+  const health = document.createElement('div');
+  health.className = 'feed-health muted';
+  const healthLine = draft ? '' : feedHealthLine(feed);
+  health.textContent = healthLine;
+
   const status = document.createElement('span');
   status.className = 'status';
   if (draft) status.textContent = t('feeds.draftNote');
-  noteCell.append(status);
+
+  noteCell.append(health, status);
   noteRow.append(noteCell);
+  if (healthLine) noteRow.hidden = false;
 
   const rowRecord = {
     feed,
@@ -141,6 +185,7 @@ function buildRow(feed, { draft }) {
     row,
     noteRow,
     status,
+    health,
     inputs: {
       name: name.input,
       rss_link: rssLink.input,
@@ -283,6 +328,15 @@ async function refreshRow(rowRecord) {
     }
   } catch (error) {
     setStatus(rowRecord, describeError(error), 'error');
+  } finally {
+    /* Загрузка оставила в хранилище свежий диагноз ленты; перечитаем его, чтобы постоянная строка
+     * под рядом показала ту попытку, что только что случилась, а не ту, что была при открытии. */
+    const fresh = await store.getFeed(rowRecord.feed.id);
+    if (rowRecord.health && fresh) {
+      const line = feedHealthLine(fresh);
+      rowRecord.health.textContent = line;
+      if (line) rowRecord.noteRow.hidden = false;
+    }
   }
 }
 

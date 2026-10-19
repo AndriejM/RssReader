@@ -218,10 +218,14 @@ function renderFeeds() {
     });
     body.append(title, meta);
 
-    /* Лента, которую не удаётся прочесть, не должна выглядеть обычной строкой: её счётчик отказов
-     * стоит под её названием, а подробности — в подсказке строки. */
+    /* Лента, которую не удаётся прочесть, не должна выглядеть обычной строкой: значок отказа стоит
+     * рядом с её названием, счётчик отказов — под названием, а подробности — в подсказке строки. */
     const failures = Number(feed.fetchFailureCount) || 0;
     if (failures > 0 && feed.lastErrorAt) {
+      const warn = icon('warning');
+      warn.classList.add('feed-warning');
+      title.append(warn);
+
       const status = document.createElement('span');
       status.className = 'item-meta feed-health';
       status.textContent = t('reader.feed.failedCount', { count: failures });

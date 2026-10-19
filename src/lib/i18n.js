@@ -144,6 +144,11 @@ const DICTIONARIES = {
     'feeds.error.delay': 'Период загрузки — не меньше 1 минуты',
     'feeds.error.clean': 'Время хранения — не меньше 1 минуты',
 
+    'feeds.health.checked': 'проверено {since}',
+    'feeds.health.next': 'следующая проверка {until}',
+    'feeds.health.error': 'ошибка: {error}',
+    'feeds.health.streak': 'сбоев подряд: {count}',
+
     'settings.title': 'Глобальные настройки',
     'settings.save': 'Записать',
     'settings.clearRead': 'Забыть прочитанные',
@@ -218,6 +223,10 @@ const DICTIONARIES = {
     'units.minutesAgo': '{n} мин назад',
     'units.hoursAgo': '{n} ч назад',
     'units.daysAgo': '{n} дн назад',
+    'units.inMinutes': 'через {n} мин',
+    'units.inHours': 'через {n} ч',
+    'units.inDays': 'через {n} дн',
+    'units.anyNow': 'сейчас',
   },
 
   en: {
@@ -327,6 +336,11 @@ const DICTIONARIES = {
     'feeds.error.delay': 'Fetch period — at least 1 minute',
     'feeds.error.clean': 'Storage time — at least 1 minute',
 
+    'feeds.health.checked': 'checked {since}',
+    'feeds.health.next': 'next check {until}',
+    'feeds.health.error': 'error: {error}',
+    'feeds.health.streak': '{count} failures in a row',
+
     'settings.title': 'Global settings',
     'settings.save': 'Save',
     'settings.clearRead': 'Forget read',
@@ -401,6 +415,10 @@ const DICTIONARIES = {
     'units.minutesAgo': '{n} min ago',
     'units.hoursAgo': '{n} h ago',
     'units.daysAgo': '{n} d ago',
+    'units.inMinutes': 'in {n} min',
+    'units.inHours': 'in {n} h',
+    'units.inDays': 'in {n} d',
+    'units.anyNow': 'now',
   },
 
   uk: {
@@ -506,6 +524,11 @@ const DICTIONARIES = {
     'feeds.error.delay': 'Період завантаження — не менше 1 хвилини',
     'feeds.error.clean': 'Час зберігання — не менше 1 хвилини',
 
+    'feeds.health.checked': 'перевірено {since}',
+    'feeds.health.next': 'наступна перевірка {until}',
+    'feeds.health.error': 'помилка: {error}',
+    'feeds.health.streak': 'подряд збоїв: {count}',
+
     'settings.title': 'Глобальні налаштування',
     'settings.save': 'Записати',
     'settings.clearRead': 'Забути прочитані',
@@ -580,6 +603,10 @@ const DICTIONARIES = {
     'units.minutesAgo': '{n} хв тому',
     'units.hoursAgo': '{n} год тому',
     'units.daysAgo': '{n} дн тому',
+    'units.inMinutes': 'через {n} хв',
+    'units.inHours': 'через {n} год',
+    'units.inDays': 'через {n} дн',
+    'units.anyNow': 'зараз',
   },
 
   pl: {
@@ -686,6 +713,11 @@ const DICTIONARIES = {
     'feeds.error.delay': 'Okres pobierania — co najmniej 1 minuta',
     'feeds.error.clean': 'Czas przechowywania — co najmniej 1 minuta',
 
+    'feeds.health.checked': 'sprawdzono {since}',
+    'feeds.health.next': 'następne sprawdzenie {until}',
+    'feeds.health.error': 'błąd: {error}',
+    'feeds.health.streak': '{count} błędy z rzędu',
+
     'settings.title': 'Ustawienia globalne',
     'settings.save': 'Zapisz',
     'settings.clearRead': 'Zapomnij przeczytane',
@@ -760,6 +792,10 @@ const DICTIONARIES = {
     'units.minutesAgo': '{n} min temu',
     'units.hoursAgo': '{n} godz. temu',
     'units.daysAgo': '{n} dni temu',
+    'units.inMinutes': 'za {n} min',
+    'units.inHours': 'za {n} godz.',
+    'units.inDays': 'za {n} dni',
+    'units.anyNow': 'teraz',
   },
 
   de: {
@@ -866,6 +902,11 @@ const DICTIONARIES = {
     'feeds.error.delay': 'Ladezeitraum — mindestens 1 Minute',
     'feeds.error.clean': 'Aufbewahrungszeit — mindestens 1 Minute',
 
+    'feeds.health.checked': 'zuletzt geprüft {since}',
+    'feeds.health.next': 'nächste Prüfung {until}',
+    'feeds.health.error': 'Fehler: {error}',
+    'feeds.health.streak': '{count} Fehler in Folge',
+
     'settings.title': 'Globale Einstellungen',
     'settings.save': 'Speichern',
     'settings.clearRead': 'Gelesene vergessen',
@@ -940,6 +981,10 @@ const DICTIONARIES = {
     'units.minutesAgo': 'vor {n} Min.',
     'units.hoursAgo': 'vor {n} Std.',
     'units.daysAgo': 'vor {n} T.',
+    'units.inMinutes': 'in {n} Min.',
+    'units.inHours': 'in {n} Std.',
+    'units.inDays': 'in {n} T.',
+    'units.anyNow': 'jetzt',
   },
 
   fr: {
@@ -1046,6 +1091,11 @@ const DICTIONARIES = {
     'feeds.error.delay': 'Périodicité de chargement — au moins 1 minute',
     'feeds.error.clean': 'Durée de conservation — au moins 1 minute',
 
+    'feeds.health.checked': 'vérifié {since}',
+    'feeds.health.next': 'prochaine vérification {until}',
+    'feeds.health.error': 'erreur : {error}',
+    'feeds.health.streak': '{count} échecs d’affilée',
+
     'settings.title': 'Réglages globaux',
     'settings.save': 'Enregistrer',
     'settings.clearRead': 'Oublier les lus',
@@ -1120,6 +1170,10 @@ const DICTIONARIES = {
     'units.minutesAgo': 'il y a {n} min',
     'units.hoursAgo': 'il y a {n} h',
     'units.daysAgo': 'il y a {n} j',
+    'units.inMinutes': 'dans {n} min',
+    'units.inHours': 'dans {n} h',
+    'units.inDays': 'dans {n} j',
+    'units.anyNow': 'maintenant',
   },
 
   es: {
@@ -1226,6 +1280,11 @@ const DICTIONARIES = {
     'feeds.error.delay': 'Periodicidad de carga — no menos de 1 minuto',
     'feeds.error.clean': 'Tiempo de conservación — no menos de 1 minuto',
 
+    'feeds.health.checked': 'comprobado {since}',
+    'feeds.health.next': 'próxima comprobación {until}',
+    'feeds.health.error': 'error: {error}',
+    'feeds.health.streak': '{count} fallos seguidos',
+
     'settings.title': 'Ajustes globales',
     'settings.save': 'Grabar',
     'settings.clearRead': 'Olvidar los leídos',
@@ -1300,6 +1359,10 @@ const DICTIONARIES = {
     'units.minutesAgo': 'hace {n} min',
     'units.hoursAgo': 'hace {n} h',
     'units.daysAgo': 'hace {n} d',
+    'units.inMinutes': 'en {n} min',
+    'units.inHours': 'en {n} h',
+    'units.inDays': 'en {n} d',
+    'units.anyNow': 'ahora',
   },
 };
 
@@ -1389,6 +1452,10 @@ export function unitLabels(lang = currentLanguage()) {
     minutesAgo: dictionary['units.minutesAgo'],
     hoursAgo: dictionary['units.hoursAgo'],
     daysAgo: dictionary['units.daysAgo'],
+    inMinutes: dictionary['units.inMinutes'],
+    inHours: dictionary['units.inHours'],
+    inDays: dictionary['units.inDays'],
+    anyNow: dictionary['units.anyNow'],
     locale: LOCALES[lang] ?? LOCALES[FALLBACK_LANGUAGE],
   };
 }
