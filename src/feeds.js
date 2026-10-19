@@ -317,7 +317,11 @@ async function refreshRow(rowRecord) {
       feedId: rowRecord.feed.id,
     });
     if (response?.ok) {
-      if (response.notModified) {
+      if (response.busy) {
+        /* Ленту читает другой контекст: этот запрос её не начинал и поэтому не имеет своих цифр.
+         * Тот же адрес второй раз не спросили, и строка честно говорит, что лента загружается. */
+        setStatus(rowRecord, t('common.loading'));
+      } else if (response.notModified) {
         /* Сервер ответил пустым 304: лента ровно та, что уже лежит в хранилище. «считано: 0»
          * выглядело бы как пустая лента, поэтому строка говорит прямо, что не изменилось ничего. */
         setStatus(rowRecord, t('feeds.resultUnchanged'));

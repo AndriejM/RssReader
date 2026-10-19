@@ -137,11 +137,10 @@ async function forgetValidators(feed, error) {
 }
 
 /**
- * Fetch one feed and write the new headlines to storage.
- * @param {{ notify?: boolean }} options - `notify` marks an alarm-driven (automatic) read,
- *   which is the only case that plays the sound.
+ * Fetch one feed and write the new headlines to storage. Nothing here knows about the reads of the
+ * same feed running elsewhere — that is the job of `ingestFeed`, which lets one feed be read once.
  */
-async function ingestFeed(feed, { notify = false } = {}) {
+async function readFeedOnce(feed) {
   const startedAt = Date.now();
   let result;
 
@@ -196,6 +195,111 @@ async function ingestFeed(feed, { notify = false } = {}) {
 
   await reportFeedHealth(feed.id, { ok: true, time: Date.now() });
 
+  return result;
+}
+
+/**
+ * Ленты, которые читает *этот* экземпляр воркера: `feedId` → его загрузка. `Set` здесь не годится:
+ * второй запрос той же ленты должен не просто пропуска́ться, а дождаться ответа первого, чтобы
+ * «Обновить» на ленте, которую как раз читают, не осталось без результата.
+ */
+const readingFeedIds = new Map();
+
+/**
+ * Занять ленту на время её чтения.
+ * @returns {Promise<{ read: Promise<object> } | { locked: true } | null>} `read` — ленту читает этот
+ *   же воркер; `locked` — её читает другой контекст (живой билет в хранилище); `null` — лента
+ *   досталась этому вызову: её id стоит в `readingFeedIds`, билет хранилища взят.
+ */
+async function holdFeedRead(feedId) {
+  /* Локальная проверка идёт первой и не ждёт хранилища: пока воркер читает ленту, любой другой
+   * запрос той же ленты отсекается сразу — без гонки «прочитали билет — записали билет».
+   * Просроченный билет при этом ленту не держит: локально она свободна, и `tryLockFeed` стирает
+   * его сам. */
+  const running = readingFeedIds.get(feedId);
+  if (running) return { read: running.read };
+
+  try {
+    if (!(await store.tryLockFeed(feedId))) return { locked: true };
+  } catch (error) {
+    /* Хранилище не ответило — не причина отказать в загрузке: локального билета достаточно,
+     * а лента, запертая из-за сбоя хранилища, не прочиталась бы вовсе. */
+    console.warn(`could not lock feed ${feedId}:`, error?.message ?? error);
+  }
+
+  let settle = null;
+  const read = new Promise((resolve, reject) => {
+    settle = { resolve, reject };
+  });
+  /* Отказ этой загрузки может остаться без того, кто его ждёт: без обработчика воркер записал бы
+   * его как «unhandled rejection». */
+  read.catch(() => {});
+
+  readingFeedIds.set(feedId, { read, settle });
+  return null;
+}
+
+/** Отдать ленту: её прочитали (или прочесть не удалось) — её могут спросить снова. */
+async function releaseFeedRead(feedId) {
+  readingFeedIds.delete(feedId);
+  try {
+    await store.releaseFeedLock(feedId);
+  } catch (error) {
+    /* Просроченный билет снимает следующая уборка; лента от этого не заперта. */
+    console.warn(`could not release feed ${feedId}:`, error?.message ?? error);
+  }
+}
+
+/** Ответ тому, кому ленту не отдали: её читает другой контекст, и у этого запроса нет своих цифр. */
+function lockedFeedResult() {
+  /* `busy` отличает этот ответ от «0 заголовков»: лента не пуста и не сломана — её читают.
+   * Диагноз ленты (`lastCheckedAt`) остаётся нетронутым: его пишет тот, кто её держит. */
+  return { added: 0, skipped: 0, seen: 0, notModified: false, busy: true };
+}
+
+/**
+ * Fetch one feed and write the new headlines to storage — once at a time. A feed that is being
+ * read right now is not asked a second time: a joiner takes the headlines of the read in progress,
+ * and a read from another context (its ticket in storage is still alive) is skipped.
+ * @param {{ notify?: boolean }} options - `notify` marks an alarm-driven (automatic) read,
+ *   which is the only case that plays the sound.
+ * @returns {Promise<object>} `{ added, skipped, seen, notModified, busy }`. Only a feed held by a
+ *   read this request did not start answers `busy`; one that joined a read of its own worker answers
+ *   with the headlines of that read, as if it had fetched them itself.
+ */
+async function ingestFeed(feed, { notify = false } = {}) {
+  const held = await holdFeedRead(feed.id);
+
+  if (held?.read) {
+    /* Звук и сообщение принадлежат загрузке, которая их начала: присоединившийся запрос только
+     * берёт её ответ, каким бы он ни был — отказ приходит тем же текстом. Цифры этого ответа
+     * настоящие: заголовки в хранилище именно эту ленту и принесли. */
+    const result = await held.read;
+    console.info(`feed "${feed.name}": already being read, this request takes its answer`);
+    return result;
+  }
+
+  if (held?.locked) {
+    console.info(`feed "${feed.name}": read by another request, this one is skipped`);
+    return lockedFeedResult();
+  }
+
+  const entry = readingFeedIds.get(feed.id);
+  let result = null;
+  let failure = null;
+
+  try {
+    result = await readFeedOnce(feed);
+    entry.settle.resolve(result);
+  } catch (error) {
+    failure = error;
+    entry.settle.reject(error);
+  } finally {
+    await releaseFeedRead(feed.id);
+  }
+
+  if (failure) throw failure;
+
   await updateBadge();
 
   if (result.added > 0 && notify) {
@@ -230,7 +334,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     /* Лента, которая читается всё хуже, ждёт между попытками дольше своего будильника
      * (`storage.markFeedChecked` пишет `nextRetryAt`). Будильник при этом не двигается: лишняя
      * попытка просто пропускается, поэтому одна битая лента не растягивает автоматическую загрузку
-     * на весь свой отказ и не мешает остальным. Запрошенную вручную ленту читаем всегда. */
+     * на весь свой отказ и не мешает остальным. Запрошенную вручную ленту читаем всегда. Так же
+     * пропускается будильник ленты, которую читают прямо сейчас: тот же адрес уже спрошен. */
     const paused = feedPauseRemaining(feed);
     if (paused > 0) {
       console.info(
@@ -240,6 +345,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
 
     const result = await ingestFeed(feed, { notify: true });
+    if (result.busy) return; // another context holds this feed; `ingestFeed` said so
     if (result.notModified) {
       // A 304: the reader asked, the server sent no body, nothing in the reader changed.
       console.info(`feed "${feed.name}": nothing new (304)`);
@@ -277,7 +383,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
    * Read every feed of the list in one click, in the order of that list. One after another on
    * purpose: N feeds at once would be N simultaneous requests from a single click. A feed that
    * refuses to be read does not stop the others — its error comes back with its id, so the page can
-   * say how many feeds failed. Like a manual refresh of one feed, this plays no sound.
+   * say how many feeds failed. Like a manual refresh of one feed, this plays no sound. A feed that
+   * is being read already is not asked a second time: it waits for that read, and only a read of
+   * another context answers `busy`.
    */
   if (message?.type === MSG_REFRESH_ALL_FEEDS) {
     (async () => {

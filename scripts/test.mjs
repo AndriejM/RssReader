@@ -1595,7 +1595,7 @@ test('the validators make the whole trip: storage — worker — offscreen docum
     'the document does not drop the keys on its way to the request',
   );
 
-  const ingest = worker.match(/async function ingestFeed\([\s\S]*?\n  \} catch \(error\)/);
+  const ingest = worker.match(/async function readFeedOnce\([\s\S]*?\n  \} catch \(error\)/);
   assert.ok(ingest, 'the worker writes one feed read to storage');
   assert.match(
     ingest[0],
@@ -1684,6 +1684,125 @@ test('an automatic read waits out the pause of a failing feed, a read by hand do
       !/feedPauseRemaining|nextRetryAt/.test(handler[0]),
       `${name} refuses a read the user asked for by hand`,
     );
+  }
+});
+
+/* --------------- one feed is read once (in-flight lock) --------------- */
+
+test('a feed that is being read is held; its neighbour is not', async () => {
+  const forget = storageMemory();
+
+  try {
+    assert.equal(await store.tryLockFeed('a'), true, 'a feed nobody reads is taken');
+    assert.equal(await store.tryLockFeed('a'), false, 'the same feed is not read twice at once');
+    assert.equal(await store.tryLockFeed('b'), true, 'the hold belongs to one feed, not to the list');
+
+    await store.releaseFeedLock('a');
+    assert.equal(await store.tryLockFeed('a'), true, 'a read that ended gives its feed back');
+    assert.equal(await store.releaseFeedLock('c'), false, 'there was nothing to give back');
+  } finally {
+    forget();
+  }
+});
+
+test('a hold that outlived the read it protects stops holding', async () => {
+  const forget = storageMemory();
+
+  try {
+    const ttl = store.FETCH_LOCK_TTL_MS;
+    assert.ok(
+      ttl > FEED_FETCH_TIMEOUT_MS * 2,
+      'the offscreen document may ask one feed twice (`requestOffscreen` makes two attempts), so the hold must outlive both',
+    );
+
+    const t0 = 1000;
+    await store.tryLockFeed('a', { now: t0 });
+    assert.equal(
+      await store.tryLockFeed('a', { now: t0 + ttl - 1 }),
+      false,
+      'a read that is still running holds its feed',
+    );
+    assert.equal(
+      await store.tryLockFeed('a', { now: t0 + ttl }),
+      true,
+      'a service worker that fell asleep mid-read must not leave the feed unreadable',
+    );
+
+    await store.tryLockFeed('stale', { now: t0 });
+    await store.tryLockFeed('live', { now: t0, ttlMs: 3 * ttl });
+    assert.deepEqual(
+      await store.cleanupFetchLocks(t0 + 2 * ttl - 1),
+      { removed: 1 },
+      'the sweep of a minute drops the ticket of a read that never came back and leaves the live one',
+    );
+    assert.equal(await store.tryLockFeed('stale', { now: t0 + ttl }), true, 'the sweep gave the stale feed back');
+  } finally {
+    forget();
+  }
+});
+
+test('a deleted feed takes its hold with it', async () => {
+  const forget = storageMemory();
+
+  try {
+    await store.upsertFeed({ id: 'gone', name: 'Gone', rss_link: 'https://a.b/rss' });
+    await store.tryLockFeed('gone');
+    await store.deleteFeed('gone');
+
+    const stored = await chrome.storage.local.get(store.FETCH_LOCKS_KEY);
+    assert.deepEqual(stored[store.FETCH_LOCKS_KEY] ?? {}, {}, 'nothing holds a feed nobody can read');
+  } finally {
+    forget();
+  }
+});
+
+/**
+ * The lock only works if the worker actually uses it: an alarm and a read by hand are two
+ * independent paths to the same address, and the fast guard against them lives in the worker itself.
+ */
+test('one feed is read once, whoever asked for the read', () => {
+  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+
+  const ingest = worker.match(/async function ingestFeed\([\s\S]*?\r?\n  return result;\r?\n\}/);
+  assert.ok(ingest, 'the worker reads one feed and writes its headlines');
+  assert.match(
+    ingest[0],
+    /const held = await holdFeedRead\(feed\.id\)/,
+    'the read asks for the feed before it asks the address',
+  );
+  assert.match(ingest[0], /await held\.read/, 'a second request joins the read in progress instead of fetching again');
+  const join = ingest[0].match(/if \(held\?\.read\)[\s\S]*?\r?\n  \}/);
+  assert.ok(join, 'a request can join a read of its own worker');
+  assert.match(join[0], /return result;/, 'the joined request answers with the real numbers of that read');
+  assert.ok(!join[0].includes('busy'), 'a joined read is not a placeholder answer');
+  assert.match(ingest[0], /return lockedFeedResult\(\)/, 'a read from another context is skipped, not fetched again');
+  assert.match(
+    ingest[0],
+    /}\s*finally\s*\{\s*await releaseFeedRead\(feed\.id\);\s*\}/,
+    'the feed is given back even when its read failed',
+  );
+
+  const hold = worker.match(/async function holdFeedRead\([\s\S]*?\r?\n  return null;\r?\n\}/);
+  assert.ok(hold, 'the worker has a guard against reading one feed twice');
+  assert.ok(
+    hold[0].indexOf('readingFeedIds.get(feedId)') < hold[0].indexOf('store.tryLockFeed(feedId)'),
+    'the local guard answers before the storage is asked — two requests cannot race over the ticket',
+  );
+  assert.match(hold[0], /store\.tryLockFeed\(feedId\)/, 'the hold survives a worker that falls asleep');
+  const localHit = hold[0].slice(hold[0].indexOf('const running'), hold[0].indexOf('await store.tryLockFeed'));
+  assert.ok(
+    !/await/.test(localHit),
+    'a feed this worker is already reading is refused without waiting for the storage',
+  );
+
+  const alarm = worker.match(/chrome\.alarms\.onAlarm\.addListener\([\s\S]*?\n\}\);/);
+  assert.ok(alarm, 'the worker answers no alarm');
+  assert.match(alarm[0], /if \(result\.busy\) return;/, 'the alarm of a feed being read already stands down');
+
+  for (const name of ['MSG_REFRESH_FEED', 'MSG_REFRESH_ALL_FEEDS']) {
+    const handler = worker.match(new RegExp(`message\\?\\.type === ${name}[\\s\\S]*?\n  \}`));
+    assert.ok(handler, `the worker answers ${name}`);
+    assert.match(handler[0], /ingestFeed\(feed/, `${name} reads the feed through the same guard`);
   }
 });
 

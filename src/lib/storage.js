@@ -7,6 +7,7 @@ import {
   DEFAULT_CLEAN_TIMEOUT,
   DEFAULT_DELAY_TIMEOUT,
   DEFAULT_SOUND_VOLUME,
+  FEED_FETCH_TIMEOUT_MS,
   MAX_ITEMS_PER_FEED,
   MAX_READ_RECORDS,
   READ_TTL_DAYS,
@@ -229,12 +230,99 @@ export async function rememberFeedValidators(
   return true;
 }
 
+/**
+ * Ленты, которые читаются прямо сейчас. Два параллельных чтения одного адреса — это два ответа,
+ * которые пишут заголовки друг поверх друга, поэтому занятость ленты хранится здесь, а не только
+ * в памяти воркера: service worker засыпает посреди загрузки и теряет быстрое состояние вместе
+ * с собой, а билет в хранилище остаётся.
+ */
+export const FETCH_LOCKS_KEY = 'feed_fetch_locks';
+
+/**
+ * Сколько лента считается занятой: самое долгое чтение, какое воркер может начать. Загрузка ленты —
+ * это `FEED_FETCH_TIMEOUT_MS` ожидания ответа; разбор в offscreen-документе может спросить его
+ * дважды (свежесозданный документ ещё не успел принять сообщение) и этим таймаутом не ограничен,
+ * а `+ 15000` — место на разметку XML и запись заголовков. Билет длиннее этого уже ничего не
+ * защищает: загрузка, которая не вернулась, не должна закрывать ленту для следующих.
+ */
+export const FETCH_LOCK_TTL_MS = FEED_FETCH_TIMEOUT_MS * 2 + 15000;
+
+async function getFetchLocks() {
+  const stored = await chrome.storage.local.get(FETCH_LOCKS_KEY);
+  const locks = stored[FETCH_LOCKS_KEY];
+  return locks && typeof locks === 'object' ? locks : {};
+}
+
+function saveFetchLocks(locks) {
+  return chrome.storage.local.set({ [FETCH_LOCKS_KEY]: locks });
+}
+
+/** Живой ли билет: `until` в прошлом — это загрузка, которая не вернулась, а не занятая лента. */
+function lockHolds(lock, now) {
+  return Number(lock?.until) > Number(now);
+}
+
+/**
+ * Занять ленту на время её чтения. Отказывает только живой занятости, а просроченные билеты
+ * стирает заодно — иначе уснувший воркер оставил бы ленту незчитываемой.
+ * @returns {Promise<boolean>} `false` — ленту читает кто-то другой.
+ */
+export async function tryLockFeed(feedId, { now = Date.now(), ttlMs = FETCH_LOCK_TTL_MS } = {}) {
+  const stored = await getFetchLocks();
+  const alive = {};
+  let dropped = 0;
+
+  for (const [id, lock] of Object.entries(stored)) {
+    if (lockHolds(lock, now)) alive[id] = lock;
+    else dropped += 1;
+  }
+
+  if (alive[feedId]) {
+    if (dropped > 0) await saveFetchLocks(alive);
+    return false;
+  }
+
+  alive[feedId] = { until: Number(now) + ttlMs };
+  await saveFetchLocks(alive);
+  return true;
+}
+
+/** Отдать ленту: её прочитали — следующая загрузка может её спросить. */
+export async function releaseFeedLock(feedId) {
+  const locks = await getFetchLocks();
+  if (!(feedId in locks)) return false;
+  delete locks[feedId];
+  await saveFetchLocks(locks);
+  return true;
+}
+
+/**
+ * Стереть билеты лент, загрузка которых так и не вернула ответ.
+ * @returns {{ removed: number }}
+ */
+export async function cleanupFetchLocks(now = Date.now()) {
+  const stored = await getFetchLocks();
+  const alive = {};
+  let removed = 0;
+
+  for (const [id, lock] of Object.entries(stored)) {
+    if (lockHolds(lock, now)) alive[id] = lock;
+    else removed += 1;
+  }
+
+  if (removed > 0) await saveFetchLocks(alive);
+  return { removed };
+}
+
 /** Deleting a feed also drops the headlines that belong to it. */
 export async function deleteFeed(feedId) {
   const feeds = await getFeeds();
   await saveFeeds(feeds.filter((feed) => feed.id !== feedId));
   const items = await getItems();
   await saveItems(items.filter((item) => item.feedId !== feedId));
+  /* Отдать билет удалённой ленты больше некому: без этого он пролежал бы в хранилище, пока сам
+   * не истечёт. */
+  await releaseFeedLock(feedId);
 }
 
 export async function getItems() {
@@ -475,7 +563,10 @@ export async function cleanup(now = Date.now()) {
   // Read markers are pruned even when the headline list is empty: it is the only way a marker can
   // ever lapse, and a list of markers that never ages blocks the same news forever.
   const { removed: readRemoved } = await cleanupRead(now);
-  return { removed, items: alive, readRemoved };
+  // The same sweep ages the tickets of reads that never came back, so a worker that fell asleep
+  // mid-fetch cannot leave a feed locked.
+  const { removed: lockRemoved } = await cleanupFetchLocks(now);
+  return { removed, items: alive, readRemoved, lockRemoved };
 }
 
 export async function getSettings() {
