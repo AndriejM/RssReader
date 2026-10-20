@@ -4,7 +4,7 @@
     "description": "Name der Erweiterung: chrome://extensions und Web Store"
   },
   "extensionDescription": {
-    "message": "RSS-Nachrichten lesen: Feed-Einstellungen, globale Einstellungen (read_ttl_days, der Signalton beim automatischen Laden, die Sprache der Oberfläche), Dreifeldern-Lesefenster, automatisches Laden und automatisches Löschen von Schlagzeilen",
+    "message": "RSS-Nachrichten lesen: Feed- und globale Einstellungen, Dreifeldern-Lesefenster, automatisches Laden und Löschen von Schlagzeilen.",
     "description": "Kurze Beschreibung dessen, was die Erweiterung tut"
   }
 }

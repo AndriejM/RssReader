@@ -4,7 +4,7 @@
     "description": "Nombre de la extensión: chrome://extensions y Web Store"
   },
   "extensionDescription": {
-    "message": "Lectura de noticias RSS: ajustes de fuentes, ajustes globales (read_ttl_days, la señal de la descarga automática, el idioma de la interfaz), lector de tres paneles, carga y eliminación automáticas de titulares",
+    "message": "Lee noticias RSS: ajustes de fuentes y globales, lector de tres paneles, carga y eliminación automáticas de titulares.",
     "description": "Descripción breve de lo que hace la extensión"
   }
 }

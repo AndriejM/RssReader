@@ -4,7 +4,7 @@
     "description": "Nazwa rozszerzenia: chrome://extensions i Web Store"
   },
   "extensionDescription": {
-    "message": "Czytanie wiadomości RSS: ustawienia kanałów, ustawienia globalne (read_ttl_days, sygnał automatycznego pobierania, język interfejsu), trójpanelowy interfejs, automatyczne wczytywanie i automatyczne usuwanie nagłówków",
+    "message": "Czytanie wiadomości RSS: ustawienia kanałów i globalne, trójpanelowy interfejs, automatyczne wczytywanie i usuwanie nagłówków.",
     "description": "Krótki opis działania rozszerzenia"
   }
 }
