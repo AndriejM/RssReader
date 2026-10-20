@@ -114,10 +114,22 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Крупный шрифт',
     'reader.fontScale.xlarge': 'Очень крупный шрифт',
 
+    // Что читалка сообщает вслух, когда панель перерисовывается: об этом говорит скрытая строка
+    // `role="status"` (см. `index.js`), а не текст, который читает глаз.
+    'reader.announce.loaded': 'получено новых заголовков: {count}',
+    'reader.announce.none': 'новых заголовков нет',
+    'reader.announce.failed': 'не удалось обновить лент: {count}',
+    'reader.announce.error': 'обновление не удалось: {error}',
+    'reader.announce.cleared': 'заголовков удалено: {count}',
+    'reader.announce.deleted': 'заголовок удалён',
+    'reader.feeds.list.aria': 'Ленты: выберите ленту, чтобы увидеть её заголовки',
+    'reader.headlines.list.aria': 'Список заголовков выбранной ленты',
+
     // Граница между колонками: её tooltip и aria-label.
     'reader.column.resize': 'Потяните, чтобы изменить ширину колонки',
 
     'feeds.title': 'Настройки RSS лент',
+    'feeds.caption': 'Таблица лент: название, ссылка, период загрузки заголовков, время хранения новости',
     'feeds.add': 'Добавить ленту',
     'feeds.empty': 'Лент нет. Нажмите «Добавить ленту».',
     'feeds.info.tooltip': 'Как устроены период загрузки и время хранения',
@@ -168,6 +180,7 @@ const DICTIONARIES = {
     'feeds.health.pause': 'следующая попытка {until}',
 
     'settings.title': 'Глобальные настройки',
+    'settings.caption': 'Настройки: горизонт отметок о прочитанном, сигнал загрузки, язык интерфейса',
     'settings.save': 'Записать',
     'settings.clearRead': 'Забыть прочитанные',
     'settings.ttl': 'через сколько дней забыть прочитанные',
@@ -327,10 +340,22 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Large font',
     'reader.fontScale.xlarge': 'Extra-large font',
 
+    // What the reader says out loud when a panel is repainted: a hidden `role="status"` line carries
+    // these, not a text the eye reads.
+    'reader.announce.loaded': '{count} new headlines loaded',
+    'reader.announce.none': 'no new headlines',
+    'reader.announce.failed': '{count} feeds could not be refreshed',
+    'reader.announce.error': 'refresh failed: {error}',
+    'reader.announce.cleared': '{count} headlines removed',
+    'reader.announce.deleted': 'headline deleted',
+    'reader.feeds.list.aria': 'Feeds: pick a feed to read its headlines',
+    'reader.headlines.list.aria': 'List of headlines of the selected feed',
+
     // The border between two columns: its tooltip and its aria-label.
     'reader.column.resize': 'Drag to change the width of this column',
 
     'feeds.title': 'RSS feed settings',
+    'feeds.caption': 'Feed table: name, link, headline fetch period, news storage time',
     'feeds.add': 'Add feed',
     'feeds.empty': 'No feeds yet. Press “Add feed”.',
     'feeds.info.tooltip': 'How the fetch period and the storage time work',
@@ -381,6 +406,7 @@ const DICTIONARIES = {
     'feeds.health.pause': 'next attempt {until}',
 
     'settings.title': 'Global settings',
+    'settings.caption': 'Settings: the horizon of read markers, the load signal, the interface language',
     'settings.save': 'Save',
     'settings.clearRead': 'Forget read',
     'settings.ttl': 'after how many days to forget read headlines',
@@ -537,9 +563,19 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Великий шрифт',
     'reader.fontScale.xlarge': 'Дуже великий шрифт',
 
+    'reader.announce.loaded': 'отримано нових заголовків: {count}',
+    'reader.announce.none': 'нових заголовків немає',
+    'reader.announce.failed': 'не вдалося оновити стрічок: {count}',
+    'reader.announce.error': 'оновлення не вдалося: {error}',
+    'reader.announce.cleared': 'заголовків видалено: {count}',
+    'reader.announce.deleted': 'заголовок видалено',
+    'reader.feeds.list.aria': 'Стрічки: оберіть стрічку, щоб бачити її заголовки',
+    'reader.headlines.list.aria': 'Список заголовків вибраної стрічки',
+
     'reader.column.resize': 'Перетягніть, щоб змінити ширину колонки',
 
     'feeds.title': 'Налаштування RSS-стрічок',
+    'feeds.caption': 'Таблиця стрічок: назва, посилання, період завантаження заголовків, час зберігання новини',
     'feeds.add': 'Додати стрічку',
     'feeds.empty': 'Стрічок немає. Натисніть «Додати стрічку».',
     'feeds.info.tooltip': 'Як влаштовані період завантаження та час зберігання',
@@ -590,6 +626,7 @@ const DICTIONARIES = {
     'feeds.health.pause': 'наступна спроба {until}',
 
     'settings.title': 'Глобальні налаштування',
+    'settings.caption': 'Налаштування: горизонт міток прочитаного, сигнал завантаження, мова інтерфейсу',
     'settings.save': 'Записати',
     'settings.clearRead': 'Забути прочитані',
     'settings.ttl': 'через скільки днів забути прочитані',
@@ -747,9 +784,19 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Duża czcionka',
     'reader.fontScale.xlarge': 'Bardzo duża czcionka',
 
+    'reader.announce.loaded': 'pobrano nowych nagłówków: {count}',
+    'reader.announce.none': 'brak nowych nagłówków',
+    'reader.announce.failed': 'nie udało się odświeżyć kanałów: {count}',
+    'reader.announce.error': 'odświeżanie nie powiodło się: {error}',
+    'reader.announce.cleared': 'usuniętych nagłówków: {count}',
+    'reader.announce.deleted': 'nagłówek usunięty',
+    'reader.feeds.list.aria': 'Kanały: wybierz kanał, aby zobaczyć jego nagłówki',
+    'reader.headlines.list.aria': 'Lista nagłówków wybranego kanału',
+
     'reader.column.resize': 'Przeciągnij, aby zmienić szerokość tej kolumny',
 
     'feeds.title': 'Ustawienia kanałów RSS',
+    'feeds.caption': 'Tabela kanałów: nazwa, link, okres pobierania nagłówków, czas przechowywania wiadomości',
     'feeds.add': 'Dodaj kanał',
     'feeds.empty': 'Brak kanałów. Naciśnij „Dodaj kanał”.',
     'feeds.info.tooltip': 'Jak działają okres pobierania i czas przechowywania',
@@ -800,6 +847,7 @@ const DICTIONARIES = {
     'feeds.health.pause': 'następna próba {until}',
 
     'settings.title': 'Ustawienia globalne',
+    'settings.caption': 'Ustawienia: horyzont znaczników przeczytanych, sygnał wczytywania, język interfejsu',
     'settings.save': 'Zapisz',
     'settings.clearRead': 'Zapomnij przeczytane',
     'settings.ttl': 'po ilu dniach zapomnieć przeczytane',
@@ -957,9 +1005,19 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Große Schrift',
     'reader.fontScale.xlarge': 'Sehr große Schrift',
 
+    'reader.announce.loaded': '{count} neue Schlagzeilen geladen',
+    'reader.announce.none': 'keine neuen Schlagzeilen',
+    'reader.announce.failed': '{count} Feeds konnten nicht aktualisiert werden',
+    'reader.announce.error': 'Aktualisierung fehlgeschlagen: {error}',
+    'reader.announce.cleared': '{count} Schlagzeilen entfernt',
+    'reader.announce.deleted': 'Schlagzeile gelöscht',
+    'reader.feeds.list.aria': 'Feeds: wählen Sie einen Feed, um seine Schlagzeilen zu lesen',
+    'reader.headlines.list.aria': 'Liste der Schlagzeilen des gewählten Feeds',
+
     'reader.column.resize': 'Ziehen, um die Breite dieser Spalte zu ändern',
 
     'feeds.title': 'Einstellungen der RSS-Feeds',
+    'feeds.caption': 'Feedtabelle: Name, Link, Zeitraum des Schlagzeilenladens, Aufbewahrungszeit der Nachricht',
     'feeds.add': 'Feed hinzufügen',
     'feeds.empty': 'Keine Feeds. Klicken Sie auf „Feed hinzufügen“.',
     'feeds.info.tooltip': 'So funktionieren Ladezeitraum und Aufbewahrungszeit',
@@ -1010,6 +1068,7 @@ const DICTIONARIES = {
     'feeds.health.pause': 'nächster Versuch {until}',
 
     'settings.title': 'Globale Einstellungen',
+    'settings.caption': 'Einstellungen: Horizont der gelesenen Markierungen, Ladesignal, Sprache der Oberfläche',
     'settings.save': 'Speichern',
     'settings.clearRead': 'Gelesene vergessen',
     'settings.ttl': 'Gelesene nach wie vielen Tagen vergessen',
@@ -1167,9 +1226,19 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Grande police',
     'reader.fontScale.xlarge': 'Très grande police',
 
+    'reader.announce.loaded': '{count} nouveaux titres chargés',
+    'reader.announce.none': 'aucun nouveau titre',
+    'reader.announce.failed': '{count} flux n’ont pas pu être actualisés',
+    'reader.announce.error': 'actualisation échouée : {error}',
+    'reader.announce.cleared': '{count} titres supprimés',
+    'reader.announce.deleted': 'titre supprimé',
+    'reader.feeds.list.aria': 'Flux : choisissez un flux pour lire ses titres',
+    'reader.headlines.list.aria': 'Liste des titres du flux choisi',
+
     'reader.column.resize': 'Faites glisser pour modifier la largeur de cette colonne',
 
     'feeds.title': 'Réglages des flux RSS',
+    'feeds.caption': 'Tableau des flux : nom du flux, lien, périodicité du chargement des titres, durée de conservation de l’actualité',
     'feeds.add': 'Ajouter un flux',
     'feeds.empty': 'Aucun flux. Cliquez sur « Ajouter un flux ».',
     'feeds.info.tooltip': 'Comment fonctionnent la périodicité et la durée de conservation',
@@ -1220,6 +1289,7 @@ const DICTIONARIES = {
     'feeds.health.pause': 'nouvel essai {until}',
 
     'settings.title': 'Réglages globaux',
+    'settings.caption': 'Réglages : horizon des marques de lecture, signal de chargement, langue de l’interface',
     'settings.save': 'Enregistrer',
     'settings.clearRead': 'Oublier les lus',
     'settings.ttl': 'Oublier les lus après un nombre de jours donné',
@@ -1377,9 +1447,19 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Letra grande',
     'reader.fontScale.xlarge': 'Letra muy grande',
 
+    'reader.announce.loaded': '{count} titulares nuevos cargados',
+    'reader.announce.none': 'no hay titulares nuevos',
+    'reader.announce.failed': '{count} fuentes no se pudieron actualizar',
+    'reader.announce.error': 'error al actualizar: {error}',
+    'reader.announce.cleared': '{count} titulares eliminados',
+    'reader.announce.deleted': 'titular eliminado',
+    'reader.feeds.list.aria': 'Fuentes: elija una fuente para leer sus titulares',
+    'reader.headlines.list.aria': 'Lista de titulares de la fuente seleccionada',
+
     'reader.column.resize': 'Arrastre para cambiar el ancho de esta columna',
 
-    'feeds.title': 'Ajustes de las fuentes RSS',
+    'feeds.title': 'Ajustes de fuentes RSS',
+    'feeds.caption': 'Tabla de fuentes: nombre de la fuente, enlace, periodicidad de carga de titulares, tiempo de conservación de la noticia',
     'feeds.add': 'Añadir fuente',
     'feeds.empty': 'No hay fuentes. Pulse «Añadir fuente».',
     'feeds.info.tooltip': 'Cómo funcionan la periodicidad de carga y el tiempo de conservación',
@@ -1430,6 +1510,7 @@ const DICTIONARIES = {
     'feeds.health.pause': 'próximo intento {until}',
 
     'settings.title': 'Ajustes globales',
+    'settings.caption': 'Ajustes: horizonte de las marcas de leídas, señal de carga, idioma de la interfaz',
     'settings.save': 'Grabar',
     'settings.clearRead': 'Olvidar los leídos',
     'settings.ttl': 'olvidar los leídos pasados cuántos días',

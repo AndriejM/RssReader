@@ -70,6 +70,14 @@ Every icon has both a tooltip (`title`) and an `aria-label`, taken from the same
 is built by `src/lib/nav.js`: a screen only says which screen it is (`data-nav-active` on its
 `<nav>`) and keeps its own buttons outside the strip.
 
+The parts every screen needs to be used by an ear and by a keyboard live in `src/styles/theme.css`,
+the stylesheet all three load: the `:focus-visible` outline a button, an input, a select, a link or
+the «?» disclosure of a screen takes when the keyboard reaches it; `.sr-only`, the line a screen
+reader reads and an eye never sees, from which each screen says what its buttons just did; and
+`@media (prefers-reduced-motion: reduce)`, which stops the colours of a button cross-fading under
+the pointer. A screen that spins a glyph or fades a handle answers for that in its own stylesheet,
+where those parts are drawn.
+
 ## Quick start
 
 1. Open “Feed settings” (the icon in the top-right corner) → the “add feed” icon above the table.
@@ -131,6 +139,13 @@ the interface language, how many failures ran in a row and how long an automatic
 feed alone before asking it again. It stays put while the load message above
 it comes and goes, and a healthy feed that was read cleanly shows only the check and the next one.
 A manual “Load now” refreshes this line with the attempt that just happened.
+
+What those lines say is said out loud too: a feed saved, a row whose fields were left unfilled,
+what “Load now” brought back (“New: 5”), how many feeds a file took and how many it gave back. The
+same `setStatus` and `setTransferStatus` write both the visible line and the hidden one
+(`#feeds-announce`, `role="status" aria-live="polite"`), so the two can never disagree. The table
+names itself for a screen reader through a `<caption>` no eye sees (`feeds.caption`): the `<th>` row
+is a head a sighted person reads, not a name said when a reader enters the table.
 
 Screen header: the row of screen-switcher icons (here its “Feed settings” icon is the highlighted
 one) and the theme toggle.
@@ -240,7 +255,18 @@ search field holds the same letters) or while Ctrl/Meta/Alt are down:
 | `Esc` (in the search field) | empty the field, keeping the open headline |
 
 The arrows work from inside the search field too: they leave the words typed and move the cursor
-through the headlines the field filters. Every move brings the row it landed on back into view.
+through the headlines the field filters. Every move brings the row it landed on back into view, and the
+row the keyboard opens also takes the focus, so its name is read out and the next arrow continues from
+it.
+
+The reader also says out loud what repainting a panel just did — how many headlines came in, how many
+feeds refused, what was removed («5 new headlines», «3 feeds could not be refreshed», «headline
+deleted»). A line no eye sees (`#reader-announce`, `role="status" aria-live="polite"`, hidden through
+`.sr-only`) carries it, and the same facts stand where the eye reads them: the counters of the panels
+and the placeholders. The middle column is a `listbox` whose rows are `option`s, the open headline
+among them is `aria-selected`; the chosen row of the left column carries `aria-current`. A keyboard
+cursor is drawn around the whole row (`:focus-visible`, in a colour that reads against a filled row),
+and `prefers-reduced-motion: reduce` drops the spinning refresh glyph and the fade of a border handle.
 
 ## Global settings screen (`src/settings.html`)
 
@@ -279,6 +305,13 @@ value (first launch) — the browser language (`navigator.language` and `navigat
 and only if it is not supported by the extension — `English`. A saved language takes effect
 right away: the screen where it was changed re-pastes its own labels without a reload, and the
 reader and the feed screen pick up the change via `chrome.storage.onChanged`.
+
+The result of pressing “Write” — what was written, that a days field was refused, how many read
+markers “Forget read” removed, why a preview signal did not play — is also said out loud from a
+hidden line (`#settings-announce`, `role="status" aria-live="polite"`). Only outcomes are spoken:
+the «changes are not written yet» hint stands under the fields from the first keystroke, and
+repeating it by ear on every keystroke would drown the screen. The table of fields names itself
+through a `<caption>` no eye sees (`settings.caption`).
 
 Screen header: the row of screen-switcher icons (here its “Global settings” icon is the
 highlighted one; the reader icon returns to the reader in this same tab, keeping the selected feed
@@ -342,7 +375,9 @@ src/lib/util.js               pure functions without chrome.* (covered by tests)
 _locales/                     the extension's own name and description in each of the seven
                               locales (en|ru|uk|pl|de|fr|es) — Chrome picks them by the browser
                               language (`__MSG_extensionName__` in the manifest)
-src/styles/                   theme.css (theme CSS variables), reader.css, feeds.css, settings.css
+src/styles/                   theme.css (theme CSS variables, and for every screen the focus
+                              outline, `.sr-only` and the answer to reduced motion), reader.css,
+                              feeds.css, settings.css
 scripts/test.mjs              unit tests of the pure functions: node scripts/test.mjs
 scripts/make_icons.mjs        regenerate the icons without dependencies
 scripts/check_icons.mjs       verify the result of make_icons.mjs
@@ -874,7 +909,9 @@ rules are covered by the tests.
     the cursor moves through the headlines and the text in the right panel follows, the row staying in
     view; `Enter` opens the original of the open headline in a new tab; `d` deletes it and opens the
     next visible one; `r` re-reads the selected feed. None of these keys fires while the cursor stands
-    in the search field, except the arrows.
+    in the search field, except the arrows. Every row the keyboard opens takes the focus, and a screen
+    reader reads its name; the outcome of `r` is said out loud from the hidden status line («5 new
+    headlines», «3 feeds could not be refreshed»).
 26. Add a feed whose address answers nothing (or disconnect the network) and wait for its period →
     in the left column a warning glyph stands beside its name, under the name the number of failures
     runs; its tooltip names the last check and the last failure in the interface language. On the
@@ -922,6 +959,13 @@ rules are covered by the tests.
     «4 min ago» becomes «5 min ago» on its own. Press “Refresh” → the line answers without a reload,
     because a read rewrites the feed row and the reader repaints from it, and the moment it names is
     the number that stands in `feeds[].nextAlarmAt` in `chrome.storage.local`.
+33. On the feed screen press Tab through the row of icons, a row of the table and the “?” → every one
+    of them takes a visible outline, the “?” included, although it is a `<summary>` and no button. Press
+    the “save” icon of a row whose link is empty → the row says “Check the fields” to the eye and the
+    same words come from its hidden status line, which also names the table when a screen reader enters
+    it. On the global settings screen press “Write” → what was written is read out loud, while the
+    «changes are not written yet» hint stays where it stands. Turn on “reduce motion” in the OS → the
+    colours of a button stop fading and the reader's refresh glyph stops spinning.
 
 ## Limitations
 

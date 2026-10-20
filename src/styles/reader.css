@@ -34,7 +34,8 @@
   text-align: center;
 }
 
-/* While a feed is being re-read the refresh glyph turns. */
+/* While a feed is being re-read the refresh glyph turns. The line the reader announces from lives in
+   `theme.css`, where every screen's `.sr-only` line is described. */
 .icon-btn.busy {
   opacity: 1;
 }
@@ -46,6 +47,28 @@
 @keyframes icon-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/*
+  Что делает читалку пригодной для клавиатуры и экрана:
+
+  - крутящийся значок — только движение, а не сообщение: без него та же работа видна по нажатой
+    (`disabled`) кнопке и по её подсказке «Загрузка…»;
+  - полоса-ручка границы колонки появляется без плавания цвета;
+  - переход к выбранной строке назван прямым, чтобы список не ехал к ней плавно.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn.busy .icon {
+    animation: none;
+  }
+
+  .col-resize::after {
+    transition: none;
+  }
+
+  .panel-scroll {
+    scroll-behavior: auto;
   }
 }
 
@@ -239,6 +262,21 @@
 
 .list-item.selected .muted {
   color: rgba(255, 255, 255, 0.78);
+}
+
+/*
+  Клавиатурный курсор строки списка: рамка стоит вокруг всей строки, а не вокруг её текстовой части,
+  и она рисуется внутри строки — широкая кнопка на всю колонку не толкает соседние строки. Мышиный
+  клик рамки не получает: отвечает только `:focus-visible`, то есть ход по списку с клавиатуры.
+  Выбранная строка залита акцентом, поэтому там рамка берёт цвет своего текста, а не тот же акцент.
+*/
+.list-item > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.list-item.selected > button:focus-visible {
+  outline-color: var(--text-on-selected);
 }
 
 /*

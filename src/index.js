@@ -32,6 +32,8 @@ const els = {
   headlineList: document.getElementById('headline-list'),
   headlinesEmpty: document.getElementById('headlines-empty'),
 
+  announce: document.getElementById('reader-announce'),
+
   contentDelete: document.getElementById('content-delete'),
   contentBody: document.getElementById('content-body'),
 };
@@ -126,8 +128,40 @@ function itemsOfSelectedFeed() {
   return state.items.filter(inSelection).filter(matchesQuery);
 }
 
+/*
+ * Чем закончилась загрузка: сколько заголовков пришло и сколько лент отказалось. Ответ за одну ленту
+ * и за все — одной формы: `added` в ответе или в каждой строке `results`, `failed` — их число.
+ */
+function refreshOutcome(response) {
+  if (!response?.ok) return t('reader.announce.error', { error: describeError(response?.error) });
+
+  const results = response.results ?? [response];
+  const added = results.reduce((sum, entry) => sum + (Number(entry.added) || 0), 0);
+  const failed = Number(response.failed) || results.filter((entry) => entry.ok === false).length;
+
+  const parts = [added > 0 ? t('reader.announce.loaded', { count: added }) : t('reader.announce.none')];
+  if (failed > 0) parts.push(t('reader.announce.failed', { count: failed }));
+  return parts.join(' · ');
+}
+
 function renderTotal() {
   els.totalCount.textContent = String(state.items.length);
+}
+
+/**
+ * Что читалка говорит вслух, когда панель перерисовывается: строка `role="status"` (см. `index.html`)
+ * нигде не рисуется — её только читает экран, и та же правда стоит в самих панелях. Пустая строка
+ * не говорит ничего: так перезагрузка от `chrome.storage.onChanged` не пересказывает вслух то, о чём
+ * уже сказал щелчок мыши или клавиша.
+ */
+function announce(message) {
+  if (!message) return;
+  /* Одни и те же слова подряд — не то изменение, о котором экран сообщит: строка сначала пустеет,
+   * а наполняется следующим тиком, поэтому «получено 5» звучит и когда ленту обновили дважды. */
+  els.announce.textContent = '';
+  setTimeout(() => {
+    els.announce.textContent = message;
+  }, 50);
 }
 
 /**
@@ -135,11 +169,13 @@ function renderTotal() {
  * meta line counts the headlines of every feed instead of naming one feed's refresh interval.
  */
 function renderAllFeedsRow() {
+  const all = state.feedId === ALL_FEEDS_ID;
   const li = document.createElement('li');
-  li.className = `list-item list-all-feeds${state.feedId === ALL_FEEDS_ID ? ' selected' : ''}`;
+  li.className = `list-item list-all-feeds${all ? ' selected' : ''}`;
 
   const button = document.createElement('button');
   button.type = 'button';
+  if (all) button.setAttribute('aria-current', 'true');
   // Not a feed, so it has no site icon of its own; the RSS glyph in the same box keeps every row of
   // the column on one grid.
   const box = document.createElement('span');
@@ -213,10 +249,14 @@ function renderFeeds() {
 
   for (const feed of state.feeds) {
     const li = document.createElement('li');
-    li.className = `list-item${feed.id === state.feedId ? ' selected' : ''}`;
+    const selected = feed.id === state.feedId;
+    li.className = `list-item${selected ? ' selected' : ''}`;
 
     const button = document.createElement('button');
     button.type = 'button';
+    // Строка левой колонки выбирает ленту: `aria-current` говорит экрану, какая из них выбрана, —
+    // то же самое, что цвет выделения говорит глаз.
+    if (selected) button.setAttribute('aria-current', 'true');
     button.append(feedIconImg(feed.id));
 
     const body = document.createElement('span');
@@ -322,7 +362,12 @@ function renderHeadlines() {
 
   for (const item of items) {
     const li = document.createElement('li');
-    li.className = `list-item${item.uid === state.uid ? ' selected' : ''}`;
+    // Средняя колонка — `listbox` (см. `index.html`), поэтому её строка — `option`, а открытая
+    // новость — та, что `aria-selected`; без этого экран назвал бы список списком кнопок.
+    li.setAttribute('role', 'option');
+    const selected = item.uid === state.uid;
+    li.setAttribute('aria-selected', selected ? 'true' : 'false');
+    li.className = `list-item${selected ? ' selected' : ''}`;
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -459,11 +504,16 @@ function titleHeading(text, link) {
   return h1;
 }
 
-/** Requirement: clicking a title shows the stored `<description>` in the right panel. */
-function openItem(item) {
+/**
+ * Requirement: clicking a title shows the stored `<description>` in the right panel.
+ * `followFocus` is set only where the keyboard moves the cursor: the row of the middle column takes
+ * the focus, so its name is read out and the next arrow continues from the row that is now open.
+ */
+function openItem(item, { followFocus = false } = {}) {
   state.uid = item.uid;
   saveSelection();
   renderHeadlines();
+  if (followFocus) els.headlineList.querySelector('.list-item.selected > button')?.focus();
 
   els.contentDelete.hidden = false;
 
@@ -510,6 +560,7 @@ async function deleteItem() {
   state.uid = null;
   saveSelection();
   await renderAll();
+  announce(t('reader.announce.deleted'));
 
   // «Все ленты» keeps the whole list: the next headline is the one that stood below the removed
   // one, whatever feed it belongs to. The search field filters that list exactly as it filters the
@@ -527,9 +578,10 @@ async function deleteItem() {
   }
 
   // Same slot in the list: the headline that used to sit below the removed one, or the last
-  // one when the removed headline was the bottom of the list.
+  // one when the removed headline was the bottom of the list. `followFocus` — because the row that
+  // held the focus is gone, and the cursor of the keyboard goes to the same slot it moved to.
   const next = remaining[Math.max(0, Math.min(position, remaining.length - 1))];
-  openItem(next);
+  openItem(next, { followFocus: true });
 }
 
 /**
@@ -548,6 +600,7 @@ async function clearSelectionHeadlines() {
     if (isAllFeeds()) await store.clearAllItems();
     else await store.clearItemsForFeed(state.feedId);
     await renderAll();
+    announce(t('reader.announce.cleared', { count: targets.length }));
   } finally {
     els.clear.disabled = false;
   }
@@ -579,6 +632,7 @@ async function refreshSelection() {
       showPlaceholder(t('reader.refresh.failed', { error: describeError(response?.error) }));
     }
     await renderAll();
+    announce(refreshOutcome(response));
   } finally {
     els.load.disabled = false;
     els.load.classList.remove('busy');
@@ -617,6 +671,7 @@ async function refreshSelectedFeed() {
       showPlaceholder(t('reader.refresh.failed', { error: describeError(response?.error) }));
     }
     await renderAll();
+    announce(refreshOutcome(response));
   } finally {
     els.refresh.disabled = false;
     els.refresh.classList.remove('busy');
@@ -649,6 +704,7 @@ async function refreshAllFeeds(target = els.refresh) {
       showPlaceholder(t('reader.refreshAll.failed', { error: describeError(failure?.error) }));
     }
     await renderAll();
+    announce(refreshOutcome(response));
   } finally {
     target.disabled = false;
     target.classList.remove('busy');
@@ -776,7 +832,7 @@ function moveHeadline(delta) {
         : visible.length - 1
       : Math.max(0, Math.min(visible.length - 1, index + delta));
 
-  openItem(visible[next]);
+  openItem(visible[next], { followFocus: true });
   els.headlineList.querySelector('.list-item.selected')?.scrollIntoView({ block: 'nearest' });
 }
 

@@ -123,6 +123,10 @@ select {
 input:focus-visible,
 select:focus-visible,
 button:focus-visible,
+/* The «?» of a screen is a `<summary>`, which Chrome makes tabbable but which is no `button`, so the
+   rule above never reaches it: without this a keyboard user opens the explanation knowing only that
+   something has focus. */
+summary:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -134,6 +138,22 @@ a {
 
 .muted {
   color: var(--text-muted);
+}
+
+/*
+  A line written for an ear and not for an eye: what a button just did is said from here, while the
+  same words stand where the eye expects them — under the row, under the table, at the end of the
+  table of fields. `display: none` or `visibility: hidden` would remove the line from what a screen
+  reader reads, so it is clipped to a single pixel instead. Every screen speaks from such a line, so
+  it belongs to the stylesheet all three screens share.
+*/
+.sr-only {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 /*
@@ -219,4 +239,15 @@ a {
 
 :root[data-theme="light"] .theme-toggle .icon-sun {
   display: none;
+}
+
+/*
+  A person who asks the system for no motion gets none from this extension either: the button colour
+  stops cross-fading under the pointer. A screen whose own glyphs spin or whose border handle fades
+  answers for that in its own stylesheet, where those parts are drawn (see `reader.css`).
+*/
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
 }

@@ -21,6 +21,7 @@ const els = {
   import: document.getElementById('btn-import'),
   importFile: document.getElementById('file-import'),
   transfer: document.getElementById('transfer-status'),
+  announce: document.getElementById('feeds-announce'),
   theme: document.getElementById('btn-theme'),
 };
 
@@ -219,10 +220,25 @@ function buildRow(feed, { draft }) {
   return { record: rowRecord, note: noteRow };
 }
 
+/**
+ * Что экран сообщает вслух: те же слова, что пишет глаз под рядом или под таблицей, но прочитанные
+ * экраном. Живой статус отвечает на изменение текста, поэтому одно и то же сообщение двух подряд
+ * кнопок снимается и ставится заново — иначе вторая «Сохранено» была бы молчанием. Пустая строка
+ * молчит: перерисовка ряда из-за изменения хранилища на другом экране рассказом не считается.
+ */
+function announce(message) {
+  if (!message) return;
+  els.announce.textContent = '';
+  setTimeout(() => {
+    els.announce.textContent = message;
+  }, 50);
+}
+
 function setStatus(rowRecord, message, kind = '') {
   rowRecord.status.textContent = message;
   rowRecord.status.className = kind ? `status ${kind}` : 'status';
   rowRecord.noteRow.hidden = false;
+  announce(message);
 }
 
 function showFieldErrors(rowRecord, errors) {
@@ -400,6 +416,7 @@ function setTransferStatus(message, kind = '') {
   els.transfer.textContent = message;
   els.transfer.className = kind ? `transfer-status muted ${kind}` : 'transfer-status muted';
   els.transfer.hidden = false;
+  announce(message);
 }
 
 /**

@@ -153,6 +153,9 @@
     </div>
 
     <table class="feed-table" data-i18n-aria="feeds.title">
+      <!-- The columns are named by `<th>`, which a sighted person reads as the head of the table and
+           a screen reader does not announce on its own; a caption names the table itself. -->
+      <caption class="sr-only" data-i18n="feeds.caption"></caption>
       <thead>
         <tr>
           <th data-i18n="feeds.field.name"></th>
@@ -169,6 +172,14 @@
     <!-- What a transfer of the whole table just did: how many feeds left, how many arrived. It
          speaks of the table as a whole, so it stands under it, not inside a row. -->
     <p class="transfer-status muted" id="transfer-status" hidden></p>
+
+    <!--
+      Что экран говорит вслух о работе своих кнопок: лента записана, в строке есть незаполненные
+      поля, сколько заголовков пришло по кнопке «Загрузить сейчас», сколько лент выписано в файл и
+      сколько прочиталось обратно. Те же слова стоят под рядом или под таблицей, где их видит глаз;
+      эта строка нигде не рисуется (см. `.sr-only` в `theme.css`), но экран читает её вслух.
+    -->
+    <p class="sr-only" id="feeds-announce" role="status" aria-live="polite" aria-atomic="true"></p>
   </div>
 </body>
 </html>

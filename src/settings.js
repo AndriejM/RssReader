@@ -21,6 +21,7 @@ const els = {
   clearRead: document.getElementById('btn-clear-read'),
   readStats: document.getElementById('read-stats'),
   status: document.getElementById('read-status'),
+  announce: document.getElementById('settings-announce'),
 
   sound: document.getElementById('sound-file'),
   soundEnabled: document.getElementById('sound-enabled'),
@@ -56,9 +57,27 @@ const state = {
   languagePending: false,
 };
 
+/**
+ * Что экран сообщает вслух: та же строка, что стоит под таблицей полей, но прочитанная экраном.
+ * Живой статус отвечает на изменение текста, поэтому одно и то же сообщение двух подряд нажатий
+ * снимается и ставится заново — иначе вторая «Записано» была бы молчанием. Пустая строка молчит.
+ */
+function announce(message) {
+  if (!message) return;
+  els.announce.textContent = '';
+  setTimeout(() => {
+    els.announce.textContent = message;
+  }, 50);
+}
+
+/**
+ * Итог работы с полями — вслух, подсказка о незаписанном — нет: `pending` висит на экране с первого
+ * знака в поле, и повторять его при каждом нажатии клавиши значит заглушить экран.
+ */
 function setStatus(message, kind = '') {
   els.status.textContent = message;
   els.status.className = kind ? `status ${kind}` : 'status';
+  if (kind === 'ok' || kind === 'error') announce(message);
 }
 
 /** Years are easier to read than a four-digit day count. */

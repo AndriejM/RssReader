@@ -1992,6 +1992,216 @@ test('the reader names the last load and the next check of what it shows', () =>
   }
 });
 
+/* ---------------- what the reader says out loud ---------------- */
+
+/**
+ * The reader is used by an ear and by a keyboard, not only by an eye: the outcome of a load is said
+ * from a line no eye sees, the two lists name themselves and the row among them that is chosen, the row
+ * a keyboard opens takes the focus and is drawn with a cursor, and the spinning glyph is a decoration a
+ * reader who asks for no motion never gets. Markup, script, stylesheet and the seven dictionaries are
+ * kept in step here.
+ */
+test('the reader announces its outcomes and keeps a keyboard cursor visible', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const html = read('src/index.html');
+  const page = read('src/index.js');
+  const css = read('src/styles/reader.css');
+  const theme = read('src/styles/theme.css');
+
+  /* The line a screen reader reads and an eye never sees. */
+  assert.ok(
+    html.includes('id="reader-announce" role="status" aria-live="polite"'),
+    'the reader declares no line a screen reader reports',
+  );
+  assert.ok(
+    page.includes("document.getElementById('reader-announce')"),
+    'the page does not know the line the markup declares',
+  );
+  assert.ok(page.includes('function announce('), 'nobody writes to the line the markup declares');
+  assert.ok(page.includes('function refreshOutcome('), 'noone gathers what a load ended with');
+  assert.equal(
+    page.split('announce(refreshOutcome(response));').length - 1,
+    3,
+    'a load is announced by only some of the buttons that can start one',
+  );
+  assert.ok(
+    page.includes("announce(t('reader.announce.deleted')"),
+    'a deleted headline is said to nobody who cannot see the panels',
+  );
+  assert.ok(
+    page.includes("announce(t('reader.announce.cleared'"),
+    'a cleared column is said to nobody who cannot see the panels',
+  );
+
+  assert.ok(theme.includes('.sr-only'), 'no stylesheet describes the line the reader announces from');
+  const hidden = theme.slice(
+    theme.indexOf('.sr-only {'),
+    theme.indexOf('}', theme.indexOf('.sr-only {')),
+  );
+  assert.ok(
+    !hidden.includes('display: none') && !hidden.includes('visibility: hidden'),
+    'a line hidden with `display: none` is a line no screen reader reads either',
+  );
+
+  /* The two lists name themselves and say which of their rows the selection has. */
+  assert.ok(html.includes('id="feed-list" role="list"'), 'the left column declares no list');
+  assert.ok(
+    html.includes('id="headline-list" role="listbox"'),
+    'the middle column declares a list of rows instead of a list of choices',
+  );
+  assert.ok(page.includes("li.setAttribute('role', 'option')"), 'a headline row is no option of that listbox');
+  assert.ok(
+    page.includes("li.setAttribute('aria-selected'"),
+    'the open headline is not named among the options it belongs to',
+  );
+  assert.equal(
+    page.split("setAttribute('aria-current', 'true')").length - 1,
+    2,
+    'the chosen feed row is named for a feed but not for the all-feeds row',
+  );
+
+  /* A cursor the keyboard moves is a cursor an eye can find. */
+  assert.ok(
+    page.includes('{ followFocus = false }'),
+    'opening a headline with the keyboard is no different from opening it with a mouse',
+  );
+  assert.ok(
+    page.includes('openItem(visible[next], { followFocus: true })'),
+    'the arrows leave the focus where it already stood',
+  );
+  assert.ok(
+    page.includes("els.headlineList.querySelector('.list-item.selected > button')?.focus()"),
+    'the row the keyboard opens never takes the focus',
+  );
+  assert.ok(
+    css.includes('.list-item > button:focus-visible'),
+    'a row reached with the keyboard is drawn exactly like a row reached with the mouse',
+  );
+  assert.ok(
+    css.includes('.list-item.selected > button:focus-visible'),
+    'the cursor on a filled row keeps the colour it cannot be seen in',
+  );
+
+  /* The spin is decoration: the load still shows as a held button with its own tooltip. */
+  const reducedAt = css.indexOf('@media (prefers-reduced-motion: reduce)');
+  assert.ok(reducedAt > 0, 'the reader has no answer for a user who asks for no motion');
+  assert.ok(css.indexOf('animation: none', reducedAt) > 0, 'the glyph keeps spinning for a user who asks for no motion');
+  assert.ok(css.indexOf('transition: none', reducedAt) > 0, 'the border handle keeps fading for a user who asks for no motion');
+
+  const captions = [
+    'reader.announce.loaded',
+    'reader.announce.none',
+    'reader.announce.failed',
+    'reader.announce.error',
+    'reader.announce.cleared',
+    'reader.announce.deleted',
+    'reader.feeds.list.aria',
+    'reader.headlines.list.aria',
+  ];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the reader asks to say or to name with`);
+    }
+  }
+});
+
+/* ---------------- what the other two screens say out loud ---------------- */
+
+/**
+ * The feeds screen and the settings screen answer an ear the way the reader does: the markup declares
+ * a line a screen reader reports, the page script knows it, and the same function that writes what an
+ * eye sees under a row, under the table or under the fields writes that line too. A table is named by
+ * its own caption, the line no eye sees is described once for all three screens, and a button colour
+ * stops cross-fading for whoever asks the system for no motion.
+ */
+test('the feeds and settings screens say what their buttons did', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const feedsHtml = read('src/feeds.html');
+  const feedsJs = read('src/feeds.js');
+  const settingsHtml = read('src/settings.html');
+  const settingsJs = read('src/settings.js');
+  const readerCss = read('src/styles/reader.css');
+  const theme = read('src/styles/theme.css');
+
+  for (const [screen, html, page] of [
+    ['feeds', feedsHtml, feedsJs],
+    ['settings', settingsHtml, settingsJs],
+  ]) {
+    assert.ok(
+      html.includes(`id="${screen}-announce" role="status" aria-live="polite"`),
+      `the ${screen} screen declares no line a screen reader reports`,
+    );
+    assert.ok(
+      page.includes(`document.getElementById('${screen}-announce')`),
+      `the ${screen} page does not know the line its own markup declares`,
+    );
+    assert.ok(page.includes('function announce('), `nothing writes to the live line of the ${screen} screen`);
+  }
+
+  /* Both screens speak from the place that already writes the words an eye sees. */
+  const feedsStatus = feedsJs.slice(
+    feedsJs.indexOf('function setStatus('),
+    feedsJs.indexOf('function showFieldErrors('),
+  );
+  assert.ok(feedsStatus.includes('announce(message);'), 'a feed row answers to an eye only');
+
+  const transfer = feedsJs.slice(
+    feedsJs.indexOf('function setTransferStatus('),
+    feedsJs.indexOf('async function exportFeeds('),
+  );
+  assert.ok(transfer.includes('announce(message);'), 'a transfer of the whole table is said to nobody who cannot see it');
+
+  const settingsStatus = settingsJs.slice(
+    settingsJs.indexOf('function setStatus('),
+    settingsJs.indexOf('function describeTtl('),
+  );
+  assert.ok(
+    settingsStatus.includes("if (kind === 'ok' || kind === 'error') announce(message);"),
+    'the settings screen says nothing out loud about what «Записать» wrote',
+  );
+  assert.ok(
+    settingsJs.includes("setStatus(t('settings.status.pending'), 'pending')"),
+    'the settings screen no longer marks an unwritten field',
+  );
+
+  /* A table is named by a caption: the `<th>` row is a head a sighted person reads, not a name a
+   * screen reader says when it enters the table. */
+  assert.ok(
+    feedsHtml.includes('<caption class="sr-only" data-i18n="feeds.caption">'),
+    'the feed table has no caption for a screen reader',
+  );
+  assert.ok(
+    settingsHtml.includes('<caption class="sr-only" data-i18n="settings.caption">'),
+    'the settings table has no caption for a screen reader',
+  );
+
+  /* The «?» of both screens is a `<summary>`: tabbable, but no `button`, so it has to be named by the
+   * outline rule of the shared stylesheet or a keyboard opens it blind. */
+  assert.ok(
+    theme.includes('summary:focus-visible'),
+    'the explanation folded behind a «?» takes no cursor a keyboard can see',
+  );
+
+  /* The colours of a button stop cross-fading for a user who asks for no motion — on every screen, so
+   * the rule lives in the stylesheet all three share. */
+  const reducedAt = theme.indexOf('@media (prefers-reduced-motion: reduce)');
+  assert.ok(reducedAt > 0, 'no stylesheet answers a user who asks for no motion');
+  assert.ok(theme.indexOf('transition: none', reducedAt) > 0, 'a button colour still cross-fades on command');
+  assert.ok(
+    !readerCss.includes('.sr-only {'),
+    'the line no eye sees is described once per screen instead of once for all three screens',
+  );
+
+  const captions = ['feeds.caption', 'settings.caption'];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which a table of this screen asks to be named`);
+    }
+  }
+});
+
 /* ---------------- the schedule the reader names ---------------- */
 
 /**

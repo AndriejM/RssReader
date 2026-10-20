@@ -105,7 +105,8 @@
         </button>
       </div>
       <div class="panel-scroll">
-        <ul class="list" id="feed-list"></ul>
+        <!-- Строки этой колонки — ленты, одна из них выбрана (`aria-current` в `index.js`). -->
+        <ul class="list" id="feed-list" role="list" data-i18n-aria="reader.feeds.list.aria"></ul>
         <p class="empty" id="feeds-empty" hidden data-i18n="reader.feeds.empty"></p>
       </div>
     </section>
@@ -153,7 +154,11 @@
       -->
       <p class="panel-status muted" id="feed-status" hidden></p>
       <div class="panel-scroll">
-        <ul class="list" id="headline-list"></ul>
+        <!--
+          Средняя колонка — `listbox`: её строки — `option` (их ставит `index.js`), а открытая новость
+          — `aria-selected`. Так экран называет список списком выбираемых строк, а не россыпью кнопок.
+        -->
+        <ul class="list" id="headline-list" role="listbox" data-i18n-aria="reader.headlines.list.aria"></ul>
         <p class="empty" id="headlines-empty" hidden data-i18n="reader.headlines.emptyNoFeed"></p>
       </div>
     </section>
@@ -173,6 +178,14 @@
       </article>
     </section>
   </main>
+
+  <!--
+    Что читалка говорит вслух, когда перерисовывает панель: сколько заголовков пришло, сколько лент
+    отказалось, что удалено. Эта строка нигде не рисуется (см. `.sr-only` в `reader.css`), но экран
+    читает её вслух; та же правда стоит в самих панелях, где её видит глаз. Строку описывает общий
+    для всех экранов `theme.css` (см. `.sr-only`).
+  -->
+  <p class="sr-only" id="reader-announce" role="status" aria-live="polite" aria-atomic="true"></p>
 
   <!--
     Read last in the markup on purpose: it paints every column at its remembered size and its
