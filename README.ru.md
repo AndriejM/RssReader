@@ -31,9 +31,12 @@
 
 ## Требования
 
-- **Chrome 109 или новее.** Требуется API `chrome.offscreen` — он нужен, чтобы играть звук:
-  у service worker нет DOM, поэтому для файла-сигнала создаётся offscreen-документ.
-  (Запасной путь `chrome.runtime.getContexts` появился в Chrome 116.)
+- **Chrome 116 или новее** — это заявлено в манифесте как `minimum_chrome_version`. Сам API
+  `chrome.offscreen` появился в Chrome 109: у service worker нет DOM, поэтому для разметки XML лент и
+  для файла-сигнала создаётся offscreen-документ. Но узнать, что такой документ уже есть, можно только
+  через `chrome.runtime.getContexts` (Chrome 116) или `chrome.offscreen.hasDocument` (Chrome 150): ниже
+  116 честного ответа нет, документ создавался бы второй раз поверх открытого, и читалка сообщала бы об
+  отсутствующем offscreen-документе вместо заголовков ленты.
 - MV3 (`manifest_version: 3`) — поддерживается всеми актуальными Chrome/Edge.
 - `node` (для `scripts/*.mjs`) — только для unit-тестов и перегенерации иконок; самому
   расширению node не нужен.

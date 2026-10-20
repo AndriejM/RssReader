@@ -30,9 +30,12 @@ notice and the license notice are kept with it. The software is provided without
 
 ## Requirements
 
-- **Chrome 109 or newer.** The `chrome.offscreen` API is required — it is needed to play sound:
-  a service worker has no DOM, so an offscreen document is created for the signal file.
-  (The fallback path `chrome.runtime.getContexts` appeared in Chrome 116.)
+- **Chrome 116 or newer**, declared in the manifest as `minimum_chrome_version`. The
+  `chrome.offscreen` API itself arrived in Chrome 109 — a service worker has no DOM, so an offscreen
+  document is created to parse the feed XML and to play the signal file. But telling whether that
+  document already exists needs `chrome.runtime.getContexts` (Chrome 116) or
+  `chrome.offscreen.hasDocument` (Chrome 150): below 116 the reader cannot know, so it would create a
+  second document, fail, and report the offscreen document as unavailable.
 - MV3 (`manifest_version: 3`) — supported by all current Chrome/Edge.
 - `node` (for `scripts/*.mjs`) — only for the unit tests and regenerating icons; the extension
   itself does not need node.

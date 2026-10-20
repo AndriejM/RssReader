@@ -26,6 +26,13 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Есть ли уже offscreen-документ.
+ * `chrome.offscreen.hasDocument` есть только с Chrome 150, `chrome.runtime.getContexts` — с Chrome 116,
+ * и этот нижний край записан в манифесте как `minimum_chrome_version`: ниже 116 спросить нечем, а без
+ * ответа `ensureOffscreenDocument()` создавал бы документ поверх уже открытого и ленты падали бы с
+ * `errors.offscreenUnavailable`.
+ */
 export async function hasOffscreenDocument() {
   if (chrome.offscreen?.hasDocument) {
     try {
