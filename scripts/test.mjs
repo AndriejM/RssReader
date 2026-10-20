@@ -2056,6 +2056,11 @@ test('the schedule the reader names is the one Chrome really runs', async () => 
       fresh > Date.now() && fresh <= Date.now() + 30 * MINUTE,
       'an alarm created by this sync is due one period from now',
     );
+    assert.equal(
+      fresh,
+      scheduled.get(`${util.ALARM_PREFIX}fresh`).scheduledTime,
+      'the row names the same moment the new alarm itself carries, to the millisecond',
+    );
     assert.equal(byId.get('pending').lastCheckedAt, undefined, 'a schedule is not a diagnosis: nothing claims the feed was read');
 
     writes = 0;

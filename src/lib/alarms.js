@@ -58,13 +58,12 @@ export async function syncAlarms() {
   desired.set(CLEANUP_ALARM_NAME, { periodInMinutes: CLEANUP_PERIOD_MINUTES });
 
   const soon = Date.now();
-  /* `now + period` is what a freshly created alarm is scheduled for; an alarm that already exists
-   * answers for itself, and its answer wins below. */
+  /* `dueAt` only ever carries an answer a real alarm gave: an alarm Chrome already had answers for
+   * itself below, and an alarm this sync creates answers for itself after it exists (see the read
+   * back at the end). A moment counted from `soon` would be an approximation of the alarm's own —
+   * and the next sync would rewrite it. */
   const dueAt = new Map();
-  for (const [name, { periodInMinutes }] of desired) {
-    if (name === CLEANUP_ALARM_NAME) continue;
-    dueAt.set(name, soon + periodInMinutes * 60000);
-  }
+  const created = [];
 
   const existing = await chrome.alarms.getAll();
   for (const alarm of existing) {
@@ -83,7 +82,26 @@ export async function syncAlarms() {
   }
 
   for (const [name, properties] of desired) {
-    chrome.alarms.create(name, properties);
+    await chrome.alarms.create(name, properties);
+    if (name !== CLEANUP_ALARM_NAME) created.push(name);
+  }
+
+  /* A new alarm is scheduled from the moment of its creation, which this function cannot name from
+   * `soon`: only the alarm itself, read back once it exists, names the millisecond Chrome will wake
+   * it at. Before Chrome 111 `create()` answers no promise, so an alarm that has not shown up yet
+   * gets the one period this function did have to guess. */
+  if (created.length > 0) {
+    const now = Date.now();
+    const named = new Set();
+    for (const alarm of await chrome.alarms.getAll()) {
+      if (!created.includes(alarm.name)) continue;
+      dueAt.set(alarm.name, alarmDueAt(alarm, now, alarm.periodInMinutes));
+      named.add(alarm.name);
+    }
+    for (const name of created) {
+      if (named.has(name)) continue;
+      dueAt.set(name, now + desired.get(name).periodInMinutes * 60000);
+    }
   }
 
   const times = new Map();

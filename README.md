@@ -407,8 +407,9 @@ row and the line under a feed row on the “Feed settings” screen are where it
 None of these fields exists until the feed has actually been read, and changing the feed's
 `rss_link` clears them: the failures described the old address. `nextAlarmAt` is what the reader and
 the feed screen name as “next check”. `syncAlarms` writes it from the alarms Chrome really runs: the
-moment the alarm states for itself, or — when that moment has already gone by — one period after it,
-and an automatic read hands the next period of the alarm that just ran to `markFeedChecked`. Only a
+moment the alarm states for itself — an alarm this sync has just created is read back once it exists,
+so its row names the same millisecond — or, when that moment has already gone by, one period after
+it; an automatic read hands the next period of the alarm that just ran to `markFeedChecked`. Only a
 feed whose alarm has not been seen yet gets the formula (`alarmPeriodMinutes(delay_timeout)`, the one
 `syncAlarms` creates the alarm with) counted from the last read. `nextRetryAt` is set only by a read
 that failed and is the later of the two: it names the moment an *automatic* read may ask the feed
