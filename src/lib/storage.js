@@ -19,11 +19,14 @@ import {
   isReadExpired,
   itemTime,
   linkKey,
+  newId,
+  normalizeFeed,
   normalizePreviewImages,
   normalizeUid,
   readTime,
   toDays,
   toFlag,
+  toMinutes,
   toVolume,
 } from './util.js';
 import {
@@ -893,4 +896,99 @@ export function emptyFeed() {
     delay_timeout: DEFAULT_DELAY_TIMEOUT,
     clean_timeout: DEFAULT_CLEAN_TIMEOUT,
   };
+}
+
+/* ------------------------------ carrying feeds between profiles ------------------------------ */
+
+/**
+ * Версия файла, который экран лент умеет выписать и прочесть. Изменился формат — меняется число,
+ * и файл другой версии отвергается целиком, а не читается наугад.
+ */
+export const FEED_EXPORT_VERSION = 1;
+
+/** Имя выписанного файла — оно не переводится: это имя файла, а не подпись интерфейса. */
+export const FEED_EXPORT_FILE_NAME = 'rss-reader-feeds.json';
+
+/**
+ * Что уносит лента с собой: только те поля, которые задал сам пользователь. `id` даёт этот
+ * профиль — в другом он уже может принадлежать другой ленте; диагноз (`lastErrorCode`,
+ * `fetchFailureCount`) и ответ сервера (`etag`, `lastModified`) описывают чтение, сделанное
+ * здесь, и на другом месте были бы чужими.
+ */
+export function buildFeedsExport(feeds) {
+  const rows = (Array.isArray(feeds) ? feeds : []).map((feed) => ({
+    name: String(feed?.name ?? ''),
+    rss_link: String(feed?.rss_link ?? ''),
+    delay_timeout: toMinutes(feed?.delay_timeout, DEFAULT_DELAY_TIMEOUT),
+    clean_timeout: toMinutes(feed?.clean_timeout, DEFAULT_CLEAN_TIMEOUT),
+  }));
+
+  return { version: FEED_EXPORT_VERSION, feeds: rows };
+}
+
+/**
+ * Прочитать файл, который пользователь принёс на экран. Возвращает `{ feeds, skipped, code }`:
+ * `feeds` — строки файла, прошедшие ту же проверку, что и строка таблицы, но без `id` (его даст
+ * этот профиль); `skipped` — сколько строк проверка отвергла, в том числе повтор одного и того же
+ * адреса внутри файла; `code` — почему отвергнут весь файл (`json` / `version` / `shape`) либо
+ * `null`, когда файл прочитан. Код называет ключ `feeds.import.error.<code>`, чтобы экран ответил
+ * на своём языке, а не текстом, замороженным в одном.
+ */
+export function parseFeedsExport(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(text ?? ''));
+  } catch {
+    return { feeds: [], skipped: 0, code: 'json' };
+  }
+
+  if (parsed?.version !== FEED_EXPORT_VERSION) {
+    return { feeds: [], skipped: 0, code: 'version' };
+  }
+  if (!Array.isArray(parsed?.feeds)) {
+    return { feeds: [], skipped: 0, code: 'shape' };
+  }
+
+  const feeds = [];
+  const known = new Set();
+  let skipped = 0;
+
+  for (const row of parsed.feeds) {
+    const { feed, errors } = normalizeFeed(row);
+    const link = feed.rss_link;
+    if (Object.keys(errors).length > 0 || !link || known.has(link)) {
+      skipped += 1;
+      continue;
+    }
+    known.add(link);
+    feeds.push(feed);
+  }
+
+  return { feeds, skipped, code: null };
+}
+
+/**
+ * Дописать к хранилищу ленты, пришедшие из файла. Лента того же адреса уже настроена — она
+ * остаётся как есть: перенос не должен перечёркивать местные сроки и не должен молча трогать
+ * заголовки, которые у этой ленты уже есть. Возвращает `{ added, existing }`.
+ */
+export async function mergeFeeds(feeds) {
+  const stored = await getFeeds();
+  const known = new Set(stored.map((feed) => String(feed?.rss_link ?? '').trim()));
+  let added = 0;
+  let existing = 0;
+
+  for (const feed of Array.isArray(feeds) ? feeds : []) {
+    const link = String(feed?.rss_link ?? '').trim();
+    if (!link || known.has(link)) {
+      existing += 1;
+      continue;
+    }
+    known.add(link);
+    stored.push({ ...feed, id: newId() });
+    added += 1;
+  }
+
+  if (added > 0) await saveFeeds(stored);
+  return { added, existing };
 }

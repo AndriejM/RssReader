@@ -2458,6 +2458,179 @@ test('one feed is read once, whoever asked for the read', () => {
   }
 });
 
+/* ---------------------------- carrying feeds between profiles ---------------------------- */
+
+/**
+ * The file is the one thing a user of a local reader can move to another profile, so both ends of it
+ * are guarded: a write takes only the fields the user set, a read refuses whatever a row of the
+ * table would refuse.
+ */
+test('a written file carries what the user set, not what this profile learned about the feed', () => {
+  const file = store.buildFeedsExport([
+    {
+      id: 'local-id',
+      name: 'Example',
+      rss_link: 'https://example.com/feed.xml',
+      delay_timeout: 30,
+      clean_timeout: 1440,
+      icon: 'https://example.com/favicon.ico',
+      etag: '"abc"',
+      lastErrorCode: 'network',
+      fetchFailureCount: 3,
+    },
+    {
+      name: 'Sloppy row',
+      rss_link: 'https://example.com/other',
+      delay_timeout: 0,
+      clean_timeout: 'not a number',
+    },
+  ]);
+
+  assert.equal(file.version, store.FEED_EXPORT_VERSION);
+  assert.deepEqual(file.feeds, [
+    {
+      name: 'Example',
+      rss_link: 'https://example.com/feed.xml',
+      delay_timeout: 30,
+      clean_timeout: 1440,
+    },
+    {
+      /* A period that is a number but too small is clamped to the floor Chrome allows; a value that
+       * is no number at all falls back to the default the row of the table would have filled in. */
+      name: 'Sloppy row',
+      rss_link: 'https://example.com/other',
+      delay_timeout: 1,
+      clean_timeout: DEFAULT_CLEAN_TIMEOUT,
+    },
+  ]);
+});
+
+test('a file that is not JSON, of another version or with no list is refused whole', () => {
+  assert.equal(store.parseFeedsExport('not a file at all').code, 'json');
+  assert.equal(store.parseFeedsExport('{"version": 2, "feeds": []}').code, 'version');
+  assert.equal(store.parseFeedsExport('{"feeds": []}').code, 'version');
+  assert.equal(store.parseFeedsExport('{"version": 1}').code, 'shape');
+  assert.equal(store.parseFeedsExport('{"version": 1, "feeds": "Example"}').code, 'shape');
+});
+
+test('a row of a file is checked as strictly as a row of the table', () => {
+  const { feeds, skipped, code } = store.parseFeedsExport(
+    JSON.stringify({
+      version: 1,
+      feeds: [
+        {
+          name: ' Good name ',
+          rss_link: ' https://example.com/feed.xml ',
+          delay_timeout: 45,
+          clean_timeout: 60,
+        },
+        { name: '', rss_link: 'https://example.com/nameless' },
+        { name: 'No protocol', rss_link: 'ftp://example.com/feed' },
+        { name: 'Zero period', rss_link: 'https://example.com/fast', delay_timeout: 0 },
+        { name: 'A repeat of the first', rss_link: 'https://example.com/feed.xml' },
+        'not even a row',
+      ],
+    }),
+  );
+
+  assert.equal(code, null);
+  assert.equal(skipped, 5);
+  /* A row arrives without an `id`: the profile that reads the file gives its own. */
+  assert.deepEqual(feeds, [
+    {
+      name: 'Good name',
+      rss_link: 'https://example.com/feed.xml',
+      delay_timeout: 45,
+      clean_timeout: 60,
+    },
+  ]);
+});
+
+test('import adds the feeds of a file and leaves the configured ones and their headlines alone', async () => {
+  const forget = storageMemory();
+  try {
+    await store.saveFeeds([
+      {
+        id: 'mine',
+        name: 'My name for it',
+        rss_link: 'https://example.com/feed.xml',
+        delay_timeout: 5,
+        clean_timeout: 60,
+        icon: 'https://example.com/favicon.ico',
+      },
+    ]);
+    await store.saveItems([
+      store.makeItem({ feed: { id: 'mine' }, title: 'Kept', link: 'https://example.com/a' }),
+    ]);
+
+    const parsed = store.parseFeedsExport(
+      JSON.stringify({
+        version: 1,
+        feeds: [
+          {
+            name: 'Their name for it',
+            rss_link: 'https://example.com/feed.xml',
+            delay_timeout: 30,
+            clean_timeout: 1440,
+          },
+          {
+            name: 'New one',
+            rss_link: 'https://other.example.com/feed.xml',
+            delay_timeout: 15,
+            clean_timeout: 90,
+          },
+        ],
+      }),
+    );
+
+    const { added, existing } = await store.mergeFeeds(parsed.feeds);
+    assert.deepEqual({ added, existing }, { added: 1, existing: 1 });
+
+    const stored = await store.getFeeds();
+    assert.equal(stored.length, 2);
+
+    /* A feed that is already here keeps its own name, its own minutes and its icon: the transfer
+     * adds feeds, it does not overwrite the ones this profile already cares about. */
+    const kept = stored.find((feed) => feed.rss_link === 'https://example.com/feed.xml');
+    assert.deepEqual(
+      { id: kept.id, name: kept.name, delay_timeout: kept.delay_timeout, icon: kept.icon },
+      { id: 'mine', name: 'My name for it', delay_timeout: 5, icon: 'https://example.com/favicon.ico' },
+    );
+
+    const arrived = stored.find((feed) => feed.rss_link === 'https://other.example.com/feed.xml');
+    assert.equal(arrived.name, 'New one');
+    assert.equal(arrived.delay_timeout, 15);
+    assert.equal(arrived.clean_timeout, 90);
+    assert.ok(arrived.id && arrived.id !== 'mine', 'the new feed gets an id of this profile');
+
+    assert.equal(await store.countItems(), 1, 'import does not throw away stored headlines');
+  } finally {
+    forget();
+  }
+});
+
+test('the feeds screen reads and writes the file through the storage the worker reads', () => {
+  const feedsJs = fs.readFileSync(new URL('../src/feeds.js', import.meta.url), 'utf8');
+  const storageJs = fs.readFileSync(new URL('../src/lib/storage.js', import.meta.url), 'utf8');
+
+  for (const name of ['buildFeedsExport', 'parseFeedsExport', 'mergeFeeds', 'FEED_EXPORT_FILE_NAME']) {
+    assert.ok(
+      new RegExp(`export (async function|const|function) ${name}\\b`).test(storageJs),
+      `storage.js does not offer ${name}`,
+    );
+    assert.ok(feedsJs.includes(`store.${name}`), `feeds.js does not use store.${name}`);
+  }
+
+  assert.match(storageJs, /export const FEED_EXPORT_VERSION\b/);
+
+  /* A feed is read by nobody until the worker gives it an alarm, so an import has to tell the worker
+   * the table changed — the same call a saved row makes. */
+  const start = feedsJs.indexOf('async function importFeeds');
+  const importBody = feedsJs.slice(start, feedsJs.indexOf('els.export.addEventListener', start));
+  assert.ok(importBody.length > 0, 'the feeds screen has no import of its own');
+  assert.match(importBody, /notifyBackground\(\)/);
+});
+
 /* ---------------------------- runner ---------------------------- */
 
 let failures = 0;

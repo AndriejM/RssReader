@@ -17,6 +17,10 @@ const els = {
   rows: document.getElementById('feed-rows'),
   empty: document.getElementById('feeds-empty'),
   add: document.getElementById('btn-add'),
+  export: document.getElementById('btn-export'),
+  import: document.getElementById('btn-import'),
+  importFile: document.getElementById('file-import'),
+  transfer: document.getElementById('transfer-status'),
   theme: document.getElementById('btn-theme'),
 };
 
@@ -386,6 +390,92 @@ async function render() {
 els.add.addEventListener('click', () => {
   state.drafts.add(store.emptyFeed());
   void render();
+});
+
+/**
+ * Отчёт о переносе всей таблицы. Он не относится ни к одной строке, поэтому берёт себе строку под
+ * таблицей, а не чужую заметку ряда.
+ */
+function setTransferStatus(message, kind = '') {
+  els.transfer.textContent = message;
+  els.transfer.className = kind ? `transfer-status muted ${kind}` : 'transfer-status muted';
+  els.transfer.hidden = false;
+}
+
+/**
+ * Выписать таблицу лент в файл: то, что пользователь задал сам, без местных идентификаторов и без
+ * диагноза чтения (см. `store.buildFeedsExport`). Адрес живёт ровно столько, сколько нужно,
+ * чтобы загрузка забрала файл.
+ */
+async function exportFeeds() {
+  const feeds = await store.getFeeds();
+
+  if (feeds.length === 0) {
+    setTransferStatus(t('feeds.export.empty'), 'error');
+    return;
+  }
+
+  const payload = JSON.stringify(store.buildFeedsExport(feeds), null, 2);
+  const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = store.FEED_EXPORT_FILE_NAME;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  setTransferStatus(t('feeds.export.done', { count: feeds.length }), 'ok');
+}
+
+/**
+ * Прочитать принесённый файл и дописать его ленты тем, что уже настроены. Строки, которые не
+ * прошли ту же проверку, что и строка таблицы, не спасаются «на глаз»: они просто не добавляются,
+ * и их количество называется отдельно — пользователь видит, что в файле была кривая строка.
+ */
+async function importFeeds(file) {
+  let text;
+  try {
+    text = await file.text();
+  } catch (error) {
+    console.warn('could not read the chosen file:', error?.message ?? error);
+    setTransferStatus(t('feeds.import.error.json'), 'error');
+    return;
+  }
+
+  const { feeds, skipped, code } = store.parseFeedsExport(text);
+  if (code) {
+    setTransferStatus(t(`feeds.import.error.${code}`), 'error');
+    return;
+  }
+
+  const { added, existing } = await store.mergeFeeds(feeds);
+
+  const parts = [];
+  if (added > 0) parts.push(t('feeds.import.added', { count: added }));
+  if (existing > 0) parts.push(t('feeds.import.existing', { count: existing }));
+  if (skipped > 0) parts.push(t('feeds.import.invalid', { count: skipped }));
+
+  if (parts.length === 0) setTransferStatus(t('feeds.import.none'), 'error');
+  else setTransferStatus(parts.join(' · '), added > 0 ? 'ok' : '');
+
+  /* Лента без будильника сама не читается: worker строит их по хранилищу, поэтому о новом ряду
+   * нужно сказать ему, а не ждать ближайшей проверки. */
+  if (added > 0) await notifyBackground();
+  await render();
+}
+
+els.export.addEventListener('click', () => void exportFeeds());
+
+els.import.addEventListener('click', () => els.importFile.click());
+
+els.importFile.addEventListener('change', () => {
+  const file = els.importFile.files?.[0] ?? null;
+  // Поле отвечает на тот же файл вторично как на новое значение только когда оно пустое.
+  els.importFile.value = '';
+  if (file) void importFeeds(file);
 });
 
 // The screen switcher shared by all three screens: it takes over this tab, so the reader the nav

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "feeds": [
+    {
+      "name": "Хабр",
+      "rss_link": "https://habr.com/ru/rss/all/all/",
+      "delay_timeout": 30,
+      "clean_timeout": 1440
+    },
+    {
+      "name": "BBC News | World",
+      "rss_link": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "delay_timeout": 60,
+      "clean_timeout": 2880
+    }
+  ]
+}

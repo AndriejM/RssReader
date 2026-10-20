@@ -19,14 +19,26 @@
   margin: 0;
 }
 
-/* The only two controls that are not a feed: «add a feed» on the left of the table, the explanation
-   folded behind a «?» on its right, so the table itself holds nothing but the feeds. */
+/* The controls that are not a feed: on the left the tools for the table as a whole — add a feed,
+   write the table to a file, read one back — on the right the explanation folded behind a «?», so
+   the table itself holds nothing but the feeds. */
 .table-bar {
   align-items: center;
   display: flex;
   gap: 8px;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.bar-tools {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+/* A file chosen for import is not a control the user reads: the import icon is what they press. */
+.file-import {
+  display: none;
 }
 
 .info {
@@ -192,6 +204,20 @@
   color: var(--text-muted);
   font-size: 13px;
   margin: 14px 0 0;
+}
+
+/* The report of a transfer of the whole table stands under it, where no row owns it. */
+.transfer-status {
+  font-size: 13px;
+  margin: 14px 0 0;
+}
+
+.transfer-status.ok {
+  color: var(--accent);
+}
+
+.transfer-status.error {
+  color: var(--danger);
 }
 
 @media (max-width: 720px) {
