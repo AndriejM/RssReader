@@ -1,7 +1,7 @@
 // Background service worker: polls feeds on their delay_timeout alarms, stores headlines,
 // prunes them on clean_timeout, keeps the toolbar badge count and plays the alert sound.
 
-import { feedIdFromAlarm, syncAlarms } from './lib/alarms.js';
+import { alarmDueAt, feedIdFromAlarm, syncAlarms } from './lib/alarms.js';
 import { MSG_COUNT, MSG_FETCH_FEED, MSG_FEEDS_CHANGED, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from './lib/messages.js';
 import { notifyIngest } from './lib/notify.js';
 import { requestOffscreen } from './lib/offscreen.js';
@@ -9,7 +9,7 @@ import { FeedError } from './lib/rss.js';
 import { playSound } from './lib/sound.js';
 import * as store from './lib/storage.js';
 import { READER_PAGE, focusOrCreateTab } from './lib/tabs.js';
-import { CLEANUP_ALARM_NAME, badgeText, feedPauseRemaining } from './lib/util.js';
+import { CLEANUP_ALARM_NAME, alarmPeriodMinutes, badgeText, feedPauseRemaining } from './lib/util.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   void bootstrap('install');
@@ -139,8 +139,10 @@ async function forgetValidators(feed, error) {
 /**
  * Fetch one feed and write the new headlines to storage. Nothing here knows about the reads of the
  * same feed running elsewhere — that is the job of `ingestFeed`, which lets one feed be read once.
+ * @param {{ nextAlarmAt?: number }} options - момент следующего будильника этой загрузки, чтобы
+ *   диагноз ленты назвал его, а не вывел из `delay_timeout` (см. `storage.markFeedChecked`).
  */
-async function readFeedOnce(feed) {
+async function readFeedOnce(feed, { nextAlarmAt = 0 } = {}) {
   const startedAt = Date.now();
   let result;
 
@@ -191,11 +193,11 @@ async function readFeedOnce(feed) {
     await forgetValidators(feed, error);
     /* Диагноз пишется именно здесь: иначе отказ ленты не отличить от сбоя бейджа или сигнала, а
      * экран настроек показал бы здоровую ленту сломанной. */
-    await reportFeedHealth(feed.id, { ok: false, error, time: startedAt });
+    await reportFeedHealth(feed.id, { ok: false, error, time: startedAt, nextAlarmAt });
     throw error;
   }
 
-  await reportFeedHealth(feed.id, { ok: true, time: Date.now() });
+  await reportFeedHealth(feed.id, { ok: true, time: Date.now(), nextAlarmAt });
 
   return result;
 }
@@ -263,13 +265,14 @@ function lockedFeedResult() {
  * Fetch one feed and write the new headlines to storage — once at a time. A feed that is being
  * read right now is not asked a second time: a joiner takes the headlines of the read in progress,
  * and a read from another context (its ticket in storage is still alive) is skipped.
- * @param {{ notify?: boolean }} options - `notify` marks an alarm-driven (automatic) read,
- *   which is the only case that plays the sound.
+ * @param {{ notify?: boolean, nextAlarmAt?: number }} options - `notify` marks an alarm-driven
+ *   (automatic) read, which is the only case that plays the sound. `nextAlarmAt` names the next
+ *   alarm of this feed, which only the alarm itself knows.
  * @returns {Promise<object>} `{ added, skipped, seen, notModified, busy }`. Only a feed held by a
  *   read this request did not start answers `busy`; one that joined a read of its own worker answers
  *   with the headlines of that read, as if it had fetched them itself.
  */
-async function ingestFeed(feed, { notify = false } = {}) {
+async function ingestFeed(feed, { notify = false, nextAlarmAt = 0 } = {}) {
   const held = await holdFeedRead(feed.id);
 
   if (held?.read) {
@@ -291,7 +294,7 @@ async function ingestFeed(feed, { notify = false } = {}) {
   let failure = null;
 
   try {
-    result = await readFeedOnce(feed);
+    result = await readFeedOnce(feed, { nextAlarmAt });
     entry.settle.resolve(result);
   } catch (error) {
     failure = error;
@@ -346,7 +349,12 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       return;
     }
 
-    const result = await ingestFeed(feed, { notify: true });
+    /* Когда ленту спросят снова — это следующий период её будильника, а не «сейчас + период»:
+     * сработавший будильник Chrome уже ставит себе следующую встречу, и читалка называет её. */
+    const result = await ingestFeed(feed, {
+      notify: true,
+      nextAlarmAt: alarmDueAt(alarm, Date.now(), alarmPeriodMinutes(feed.delay_timeout)),
+    });
     if (result.busy) return; // another context holds this feed; `ingestFeed` said so
     if (result.notModified) {
       // A 304: the reader asked, the server sent no body, nothing in the reader changed.

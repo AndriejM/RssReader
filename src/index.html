@@ -146,6 +146,12 @@
         </button>
         <div class="font-scale" data-font-scale="headlines"></div>
       </div>
+      <!--
+        One quiet line under the head of the middle column: when the headlines of what is selected
+        now were last brought in, and when they are next asked for on their own. It stays hidden
+        while the selection has nothing to say about its own load.
+      -->
+      <p class="panel-status muted" id="feed-status" hidden></p>
       <div class="panel-scroll">
         <ul class="list" id="headline-list"></ul>
         <p class="empty" id="headlines-empty" hidden data-i18n="reader.headlines.emptyNoFeed"></p>

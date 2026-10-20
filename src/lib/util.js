@@ -132,6 +132,21 @@ export function feedPauseRemaining(feed, now = Date.now()) {
   return Math.max(0, until - Number(now));
 }
 
+/**
+ * Когда ленту прочтут в следующий раз. Срок стоит искать позже обоих, что его называют: будильник
+ * ленты (`nextAlarmAt`) идёт своим расписанием, а пауза после отказа (`nextRetryAt`) только
+ * пропуска́ет попытку — сам будильник не двигается (см. `background.js`). Лента, у которой срок
+ * уже прошёл, отвечает на этот вопрос собой: её вопрос стоит задать сейчас.
+ * 0 — срока нет вовсе: ленту никто не читал и её будильник ещё не записан.
+ */
+export function feedNextCheckAt(feed, now = Date.now()) {
+  const alarmAt = Number(feed?.nextAlarmAt);
+  const retryAt = Number(feed?.nextRetryAt);
+  const due = Number.isFinite(alarmAt) && alarmAt > 0 ? alarmAt : 0;
+  const paused = Number.isFinite(retryAt) && retryAt > Number(now) ? retryAt : 0;
+  return Math.max(due, paused);
+}
+
 function round2(value) {
   return String(Math.round(value * 100) / 100);
 }

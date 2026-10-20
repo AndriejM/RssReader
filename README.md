@@ -148,9 +148,9 @@ Three vertical panels:
    its first (freshest) headline, and its text opens in the right panel right away; clicking “All
    feeds” puts it on the freshest headline there is, whichever feed it came from. A feed whose last
    read failed is set apart: a warning glyph stands beside its name, the number of its failures runs
-   under the name in the colour of a failure; the tooltip of that row names when the feed was last
-   read, what the last attempt answered and — while the feed is in its pause — how much longer it is
-   left alone.
+   under the name in the colour of a failure. Any feed that has been read carries a tooltip: when it
+   was last read, when its next check is due, and — while a failing feed sits out its pause — how
+   much longer an automatic read leaves it alone.
 2. **Headlines** — headlines of the selected feed from storage, freshest on top, with a
    “loaded N min ago” label and a storage time counted down from `clean_timeout`. When “All feeds”
    is selected, the headlines of all the feeds stand here, also freshest on top, and each one is
@@ -214,6 +214,17 @@ name counts what is left, and a search that matches nothing says so in both the 
 panel. Deleting a headline while the field holds words hands the reader to the next headline the
 search still shows. What is typed belongs to the reading position, so a reader that comes back from a
 settings screen comes back to the same filtered list.
+
+Under that head stands one quiet line about the load of whatever is selected now: when its headlines
+last came in (`lastFetchedAt`) and when they are next asked for on their own. For one feed the second
+is that feed's alarm; for «All feeds» it is the earliest alarm among all the feeds. The moment comes
+from the schedule Chrome really runs — `syncAlarms` reads it off the alarms themselves — so the line
+answers «why has nothing arrived» without opening the service worker console: *headlines fetched 4
+min ago · next check in 26 min* says the reader asked recently and the site has nothing newer. A
+`304` is a check that brings no headlines, so it moves the next check but not the age of what lies
+here. The line redraws once a minute while the reader tab is visible (and at once when the tab
+becomes visible again), so «4 min ago» does not freeze, and a feed nobody has read yet leaves the
+line off entirely.
 
 The reader answers to the keyboard, and its keys are held back while a field is being typed in (the
 search field holds the same letters) or while Ctrl/Meta/Alt are down:
@@ -388,18 +399,21 @@ row and the line under a feed row on the “Feed settings” screen are where it
   "lastErrorParams": { "seconds": 15 },
   "lastErrorMessage": "fetch failed", // kept under 300 characters
   "fetchFailureCount": 2,           // failures in a row; a read that worked sets it back to 0
-  "nextAlarmAt": 1760001800000,     // when the next check is due: the last read + delay_timeout
+  "nextAlarmAt": 1760001800000,     // when this feed's alarm is due to run, ms (Chrome's schedule)
   "nextRetryAt": 1760003600000      // when an automatic read may ask this feed again
 }
 ```
 
 None of these fields exists until the feed has actually been read, and changing the feed's
-`rss_link` clears them: the failures described the old address. `nextAlarmAt` is what the reader
-names as “next check”, the feed's own poll period (`alarmPeriodMinutes(delay_timeout)`, the same
-formula `syncAlarms` uses) counted from the last read. `nextRetryAt` is set only by a read that
-failed and is the later of the two: it names the moment an *automatic* read may ask the feed again
-(see “Implementation notes”), which is why the health line of a failing feed shows it rather than
-the alarm time.
+`rss_link` clears them: the failures described the old address. `nextAlarmAt` is what the reader and
+the feed screen name as “next check”. `syncAlarms` writes it from the alarms Chrome really runs: the
+moment the alarm states for itself, or — when that moment has already gone by — one period after it,
+and an automatic read hands the next period of the alarm that just ran to `markFeedChecked`. Only a
+feed whose alarm has not been seen yet gets the formula (`alarmPeriodMinutes(delay_timeout)`, the one
+`syncAlarms` creates the alarm with) counted from the last read. `nextRetryAt` is set only by a read
+that failed and is the later of the two: it names the moment an *automatic* read may ask the feed
+again (see “Implementation notes”), which is why the health line of a failing feed shows it rather
+than the alarm time.
 
 A feed whose server answers with validators (`ETag` or `Last-Modified`) carries those answers too:
 
@@ -415,6 +429,11 @@ They are the feed's side of a conditional GET (see “Implementation notes”): 
 them, and a server that answers `304` gets nothing parsed and nothing written. Like the health
 record they belong to one address, so changing `rss_link` clears them too — an `ETag` of the old
 feed would answer `304` for a different one.
+
+`lastFetchedAt` is not one of those answers: every read that brought headlines writes it, including a
+feed whose server sends no validators at all, and only a `304` leaves it where it was. It is kept
+with the keys because it describes the same headlines, and it is what the reader names as “headlines
+fetched … ago”.
 
 **Feeds file** — what the export and import icons of the feed screen write and read
 (`FEED_EXPORT_FILE_NAME` and `FEED_EXPORT_VERSION` in `lib/storage.js`). It carries only what a
@@ -710,7 +729,8 @@ background.
   kept when it really is an HTTP-date, because a validator the server cannot read often buys a 400;
   a `304` may carry a fresher `ETag` than the body it refused to send, so the keys are rewritten
   while `lastFetchedAt` — the age of the headlines those keys describe — is not; a server that
-  stops sending validators is not asked with the old ones any more, and a `404` / `410` / `412` on a
+  stops sending validators is not asked with the old ones any more (the date its headlines arrived is
+  not one of the keys and stays), and a `404` / `410` / `412` on a
   feed that had them makes the worker forget them, so one stubborn server cannot turn every poll
   into a failure. A read that fails does not lose its keys: the next poll still asks politely. And
   the keys are only asked with while the reader still holds the headlines they describe — once
@@ -894,6 +914,13 @@ rules are covered by the tests.
     any local name or minutes stay as they were. Hand it a file of another `version`, a file that is
     not JSON, or one with rows that fail the row check → the line says what was refused, and nothing
     in storage changed.
+
+32. Open the reader on a feed that has been read → one line under the head of the middle column names
+    when its headlines came in and when they are next asked for; on «All feeds» the age is the
+    freshest of those feeds and the next check is the earliest of their alarms. Leave the tab open →
+    «4 min ago» becomes «5 min ago» on its own. Press “Refresh” → the line answers without a reload,
+    because a read rewrites the feed row and the reader repaints from it, and the moment it names is
+    the number that stands in `feeds[].nextAlarmAt` in `chrome.storage.local`.
 
 ## Limitations
 

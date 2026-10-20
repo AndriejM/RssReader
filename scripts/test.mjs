@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+import * as alarmsLib from '../src/lib/alarms.js';
 import * as encoding from '../src/lib/encoding.js';
 import * as favicon from '../src/lib/favicon.js';
 import * as i18n from '../src/lib/i18n.js';
@@ -37,6 +38,7 @@ const {
   badgeText,
   cleanTitle,
   feedBackoffMinutes,
+  feedNextCheckAt,
   feedPauseRemaining,
   formatSince,
   humanDuration,
@@ -149,6 +151,34 @@ test('feedPauseRemaining names the wait left, and none at all for a feed that ne
   assert.equal(feedPauseRemaining({}, now), 0, 'a healthy feed waits for nothing');
   assert.equal(feedPauseRemaining({ nextRetryAt: 'bogus' }, now), 0);
   assert.equal(feedPauseRemaining(undefined, now), 0);
+});
+
+/**
+ * The reader answers "when is this feed asked next" from one number, while storage keeps two: the
+ * alarm of the feed and the pause a failing feed sits out. The answer is the later of them, because
+ * a pause skips an attempt without moving the alarm (see `background.js`).
+ */
+test('feedNextCheckAt takes the later of the alarm and the pause made on top of it', () => {
+  const now = 10 * MINUTE;
+  assert.equal(feedNextCheckAt({ nextAlarmAt: now + 20 * MINUTE }, now), now + 20 * MINUTE);
+  assert.equal(
+    feedNextCheckAt({ nextAlarmAt: now + 20 * MINUTE, nextRetryAt: now + 40 * MINUTE }, now),
+    now + 40 * MINUTE,
+    'a pause that outlives the alarm is when the feed is really read again',
+  );
+  assert.equal(
+    feedNextCheckAt({ nextAlarmAt: now + 20 * MINUTE, nextRetryAt: now + 5 * MINUTE }, now),
+    now + 20 * MINUTE,
+    'a pause that runs out before the alarm leaves the alarm itself in charge',
+  );
+  assert.equal(
+    feedNextCheckAt({ nextAlarmAt: now - MINUTE }, now),
+    now - MINUTE,
+    'an alarm that already went off — or was delayed by a sleeping device — is due now',
+  );
+  assert.equal(feedNextCheckAt({}, now), 0, 'a feed nobody has read has no schedule to name');
+  assert.equal(feedNextCheckAt({ nextAlarmAt: 'bogus', nextRetryAt: 'bogus' }, now), 0);
+  assert.equal(feedNextCheckAt(undefined, now), 0);
 });
 
 test('humanDuration reads like a person wrote it', () => {
@@ -1924,6 +1954,152 @@ test('the feeds screen reports the health of each feed and the reader flags a fa
   }
 });
 
+/* ---------------- the load the reader names ---------------- */
+
+/**
+ * The reader answers «почему новости не пришли» on its own screen: the line under the head of the
+ * middle column names when the headlines of what is selected came in and when they are next asked
+ * for automatically. Markup, script, stylesheet and the seven dictionaries are kept in step here.
+ */
+test('the reader names the last load and the next check of what it shows', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const html = read('src/index.html');
+  const page = read('src/index.js');
+  const css = read('src/styles/reader.css');
+
+  assert.ok(html.includes('id="feed-status"'), 'the middle column declares no line about its own load');
+  assert.ok(page.includes("document.getElementById('feed-status')"), 'the page does not know the line the markup declares');
+  assert.ok(page.includes('function renderFeedStatus()'), 'nothing gathers what the reader knows about its selection');
+  assert.ok(page.includes('renderFeedStatus();'), 'the line the markup declares is drawn by nobody');
+  assert.ok(css.includes('.panel-status'), 'the line the markup declares is not styled');
+
+  /* One feed and «Все ленты» are both covered: the age is the newest of the feeds the selection
+   * stands for, the next check is the earliest of them. */
+  assert.ok(page.includes('state.feeds : feed ? [feed] : []'), 'the line does not follow the selection of the left column');
+  assert.ok(page.includes('feedNextCheckAt('), 'the reader names no next check of its own selection');
+  assert.ok(page.includes('lastFetchedAt'), 'the reader names no moment its headlines came in');
+
+  /* «4 мин назад» is drawn once and then left standing; it has to be redrawn while the reader is open. */
+  assert.ok(page.includes('setInterval('), 'the line stops aging while the reader sits open');
+  assert.ok(page.includes("'visibilitychange'"), 'a tab that came back shows the age it sat out');
+
+  const captions = ['reader.status.lastFetched', 'reader.status.nextCheck', 'reader.feed.nextCheck'];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the reader asks to show`);
+    }
+  }
+});
+
+/* ---------------- the schedule the reader names ---------------- */
+
+/**
+ * The reader answers «когда ленту спросят снова» with a moment it did not invent: `syncAlarms` reads
+ * it off the alarms Chrome really runs and writes it into the feed row. A sync that learned nothing
+ * has to write nothing — otherwise the write would wake `chrome.storage.onChanged`, which asks for
+ * the same sync again, and the worker would chase its own storage forever.
+ */
+test('the schedule the reader names is the one Chrome really runs', async () => {
+  const memory = {};
+  const now = Date.now();
+  const pending = `${util.ALARM_PREFIX}pending`;
+  const overdue = `${util.ALARM_PREFIX}overdue`;
+  const scheduled = new Map([
+    [pending, { name: pending, periodInMinutes: 30, scheduledTime: now + 12 * MINUTE }],
+    [overdue, { name: overdue, periodInMinutes: 30, scheduledTime: now - 5 * MINUTE }],
+    [util.CLEANUP_ALARM_NAME, { name: util.CLEANUP_ALARM_NAME, periodInMinutes: util.CLEANUP_PERIOD_MINUTES }],
+  ]);
+
+  let writes = 0;
+  globalThis.chrome = {
+    storage: {
+      local: {
+        async get(key) {
+          return key in memory ? { [key]: structuredClone(memory[key]) } : {};
+        },
+        async set(patch) {
+          writes += 1;
+          for (const [key, value] of Object.entries(patch)) memory[key] = structuredClone(value);
+        },
+      },
+    },
+    alarms: {
+      async getAll() {
+        return [...scheduled.values()];
+      },
+      async clear(name) {
+        return scheduled.delete(name);
+      },
+      async create(name, info) {
+        scheduled.set(name, { name, ...info, scheduledTime: Date.now() + info.periodInMinutes * MINUTE });
+      },
+    },
+  };
+
+  try {
+    await store.upsertFeed({ id: 'pending', name: 'Pending', rss_link: 'https://a.b/rss', delay_timeout: 30 });
+    await store.upsertFeed({ id: 'overdue', name: 'Overdue', rss_link: 'https://b.a/rss', delay_timeout: 30 });
+    await store.upsertFeed({ id: 'fresh', name: 'Fresh', rss_link: 'https://c.b/rss', delay_timeout: 30 });
+
+    await alarmsLib.syncAlarms();
+    const byId = new Map((await store.getFeeds()).map((feed) => [feed.id, feed]));
+
+    assert.equal(byId.get('pending').nextAlarmAt, now + 12 * MINUTE, 'an alarm that has not run is named by its own clock, not by the period');
+    assert.equal(
+      byId.get('overdue').nextAlarmAt,
+      now - 5 * MINUTE + 30 * MINUTE,
+      'an alarm that already went off is due one period after that run',
+    );
+    const fresh = byId.get('fresh').nextAlarmAt;
+    assert.ok(
+      fresh > Date.now() && fresh <= Date.now() + 30 * MINUTE,
+      'an alarm created by this sync is due one period from now',
+    );
+    assert.equal(byId.get('pending').lastCheckedAt, undefined, 'a schedule is not a diagnosis: nothing claims the feed was read');
+
+    writes = 0;
+    await alarmsLib.syncAlarms();
+    assert.equal(writes, 0, 'a sync that learned nothing rewrites nothing, so it cannot wake itself again');
+
+    /* A feed whose period changed gets a new alarm — and with it a new schedule. */
+    await store.upsertFeed({ id: 'pending', name: 'Pending', rss_link: 'https://a.b/rss', delay_timeout: 60 });
+    await alarmsLib.syncAlarms();
+    const moved = (await store.getFeeds()).find((feed) => feed.id === 'pending');
+    assert.equal(scheduled.get(pending).periodInMinutes, 60, 'the alarm itself follows the new period');
+    assert.ok(
+      moved.nextAlarmAt >= now + 60 * MINUTE,
+      'the schedule named for the feed is the one the new alarm carries',
+    );
+  } finally {
+    delete globalThis.chrome;
+  }
+});
+
+/**
+ * The worker writes that schedule from the alarm it is answering, not from a formula it guesses:
+ * the next check of a feed is the next period of the alarm that just ran, so the reader can name it
+ * the moment the headlines come in.
+ */
+test('an automatic read records the next alarm of its own alarm', () => {
+  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+  const alarm = worker.match(/chrome\.alarms\.onAlarm\.addListener\([\s\S]*?\n\}\);/);
+  assert.ok(alarm, 'the worker answers its alarms');
+  assert.match(
+    alarm[0],
+    /nextAlarmAt: alarmDueAt\(alarm, Date\.now\(\), alarmPeriodMinutes\(feed\.delay_timeout\)\)/,
+    'the read does not say when it will happen next',
+  );
+
+  const ingest = worker.match(/async function ingestFeed\([\s\S]*?\n  return result;\r?\n\}/);
+  assert.match(ingest[0], /readFeedOnce\(feed, \{ nextAlarmAt \}\)/, 'the schedule stops on the way to the diagnosis');
+
+  const read = worker.match(/async function readFeedOnce\([\s\S]*?\n  return result;\r?\n\}/);
+  for (const health of read[0].matchAll(/reportFeedHealth\(feed\.id, \{[^}]*\}\)/g)) {
+    assert.match(health[0], /nextAlarmAt/, `the diagnosis written here names no next check: ${health[0]}`);
+  }
+});
+
 /* ---------------- what a feed calls a headline ---------------- */
 
 test('sourceIdentity names a headline by the id the feed states', () => {
@@ -2197,7 +2373,11 @@ test('a feed remembers the answers it was given, and forgets them with the addre
     feed = (await store.getFeeds())[0];
     assert.equal(feed.etag, undefined);
     assert.equal(feed.lastModified, undefined);
-    assert.equal(feed.lastFetchedAt, undefined);
+    assert.equal(
+      feed.lastFetchedAt,
+      1000,
+      'a feed whose server sends no keys still knows when its headlines came in',
+    );
 
     assert.equal(await store.rememberFeedValidators('gone', { etag: '"x"' }), false, 'a deleted feed writes nothing');
 

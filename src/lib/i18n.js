@@ -75,6 +75,9 @@ const DICTIONARIES = {
     'reader.feed.lastChecked': 'последняя проверка: {since}',
     'reader.feed.lastError': 'последняя ошибка: {error}',
     'reader.feed.nextRetry': 'следующая попытка: {until}',
+    'reader.feed.nextCheck': 'следующая проверка: {until}',
+    'reader.status.lastFetched': 'заголовки получены {since}',
+    'reader.status.nextCheck': 'следующая проверка {until}',
 
     'reader.headlines.panelAria': 'Заголовки новостей',
     'reader.headlines.title': 'Заголовки',
@@ -285,6 +288,9 @@ const DICTIONARIES = {
     'reader.feed.lastChecked': 'last checked: {since}',
     'reader.feed.lastError': 'last error: {error}',
     'reader.feed.nextRetry': 'next attempt: {until}',
+    'reader.feed.nextCheck': 'next check: {until}',
+    'reader.status.lastFetched': 'headlines fetched {since}',
+    'reader.status.nextCheck': 'next check {until}',
 
     'reader.headlines.panelAria': 'News headlines',
     'reader.headlines.title': 'Headlines',
@@ -494,6 +500,9 @@ const DICTIONARIES = {
     'reader.feed.lastChecked': 'остання перевірка: {since}',
     'reader.feed.lastError': 'остання помилка: {error}',
     'reader.feed.nextRetry': 'наступна спроба: {until}',
+    'reader.feed.nextCheck': 'наступна перевірка: {until}',
+    'reader.status.lastFetched': 'заголовки отримано {since}',
+    'reader.status.nextCheck': 'наступна перевірка {until}',
 
     'reader.headlines.panelAria': 'Заголовки новин',
     'reader.headlines.title': 'Заголовки',
@@ -701,6 +710,9 @@ const DICTIONARIES = {
     'reader.feed.lastChecked': 'ostatnio sprawdzono: {since}',
     'reader.feed.lastError': 'ostatni błąd: {error}',
     'reader.feed.nextRetry': 'następna próba: {until}',
+    'reader.feed.nextCheck': 'następne sprawdzenie: {until}',
+    'reader.status.lastFetched': 'nagłówki pobrano {since}',
+    'reader.status.nextCheck': 'następne sprawdzenie {until}',
 
     'reader.headlines.panelAria': 'Nagłówki wiadomości',
     'reader.headlines.title': 'Nagłówki',
@@ -908,6 +920,9 @@ const DICTIONARIES = {
     'reader.feed.lastChecked': 'zuletzt geprüft: {since}',
     'reader.feed.lastError': 'letzter Fehler: {error}',
     'reader.feed.nextRetry': 'nächster Versuch: {until}',
+    'reader.feed.nextCheck': 'nächste Prüfung: {until}',
+    'reader.status.lastFetched': 'Headlines abgerufen {since}',
+    'reader.status.nextCheck': 'nächste Prüfung {until}',
 
     'reader.headlines.panelAria': 'Nachrichtenschlagzeilen',
     'reader.headlines.title': 'Schlagzeilen',
@@ -1115,6 +1130,9 @@ const DICTIONARIES = {
     'reader.feed.lastChecked': 'dernière vérification : {since}',
     'reader.feed.lastError': 'dernière erreur : {error}',
     'reader.feed.nextRetry': 'nouvel essai : {until}',
+    'reader.feed.nextCheck': 'prochaine vérification : {until}',
+    'reader.status.lastFetched': 'titres récupérés {since}',
+    'reader.status.nextCheck': 'prochaine vérification {until}',
 
     'reader.headlines.panelAria': 'Titres des actualités',
     'reader.headlines.title': 'Titres',
@@ -1322,6 +1340,9 @@ const DICTIONARIES = {
     'reader.feed.lastChecked': 'última comprobación: {since}',
     'reader.feed.lastError': 'último error: {error}',
     'reader.feed.nextRetry': 'próximo intento: {until}',
+    'reader.feed.nextCheck': 'próxima comprobación: {until}',
+    'reader.status.lastFetched': 'titulares obtenidos {since}',
+    'reader.status.nextCheck': 'próxima comprobación {until}',
 
     'reader.headlines.panelAria': 'Titulares de noticias',
     'reader.headlines.title': 'Titulares',

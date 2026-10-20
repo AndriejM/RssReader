@@ -9,7 +9,7 @@ import { MSG_FEEDS_CHANGED, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from './li
 import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
 import { wireThemeButton } from './lib/theme.js';
-import { formatSince, formatUntil, humanDuration, itemTime } from './lib/util.js';
+import { feedNextCheckAt, formatSince, formatUntil, humanDuration, itemTime } from './lib/util.js';
 
 /* Synchronous first pass: the cached language (or the browser language) is known before
  * `chrome.storage` resolves, so nothing here has to wait for the async read below. */
@@ -27,6 +27,7 @@ const els = {
 
   headlinesTitle: document.getElementById('headlines-title'),
   headlinesCount: document.getElementById('headlines-count'),
+  feedStatus: document.getElementById('feed-status'),
   headlineSearch: document.getElementById('headline-search'),
   headlineList: document.getElementById('headline-list'),
   headlinesEmpty: document.getElementById('headlines-empty'),
@@ -187,11 +188,17 @@ function feedHealthTitle(feed) {
     );
   }
 
-  /* Отказ ленты назначает паузу перед следующей автоматической попыткой: подсказка называет её
-   * срок, чтобы счётчик сбоев не выглядел как лента, которую перечитывают просто чаще. */
+  /* Когда ленту спросят снова. Будильник стоит своего расписания, а пауза после отказа только
+   * пропуска́ет попытку (см. `background.js`), поэтому во время паузы говорят о её сроке,
+   * а вне её — о сроке, который называет сам будильник. */
   const retryAt = Number(feed.nextRetryAt);
   if (retryAt > Date.now()) {
     parts.push(t('reader.feed.nextRetry', { until: formatUntil(retryAt, Date.now(), unitLabels()) }));
+  } else {
+    const nextAt = feedNextCheckAt(feed);
+    if (nextAt > 0) {
+      parts.push(t('reader.feed.nextCheck', { until: formatUntil(nextAt, Date.now(), unitLabels()) }));
+    }
   }
 
   return parts.join('\n');
@@ -248,6 +255,40 @@ function renderFeeds() {
   }
 }
 
+/**
+ * Строка под головой средней панели: что читалка знает о загрузке того, что она показывает.
+ * «Заголовки получены 4 мин назад» отвечает на «почему новости не пришли» без console воркера,
+ * а рядом называет, когда их спросят сами: у одной ленты — её будильник, у «всех лент» — самый
+ * ранний из будильников всех.
+ *
+ * Возраст заголовков и возраст проверки — разные вещи: ответ 304 ничего не приносит, поэтому он
+ * не двигает момент, когда их получили. Именно это и стоит знать: спрашивали недавно, на сервере
+ * с тех пор ничего нет.
+ */
+function renderFeedStatus() {
+  const all = isAllFeeds();
+  const feed = all ? null : selectedFeed();
+  const scope = all ? state.feeds : feed ? [feed] : [];
+  const now = Date.now();
+  const parts = [];
+
+  const fetchedAt = Math.max(0, ...scope.map((candidate) => Number(candidate.lastFetchedAt) || 0));
+  if (fetchedAt > 0) {
+    parts.push(t('reader.status.lastFetched', { since: formatSince(fetchedAt, now, unitLabels()) }));
+  }
+
+  const nextAt = scope
+    .map((candidate) => feedNextCheckAt(candidate, now))
+    .filter((at) => at > 0)
+    .sort((a, b) => a - b)[0];
+  if (nextAt) {
+    parts.push(t('reader.status.nextCheck', { until: formatUntil(nextAt, now, unitLabels()) }));
+  }
+
+  els.feedStatus.hidden = parts.length === 0;
+  els.feedStatus.textContent = parts.join(' · ');
+}
+
 function renderHeadlines() {
   els.headlineList.replaceChildren();
 
@@ -275,6 +316,9 @@ function renderHeadlines() {
   els.load.setAttribute('aria-label', t(all ? 'reader.refreshAll.aria' : 'reader.refresh.aria'));
   els.clear.title = t(all ? 'reader.clearAll.tooltip' : 'reader.clearFeed.tooltip');
   els.clear.setAttribute('aria-label', t(all ? 'reader.clearAll.aria' : 'reader.clearFeed.aria'));
+
+  // The line under this head speaks about the same selection as these two buttons.
+  renderFeedStatus();
 
   for (const item of items) {
     const li = document.createElement('li');
@@ -687,6 +731,20 @@ void wireThemeButton(els.theme);
 els.headlineSearch.addEventListener('input', () => {
   state.query = els.headlineSearch.value ?? '';
   applyQuerySelection();
+});
+
+/*
+ * «4 мин назад» должно оставаться правдой, пока читалка стоит открытой, — иначе строка говорит о
+ * загрузке, какой она была в момент, когда страницу последний раз перерисовывали. Раз в минуту её
+ * перечёркивают заново; вкладку, которой никто не видит, для этого не будят — она догонит сама,
+ * когда снова станет видимой.
+ */
+setInterval(() => {
+  if (!document.hidden) renderFeedStatus();
+}, 60000);
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) renderFeedStatus();
 });
 
 /** Whether the key belongs to the field being typed in, not to the reader around it. */

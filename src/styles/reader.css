@@ -187,6 +187,18 @@
   min-width: 80px;
 }
 
+/*
+  The line that names the load of what the middle column shows. It is a caption of the panel, not a
+  row of the list: smaller than the headlines it speaks about, and closed off from them by its own
+  border so the list still starts where it did.
+*/
+.panel-status {
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78em;
+  margin: 0;
+  padding: 6px 12px 7px;
+}
+
 .panel-scroll {
   flex: 1;
   min-height: 0;

@@ -153,9 +153,15 @@ function clearFeedValidators(feed) {
  * отказ — копит их, чтобы лента с постоянно недоступной адресной строкой была видна сразу.
  * Отказ заодно назначает, когда ленту можно спросить снова (`nextRetryAt`): пауза растёт
  * экспоненциально (`util.feedBackoffMinutes`), чтобы одна битая лента не съедала каждую загрузку.
- * @param {{ ok?: boolean, error?: unknown, time?: number }} options
+ * @param {{ ok?: boolean, error?: unknown, time?: number, nextAlarmAt?: number }} options -
+ *   `nextAlarmAt` is the moment the worker already knows the feed's alarm will run
+ *   (`lib/alarms.js` -> `alarmDueAt`); without it the schedule is read from the same period formula
+ *   `syncAlarms` creates the alarm with.
  */
-export async function markFeedChecked(feedId, { ok = true, error = null, time = Date.now() } = {}) {
+export async function markFeedChecked(
+  feedId,
+  { ok = true, error = null, time = Date.now(), nextAlarmAt = 0 } = {},
+) {
   const feeds = await getFeeds();
   const feed = feeds.find((candidate) => candidate.id === feedId);
   if (!feed) return false;
@@ -163,10 +169,13 @@ export async function markFeedChecked(feedId, { ok = true, error = null, time = 
   const checkedAt = Number(time) || Date.now();
   feed.lastCheckedAt = checkedAt;
 
-  /* Следующая проверка — это когда сработает будильник ленты: та же формула периода, что заводит
-   * `syncAlarms`, отсчитанная от этой попытки. Храним её, чтобы экран настроек назвал срок,
-   * не догадываясь о нём по одному `delay_timeout`. */
-  feed.nextAlarmAt = checkedAt + alarmPeriodMinutes(feed.delay_timeout) * 60000;
+  /* Следующая проверка — это когда сработает будильник ленты. Храним её, чтобы читалка и экран
+   * настроек назвали срок, не догадываясь о нём по одному `delay_timeout`. */
+  const scheduled = Number(nextAlarmAt);
+  feed.nextAlarmAt =
+    Number.isFinite(scheduled) && scheduled > 0
+      ? scheduled
+      : checkedAt + alarmPeriodMinutes(feed.delay_timeout) * 60000;
 
   if (ok) {
     feed.lastOkAt = checkedAt;
@@ -225,14 +234,44 @@ export async function rememberFeedValidators(
   if (lastModified) feed.lastModified = lastModified;
   else delete feed.lastModified;
 
-  /* Момент получения заголовков живёт вместе с ними: 304 обновляет ключ, но не возраст того, что
-   * эти ключи описывают. Когда сервер перестал их присылать, дату стираем вместе с ними. */
+  /* Момент получения заголовков живёт вместе с ними, но не вместе с ключами: он отвечает на
+   * «когда ленту читали в последний раз», даже когда сервер не присылает того, чем можно спросить
+   * её дешевле. 304 обновляет ключ, но не возраст того, что эти ключи описывают, — за ним
+   * приходит пустой `fetchedAt`. */
   const at = Number(fetchedAt);
   if (at > 0) feed.lastFetchedAt = at;
-  else if (!(tag || lastModified)) delete feed.lastFetchedAt;
 
   await saveFeeds(feeds);
   return true;
+}
+
+/**
+ * Записать в строки лент момент, когда Chrome действительно соберётся разбудить их будильник.
+ * `markFeedChecked` называет этот срок по формуле периода, отсчитанной от своей попытки;
+ * здесь срок говорит само расписание (см. `lib/alarms.js`).
+ * Лента, у которой записан тот же момент, не трогается, и весь список пишется только когда хоть
+ * одна строка действительно изменилась: запись целого списка, которая ничего не меняет, разбудила
+ * бы `chrome.storage.onChanged` — а через него новый `syncAlarms`, который снова записал бы его.
+ * @param {Map<string, number>|Record<string, number>} times - `feedId` → момент срабатывания
+ * @returns {number} сколько строк получили этот срок
+ */
+export async function recordFeedAlarmTimes(times) {
+  const entries = times instanceof Map ? [...times.entries()] : Object.entries(times ?? {});
+  if (entries.length === 0) return 0;
+
+  const feeds = await getFeeds();
+  let touched = 0;
+  for (const [feedId, at] of entries) {
+    const feed = feeds.find((candidate) => candidate.id === feedId);
+    const next = Number(at);
+    if (!feed || !Number.isFinite(next) || next <= 0) continue;
+    if (feed.nextAlarmAt === next) continue;
+    feed.nextAlarmAt = next;
+    touched += 1;
+  }
+
+  if (touched > 0) await saveFeeds(feeds);
+  return touched;
 }
 
 /**
