@@ -1992,6 +1992,138 @@ test('the reader names the last load and the next check of what it shows', () =>
   }
 });
 
+/* ---------------- the first run of a reader with no feeds ---------------- */
+
+/**
+ * A reader whose feeds have never been added has nothing to list, so it has to say that in its own
+ * words: the middle column holds a card that names the empty screen and hands over the way to the
+ * feeds screen, the controls that would act on an empty selection stand aside, and the feeds screen
+ * confirms the first added feed once — under the table, where a word about the whole table belongs.
+ * Markup, script, stylesheet, storage and the seven dictionaries are kept in step here.
+ */
+test('the reader greets a first run that has no feeds', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const html = read('src/index.html');
+  const page = read('src/index.js');
+  const feedsJs = read('src/feeds.js');
+  const storageJs = read('src/lib/storage.js');
+  const css = read('src/styles/reader.css');
+
+  /* The card is declared in the markup so that `applyI18n()` reaches its words on a language change. */
+  assert.ok(html.includes('id="start-card"'), 'the middle column declares no card for a reader with no feeds');
+  assert.ok(html.includes('id="btn-open-feeds"'), 'the card of a first run offers no way to the feeds screen');
+  assert.ok(
+    page.includes("document.getElementById('start-card')"),
+    'the page does not know the card its own markup declares',
+  );
+  assert.ok(
+    page.includes("document.getElementById('btn-open-feeds')"),
+    'the page does not know the button its own markup declares',
+  );
+
+  /* One function decides that there is nothing to list, and the columns ask it instead of guessing. */
+  assert.ok(page.includes('function renderStartCard()'), 'nothing decides when the card stands in for the list');
+  assert.ok(page.includes('const noFeeds = renderStartCard();'), 'the middle column is drawn without asking whether feeds exist');
+  assert.ok(
+    page.includes('els.headlinesEmpty.hidden = items.length > 0 || noFeeds;'),
+    'the empty-list line keeps speaking over the card of a first run',
+  );
+
+  /* A search field and two icons that act on an empty selection would only look usable. */
+  for (const control of ['headlineSearch', 'load', 'clear']) {
+    assert.ok(
+      page.includes(`els.${control}.hidden = noFeeds;`),
+      `the ${control} control of an empty reader is left standing as if it had something to do`,
+    );
+  }
+  assert.ok(
+    page.includes('if (els.headlineSearch.hidden) break;'),
+    'the `/` key takes the focus to a field an empty reader has hidden',
+  );
+
+  /* `hidden` on a control whose own class names its `display` hides nothing: the screen has to say
+   * it itself, or the controls of the middle column stay drawn next to the card. */
+  assert.ok(css.includes('.panel-head [hidden]'), 'no rule hides a control whose class names its display');
+  assert.ok(css.includes('.start-card'), 'the card the markup declares is not styled');
+  assert.ok(css.includes('.start-card[hidden]'), 'the card is left drawn after the first feed arrives');
+  assert.ok(css.includes('.start-card-icon'), 'the glyph of the card is drawn at no size of its own');
+
+  /* The button goes the way the screen switcher goes: the same tab, so the selection stays where it was. */
+  assert.ok(
+    page.includes("import { SETTINGS_PAGE, pageUrl } from './lib/tabs.js';"),
+    'the reader does not know where the feeds screen lives',
+  );
+  assert.ok(
+    page.includes('els.openFeeds.addEventListener'),
+    'the card the markup declares has no answer to its own button',
+  );
+  assert.ok(
+    page.includes('window.location.assign(pageUrl(SETTINGS_PAGE))'),
+    'the card of a first run leads nowhere',
+  );
+
+  /* The right panel says the same as the middle one instead of asking for a headline no feed has. */
+  assert.equal(
+    page.split("showPlaceholder(t('reader.start.contentHint'))").length - 1,
+    3,
+    'the right panel is told about the first run by only some of the ways it is repainted',
+  );
+
+  /* The first added feed is confirmed once, under the table, and the mark that made it once lives
+   * in the settings the worker shares with the screens. */
+  for (const name of ['FIRST_FEED_KEY', 'getFirstFeedDone', 'setFirstFeedDone']) {
+    assert.ok(
+      new RegExp(`export (async function|const) ${name}\\b`).test(storageJs),
+      `storage.js does not offer ${name}`,
+    );
+  }
+  assert.ok(
+    feedsJs.includes('(await store.getFeeds()).length === 0 && !(await store.getFirstFeedDone())'),
+    'the first row of an empty table is not told apart from the rows after it',
+  );
+  assert.ok(
+    feedsJs.includes("setTransferStatus(t('feeds.status.firstFeed'), 'ok')"),
+    'a first feed leaves no word about the table it just entered',
+  );
+  assert.ok(
+    feedsJs.includes('if (firstFeed && loaded?.ok && !loaded.busy)'),
+    'the confirmation promises headlines a feed that failed never brought',
+  );
+  assert.ok(
+    feedsJs.indexOf('await store.setFirstFeedDone();') < feedsJs.indexOf("setTransferStatus(t('feeds.status.firstFeed')"),
+    'the mark is left unwritten, so the same word comes back on every save',
+  );
+
+  const captions = [
+    'reader.start.title',
+    'reader.start.hint',
+    'reader.start.openFeeds',
+    'reader.start.contentHint',
+    'feeds.status.firstFeed',
+  ];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which a first run asks to show`);
+    }
+  }
+});
+
+/** The first-feed mark is a setting: absent before the first feed, kept after it is written. */
+test('the mark of a first feed is absent until it is written', async () => {
+  const forget = storageMemory();
+  try {
+    assert.equal(await store.getFirstFeedDone(), false, 'a reader that never added a feed has no mark');
+    assert.equal(await store.setFirstFeedDone(), true);
+    assert.equal(await store.getFirstFeedDone(), true, 'the confirmation is told once, not on every save');
+
+    const stored = await chrome.storage.local.get(store.SETTINGS_KEY);
+    assert.equal(stored[store.SETTINGS_KEY][store.FIRST_FEED_KEY], true);
+  } finally {
+    forget();
+  }
+});
+
 /* ---------------- what the reader says out loud ---------------- */
 
 /**

@@ -8,6 +8,7 @@ import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from './lib/messages.js';
 import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
+import { SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
 import { feedNextCheckAt, formatSince, formatUntil, humanDuration, itemTime } from './lib/util.js';
 
@@ -31,6 +32,8 @@ const els = {
   headlineSearch: document.getElementById('headline-search'),
   headlineList: document.getElementById('headline-list'),
   headlinesEmpty: document.getElementById('headlines-empty'),
+  startCard: document.getElementById('start-card'),
+  openFeeds: document.getElementById('btn-open-feeds'),
 
   announce: document.getElementById('reader-announce'),
 
@@ -329,6 +332,21 @@ function renderFeedStatus() {
   els.feedStatus.textContent = parts.join(' · ');
 }
 
+/**
+ * Первый запуск читалки: пока в хранилище нет ни одной ленты, средней колонке нечего показывать, а
+ * её поле поиска и кнопки «Загрузить» / «Удалить» действовали бы над пустым выбором. Поэтому до
+ * первой ленты их место занимает карточка с переходом на экран лент. Ответ функции говорит и правой
+ * панели, что показывать вместо статьи.
+ */
+function renderStartCard() {
+  const noFeeds = state.feeds.length === 0;
+  els.startCard.hidden = !noFeeds;
+  els.headlineSearch.hidden = noFeeds;
+  els.load.hidden = noFeeds;
+  els.clear.hidden = noFeeds;
+  return noFeeds;
+}
+
 function renderHeadlines() {
   els.headlineList.replaceChildren();
 
@@ -340,15 +358,21 @@ function renderHeadlines() {
 
   const items = itemsOfSelectedFeed();
   const searching = queryActive();
+  const noFeeds = renderStartCard();
   els.headlinesCount.textContent = items.length ? `${items.length}` : '';
-  els.headlinesEmpty.hidden = items.length > 0;
-  els.headlinesEmpty.textContent = searching
-    ? t('reader.headlines.emptySearch')
-    : all
-      ? t('reader.headlines.emptyAllFeeds')
-      : feed
-        ? t('reader.headlines.emptyForFeed')
-        : t('reader.headlines.emptyNoFeed');
+
+  /* Без лент о пустоте средней колонки говорит карточка первого запуска, а не строка пустого
+   * списка: «Выберите ленту слева» при пустой левой колонке советовало бы выбрать то, чего нет. */
+  els.headlinesEmpty.hidden = items.length > 0 || noFeeds;
+  if (!noFeeds) {
+    els.headlinesEmpty.textContent = searching
+      ? t('reader.headlines.emptySearch')
+      : all
+        ? t('reader.headlines.emptyAllFeeds')
+        : feed
+          ? t('reader.headlines.emptyForFeed')
+          : t('reader.headlines.emptyNoFeed');
+  }
 
   // The load/clear buttons sit in this head and act on this very selection, so their tooltip names
   // exactly what they now cover: a single feed, or every feed when «Все ленты» is picked.
@@ -687,7 +711,8 @@ async function refreshSelectedFeed() {
  */
 async function refreshAllFeeds(target = els.refresh) {
   if (state.feeds.length === 0) {
-    showPlaceholder(t('reader.feeds.empty'));
+    // Просьба обновить то, чего ещё нет, — то же первое знакомство, что и пустая средняя колонка.
+    showPlaceholder(t('reader.start.contentHint'));
     return;
   }
 
@@ -732,7 +757,10 @@ async function renderAll() {
   renderTotal();
   renderFeeds();
   renderHeadlines();
+  /* Правая панель говорит либо о том, что открытый заголовок исчез, либо о первой ленте, которой
+   * ещё нет: без неё там нечего показывать, и «выберите заголовок» было бы советом выбрать пустоту. */
   if (message) showPlaceholder(message);
+  else if (state.feeds.length === 0) showPlaceholder(t('reader.start.contentHint'));
   return message;
 }
 
@@ -749,6 +777,7 @@ function redraw() {
     ? state.items.find((candidate) => candidate.uid === state.uid && inSelection(candidate))
     : null;
   if (item) openItem(item);
+  else if (state.feeds.length === 0) showPlaceholder(t('reader.start.contentHint'));
 }
 
 /* Storage is written by the background worker while this page is open, so react to it. */
@@ -782,6 +811,9 @@ els.refresh.addEventListener('click', () => void refreshSelectedFeed());
 els.load.addEventListener('click', () => void refreshSelection());
 els.clear.addEventListener('click', () => void clearSelectionHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
+/* Кнопка карточки первого запуска идёт той же дорогой, что и иконка лент в переключателе экранов:
+ * переход в этой же вкладке, чтобы выбор и поиск остались там, где были. */
+els.openFeeds.addEventListener('click', () => window.location.assign(pageUrl(SETTINGS_PAGE)));
 void wireThemeButton(els.theme);
 
 els.headlineSearch.addEventListener('input', () => {
@@ -876,6 +908,8 @@ document.addEventListener('keydown', (event) => {
   switch (event.key) {
     case '/':
       event.preventDefault();
+      // Пока лент нет, поля поиска в средней колонке нет: `/` не должен вести фокус в скрытое поле.
+      if (els.headlineSearch.hidden) break;
       els.headlineSearch.focus();
       els.headlineSearch.select();
       break;

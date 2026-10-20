@@ -160,6 +160,23 @@
         -->
         <ul class="list" id="headline-list" role="listbox" data-i18n-aria="reader.headlines.list.aria"></ul>
         <p class="empty" id="headlines-empty" hidden data-i18n="reader.headlines.emptyNoFeed"></p>
+        <!--
+          Первое открытие читалки: средней колонке нечего показывать, пока в хранилище нет ни одной
+          ленты. Карточка называет это прямо и даёт кнопку перехода на экран лент — тот же путь, что
+          иконка лент в переключателе экранов (`lib/nav.js`), только сказанная словами.
+        -->
+        <div class="start-card" id="start-card" hidden>
+          <svg class="icon start-card-icon" aria-hidden="true"><use href="#icon-rss"></use></svg>
+          <h3 data-i18n="reader.start.title"></h3>
+          <p class="muted start-card-hint" data-i18n="reader.start.hint"></p>
+          <button
+            id="btn-open-feeds"
+            class="primary"
+            type="button"
+            data-i18n="reader.start.openFeeds"
+            data-i18n-aria="reader.start.openFeeds"
+          ></button>
+        </div>
       </div>
     </section>
 

@@ -79,6 +79,13 @@ const DICTIONARIES = {
     'reader.status.lastFetched': 'заголовки получены {since}',
     'reader.status.nextCheck': 'следующая проверка {until}',
 
+    // Первое знакомство с читалкой: средняя колонка пуста, пока не добавлено ни одной ленты, и её
+    // кнопка ведёт на экран лент. Подпись правой панели говорит то же самое там, где стоит статья.
+    'reader.start.title': 'Лент пока нет',
+    'reader.start.hint': 'Добавьте первую ленту: её заголовки появятся в этой колонке, а текст новости — в правой.',
+    'reader.start.openFeeds': 'Открыть настройки лент',
+    'reader.start.contentHint': 'Лент пока нет: добавьте первую на экране «Настройки лент».',
+
     'reader.headlines.panelAria': 'Заголовки новостей',
     'reader.headlines.title': 'Заголовки',
     'reader.headlines.emptyNoFeed': 'Выберите ленту слева.',
@@ -149,6 +156,7 @@ const DICTIONARIES = {
     'feeds.cancel': 'Отменить',
     'feeds.draftNote': 'Новая лента — сохраните её, чтобы включить автоматическую загрузку',
     'feeds.status.saved': 'Сохранено',
+    'feeds.status.firstFeed': 'Лента добавлена, первые заголовки получены.',
     'feeds.status.checkFields': 'Проверьте поля',
     'feeds.status.loadError': 'Ошибка загрузки',
     'feeds.confirmDelete': 'Удалить ленту «{name}» вместе с её заголовками?',
@@ -305,6 +313,13 @@ const DICTIONARIES = {
     'reader.status.lastFetched': 'headlines fetched {since}',
     'reader.status.nextCheck': 'next check {until}',
 
+    // The reader's first run: the middle column is empty while no feed has been added, and its button
+    // leads to the feeds screen. The right panel says the same where an article would stand.
+    'reader.start.title': 'No feeds yet',
+    'reader.start.hint': 'Add your first feed: its headlines appear in this column and the news text in the one to the right.',
+    'reader.start.openFeeds': 'Open feed settings',
+    'reader.start.contentHint': 'No feeds yet: add your first one on the Feed settings screen.',
+
     'reader.headlines.panelAria': 'News headlines',
     'reader.headlines.title': 'Headlines',
     'reader.headlines.emptyNoFeed': 'Select a feed on the left.',
@@ -375,6 +390,7 @@ const DICTIONARIES = {
     'feeds.cancel': 'Cancel',
     'feeds.draftNote': 'New feed — save it to turn on automatic loading',
     'feeds.status.saved': 'Saved',
+    'feeds.status.firstFeed': 'Feed added, its first headlines loaded.',
     'feeds.status.checkFields': 'Check the fields',
     'feeds.status.loadError': 'Loading failed',
     'feeds.confirmDelete': 'Delete the feed “{name}” together with its headlines?',
@@ -530,6 +546,13 @@ const DICTIONARIES = {
     'reader.status.lastFetched': 'заголовки отримано {since}',
     'reader.status.nextCheck': 'наступна перевірка {until}',
 
+    // Перше знайомство з читалкою: середня колонка порожня, доки не додано жодної стрічки, і її
+    // кнопка веде на екран стрічок. Підпис правої панелі каже те саме там, де стоїть стаття.
+    'reader.start.title': 'Ще немає стрічок',
+    'reader.start.hint': 'Додайте першу стрічку: її заголовки з’являться в цій колонці, а текст новини — в правій.',
+    'reader.start.openFeeds': 'Відкрити налаштування стрічок',
+    'reader.start.contentHint': 'Ще немає стрічок: додайте першу на екрані «Налаштування стрічок».',
+
     'reader.headlines.panelAria': 'Заголовки новин',
     'reader.headlines.title': 'Заголовки',
     'reader.headlines.emptyNoFeed': 'Оберіть стрічку ліворуч.',
@@ -595,6 +618,7 @@ const DICTIONARIES = {
     'feeds.cancel': 'Скасувати',
     'feeds.draftNote': 'Нова стрічка — збережіть її, щоб увімкнути автоматичне завантаження',
     'feeds.status.saved': 'Збережено',
+    'feeds.status.firstFeed': 'Стрічку додано, перші заголовки отримано.',
     'feeds.status.checkFields': 'Перевірте поля',
     'feeds.status.loadError': 'Помилка завантаження',
     'feeds.confirmDelete': 'Видалити стрічку «{name}» разом з її заголовками?',
@@ -751,6 +775,13 @@ const DICTIONARIES = {
     'reader.status.lastFetched': 'nagłówki pobrano {since}',
     'reader.status.nextCheck': 'następne sprawdzenie {until}',
 
+    // Pierwsze otwarcie czytnika: środkowa kolumna jest pusta, dopóki nie ma żadnego kanału, i jej
+    // przycisk prowadzi do ekranu kanałów. Podpis prawego panelu mówi to samo tam, gdzie stałby artykuł.
+    'reader.start.title': 'Brak kanałów',
+    'reader.start.hint': 'Dodaj pierwszy kanał: jego nagłówki pojawią się w tej kolumnie, a treść wiadomości w tej po prawej.',
+    'reader.start.openFeeds': 'Otwórz ustawienia kanałów',
+    'reader.start.contentHint': 'Brak kanałów: dodaj pierwszy na ekranie „Ustawienia kanałów”.',
+
     'reader.headlines.panelAria': 'Nagłówki wiadomości',
     'reader.headlines.title': 'Nagłówki',
     'reader.headlines.emptyNoFeed': 'Wybierz kanał po lewej stronie.',
@@ -816,6 +847,7 @@ const DICTIONARIES = {
     'feeds.cancel': 'Anuluj',
     'feeds.draftNote': 'Nowy kanał — zapisz go, aby włączyć automatyczne wczytywanie',
     'feeds.status.saved': 'Zapisano',
+    'feeds.status.firstFeed': 'Kanał dodany, pierwsze nagłówki wczytane.',
     'feeds.status.checkFields': 'Sprawdź pola',
     'feeds.status.loadError': 'Wczytywanie nie powiodło się',
     'feeds.confirmDelete': 'Usunąć kanał „{name}” razem z jego nagłówkami?',
@@ -972,6 +1004,14 @@ const DICTIONARIES = {
     'reader.status.lastFetched': 'Headlines abgerufen {since}',
     'reader.status.nextCheck': 'nächste Prüfung {until}',
 
+    // Die erste Begegnung mit dem Lesefenster: die mittlere Spalte ist leer, solange kein Feed
+    // hinzugefügt ist, und ihr Knopf führt zu den Feed-Einstellungen. Der rechte Panel sagt dasselbe
+    // dort, wo ein Artikel stünde.
+    'reader.start.title': 'Noch keine Feeds',
+    'reader.start.hint': 'Fügen Sie Ihren ersten Feed hinzu: seine Schlagzeilen erscheinen in dieser Spalte, der Nachrichtentext in der rechten.',
+    'reader.start.openFeeds': 'Feed-Einstellungen öffnen',
+    'reader.start.contentHint': 'Noch keine Feeds: fügen Sie Ihren ersten auf dem Bildschirm „Feed-Einstellungen“ hinzu.',
+
     'reader.headlines.panelAria': 'Nachrichtenschlagzeilen',
     'reader.headlines.title': 'Schlagzeilen',
     'reader.headlines.emptyNoFeed': 'Wählen Sie links einen Feed aus.',
@@ -1037,6 +1077,7 @@ const DICTIONARIES = {
     'feeds.cancel': 'Abbrechen',
     'feeds.draftNote': 'Neuer Feed — speichern, um das automatische Laden einzuschalten',
     'feeds.status.saved': 'Gespeichert',
+    'feeds.status.firstFeed': 'Feed hinzugefügt, erste Schlagzeilen geladen.',
     'feeds.status.checkFields': 'Felder überprüfen',
     'feeds.status.loadError': 'Fehler beim Laden',
     'feeds.confirmDelete': 'Feed „{name}“ samt seinen Schlagzeilen löschen?',
@@ -1193,6 +1234,14 @@ const DICTIONARIES = {
     'reader.status.lastFetched': 'titres récupérés {since}',
     'reader.status.nextCheck': 'prochaine vérification {until}',
 
+    // La première ouverture du lecteur : la colonne du milieu est vide tant qu’aucun flux n’est
+    // ajouté, et son bouton mène à l’écran des flux. Le panneau de droite dit la même chose là où
+    // se tiendrait l’article.
+    'reader.start.title': 'Aucun flux pour le moment',
+    'reader.start.hint': 'Ajoutez votre premier flux : ses titres s’affichent dans cette colonne et le texte de l’actualité dans celui de droite.',
+    'reader.start.openFeeds': 'Ouvrir les réglages des flux',
+    'reader.start.contentHint': 'Aucun flux pour le moment : ajoutez le vôtre sur l’écran « Réglages des flux ».',
+
     'reader.headlines.panelAria': 'Titres des actualités',
     'reader.headlines.title': 'Titres',
     'reader.headlines.emptyNoFeed': 'Sélectionnez un flux à gauche.',
@@ -1258,6 +1307,7 @@ const DICTIONARIES = {
     'feeds.cancel': 'Annuler',
     'feeds.draftNote': 'Nouveau flux — enregistrez-le pour activer le chargement automatique',
     'feeds.status.saved': 'Enregistré',
+    'feeds.status.firstFeed': 'Flux ajouté, premiers titres chargés.',
     'feeds.status.checkFields': 'Vérifiez les champs',
     'feeds.status.loadError': 'Erreur de chargement',
     'feeds.confirmDelete': 'Supprimer le flux « {name} » avec ses titres ?',
@@ -1414,6 +1464,14 @@ const DICTIONARIES = {
     'reader.status.lastFetched': 'titulares obtenidos {since}',
     'reader.status.nextCheck': 'próxima comprobación {until}',
 
+    // La primera apertura del lector: la columna del centro está vacía mientras no haya ninguna
+    // fuente, y su botón lleva a la pantalla de fuentes. El panel de la derecha dice lo mismo allí
+    // donde estaría la noticia.
+    'reader.start.title': 'Todavía no hay fuentes',
+    'reader.start.hint': 'Aañada su primera fuente: sus titulares aparecerán en esta columna y el texto de la noticia en la de la derecha.',
+    'reader.start.openFeeds': 'Abrir ajustes de fuentes',
+    'reader.start.contentHint': 'Todavía no hay fuentes: añada la primera en la pantalla «Ajustes de fuentes».',
+
     'reader.headlines.panelAria': 'Titulares de noticias',
     'reader.headlines.title': 'Titulares',
     'reader.headlines.emptyNoFeed': 'Seleccione una fuente a la izquierda.',
@@ -1479,6 +1537,7 @@ const DICTIONARIES = {
     'feeds.cancel': 'Cancelar',
     'feeds.draftNote': 'Fuente nueva — guárdela para activar la carga automática',
     'feeds.status.saved': 'Guardado',
+    'feeds.status.firstFeed': 'Fuente añadida, primeros titulares cargados.',
     'feeds.status.checkFields': 'Revise los campos',
     'feeds.status.loadError': 'Error de carga',
     'feeds.confirmDelete': '¿Eliminar la fuente «{name}» junto con sus titulares?',

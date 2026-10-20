@@ -384,6 +384,50 @@
 }
 
 /*
+  Первый запуск читалки: карточка стоит на месте будущей средней колонки, а не посреди неё — список
+  заголовков начнётся ровно там, где стояла карточка. Её рамка и фон берут цвета панелей, чтобы это
+  была подпись экрана, а не чужое окно поверх него.
+*/
+.start-card {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 4px;
+  padding: 14px 16px 16px;
+}
+
+.start-card h3 {
+  font-size: 1em;
+  letter-spacing: 0.02em;
+  margin: 0 0 6px;
+}
+
+.start-card-hint {
+  font-size: 0.93em;
+  margin: 0 0 12px;
+  max-width: 42ch;
+}
+
+/* Знак RSS над подписью — та же рука, что рисует ленту в строке списка, только крупнее. */
+.start-card-icon {
+  color: var(--text-muted);
+  height: 30px;
+  width: 30px;
+}
+
+/*
+  `hidden` на элементе, у которого свой класс называет `display`, его не прячет: авторское правило
+  сильнее браузерного `[hidden] { display: none }`. Поэтому всё, что `index.js` снимает с экрана —
+  поле поиска и кнопки средней колонки, карточка первого запуска, корзина правой панели, — скрыто
+  правилом того экрана, где стоит.
+*/
+.content-toolbar [hidden],
+.panel-head [hidden],
+.start-card[hidden] {
+  display: none;
+}
+
+/*
   The switcher in the head of a column: the letter A drawn at the size the button stands for, so
   the four steps read as one row of growing text. It is the only part of a panel head that keeps
   its own pixels — a control must not grow into the column it is sizing.

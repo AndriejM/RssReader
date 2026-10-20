@@ -50,6 +50,9 @@ export const LANGUAGE_KEY = 'language';
 export const FONT_SCALES_KEY = 'font_scales';
 export const COLUMN_WIDTHS_KEY = 'column_widths';
 
+/** Отметка первого добавления ленты — см. `getFirstFeedDone`. */
+export const FIRST_FEED_KEY = 'first_feed_done';
+
 /** «Без звука»: автоматическая загрузка остаётся без сигнала. */
 export const SOUND_NONE = 'none';
 
@@ -912,6 +915,22 @@ export async function setShowMessage(enabled) {
   const next = toFlag(enabled, false);
   await updateSettings({ [SHOW_MESSAGE_KEY]: next });
   return next;
+}
+
+/**
+ * Первый запуск на экране лент: отметка о том, что лента уже была добавлена и её заголовки пришли.
+ * Отметки нет — значит читалка ещё не показала ни одной своей ленты, и после первого сохранения
+ * экран подтверждает результат отдельной строкой. Ставится один раз и больше не снимается: экран
+ * лент не повторяет то же подтверждение при каждой сохранённой строке.
+ */
+export async function getFirstFeedDone() {
+  const settings = await getSettings();
+  return toFlag(settings[FIRST_FEED_KEY], false);
+}
+
+export async function setFirstFeedDone() {
+  await updateSettings({ [FIRST_FEED_KEY]: true });
+  return true;
 }
 
 /** How long a «read» marker keeps its news out of the list, in days. */

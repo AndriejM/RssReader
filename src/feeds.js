@@ -274,6 +274,11 @@ async function saveRow(rowRecord) {
   }
 
   feed.id = rowRecord.feed.id ?? newId();
+
+  /* Первый ряд пустой таблицы: читалка ещё не показывала ни одной своей ленты. Спрашивать о этом
+   * нужно до записи — после неё таблица уже не пуста, и отличить первый ряд от второго нельзя. */
+  const firstFeed = (await store.getFeeds()).length === 0 && !(await store.getFirstFeedDone());
+
   await store.upsertFeed(feed);
 
   /*
@@ -289,8 +294,20 @@ async function saveRow(rowRecord) {
   await notifyBackground();
 
   // Re-fetch the new/edited feed right away so the reader is not left empty.
-  await refreshRow({ ...rowRecord, feed, draft: false });
+  const loaded = await refreshRow({ ...rowRecord, feed, draft: false });
   await render();
+
+  /*
+   * Первый добавленный ряд получает подтверждение всей таблицы, а не заметку ряда: `render()` только
+   * что перестроил ряды и их заметки, а рассказ здесь о том, что читалке есть что показывать. Строка
+   * говорит о заголовках лишь тогда, когда их правда принесли: лента, которой не удалось прочесть
+   * сервер, называет свой отказ в заметке ряда, и повторять его под таблицей незачем. Отметка
+   * остаётся неснятой, чтобы подтверждение вышло один раз — при первом удачном добавлении.
+   */
+  if (firstFeed && loaded?.ok && !loaded.busy) {
+    await store.setFirstFeedDone();
+    setTransferStatus(t('feeds.status.firstFeed'), 'ok');
+  }
 }
 
 /**
@@ -329,10 +346,11 @@ async function removeRow(rowRecord) {
 }
 
 async function refreshRow(rowRecord) {
-  if (!rowRecord.feed.id) return;
+  if (!rowRecord.feed.id) return null;
   setStatus(rowRecord, t('common.loading'));
+  let response = null;
   try {
-    const response = await chrome.runtime.sendMessage({
+    response = await chrome.runtime.sendMessage({
       type: MSG_REFRESH_FEED,
       feedId: rowRecord.feed.id,
     });
@@ -366,6 +384,7 @@ async function refreshRow(rowRecord) {
     }
   } catch (error) {
     setStatus(rowRecord, describeError(error), 'error');
+    return null;
   } finally {
     /* Загрузка оставила в хранилище свежий диагноз ленты; перечитаем его, чтобы постоянная строка
      * под рядом показала ту попытку, что только что случилась, а не ту, что была при открытии. */
@@ -376,6 +395,10 @@ async function refreshRow(rowRecord) {
       if (line) rowRecord.noteRow.hidden = false;
     }
   }
+
+  /* Ответ чтения нужен не только строке ряда: он говорит, что первая лента действительно принесла
+   * свои заголовки (см. `saveRow`). */
+  return response;
 }
 
 /** The worker owns the alarms and the badge: tell it the feeds changed. */

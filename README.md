@@ -93,6 +93,11 @@ where those parts are drawn.
 4. From then on the feed is polled automatically every `delay_timeout` minutes; new headlines
    are marked with a badge on the icon and a short sound.
 
+A first run does not have to know what to do: a reader with no feeds meets you with a card in the
+empty middle column — “No feeds yet” and a button “Open feed settings” — and the first row you save
+on the feed screen confirms the result with a line under the table, “Feed added, its first headlines
+loaded”. Both cases are described below.
+
 ## Feed settings screen (`src/feeds.html`)
 
 The feeds stand in a table: one row per feed, the columns named in plain words, while the fields
@@ -132,6 +137,15 @@ Icons above the table and at the end of a row:
 A message about the whole row (“Saved”, “Check the fields”, what a load returned) takes its own
 line under it, and the screen’s explanation of the fields is folded behind the “?” icon in the
 upper right of the table.
+
+The first row you add gets a word about the whole table rather than about its own row: the line
+under the table (“Feed added, its first headlines loaded”) says what until that moment was only a
+supposition — that the reader now has something to show. It comes once: `settings.first_feed_done`
+is set by the first successful add and never taken back, so the next saved row does not repeat the
+same confirmation. And it speaks about headlines only when they really came: a feed whose server
+could not be read names its failure in the note of its own row, and repeating it under the table
+would be pointless (the same holds for a row that answers “already being read”). The line is an
+ordinary `setTransferStatus`, so it is said out loud as well.
 
 Under every saved feed a quieter line carries its health record (see the storage section): when the
 feed was last read, when its next check is due, and — while it is currently failing — the reason in
@@ -201,6 +215,15 @@ click on any feed of the left column behaves the same way — the middle panel a
 first headline of whatever is selected, one feed or all of them. There is exactly one case of
 opting out of auto-selection: returning from a settings screen in the same tab restores precisely
 the feed and precisely the headline you were on (more on this below).
+
+While storage holds no feed at all, the middle column has nothing to list, and a card of a first run
+stands there in place of the list: the RSS glyph, “No feeds yet”, a hint about where the headlines
+and the news text will appear, and the button “Open feed settings” — the same move in the same tab
+as the feeds icon of the screen switcher. Until the first feed exists, the search field and the load
+and clear buttons of that column are hidden (they would act on an empty selection) and `/` does not
+take the focus to a field that is not there. The right panel says the same about a first feed where
+an article would stand: “select a headline” with no feeds would advise choosing something that does
+not exist. The card stands exactly where the future list begins and disappears once a feed is saved.
 
 At the top of the reader there is a counter: the total number of headlines of all feeds in
 storage; in the top-right corner sit the screen-switcher icons and the theme toggle (the reader
@@ -544,7 +567,7 @@ A ticket whose `until` has passed belongs to a read that never came back (the wo
 the browser was closed), so it stops holding the feed: `store.tryLockFeed` drops such tickets and
 so does `store.cleanup` (see “Implementation notes”).
 
-**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "sound_file": "src/media/ceres.mp3", "sound_volume": 100, "show_message": false, "read_ttl_days": 7, "language": "ru", "font_scales": { "feeds": 1, "headlines": 1.2, "content": 1 }, "column_widths": { "feeds": 240, "headlines": 340 } }`. `sound` is the «Sound» checkbox: off, and an automatic load plays no signal. `font_scales` is the font size of every reader column: a multiplier from the ladder `0.85 / 1 / 1.2 / 1.45` (`store.FONT_SCALES`), chosen by the switcher in the head of that column. `column_widths` is the width in pixels of every column the mouse can size — the feed column and the headline column — each clamped to 160..900 px (`store.MIN_PANEL_WIDTH`, `store.MAX_PANEL_WIDTH`); the article column takes the width the other two leave in the window.
+**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "sound_file": "src/media/ceres.mp3", "sound_volume": 100, "show_message": false, "read_ttl_days": 7, "language": "ru", "first_feed_done": true, "font_scales": { "feeds": 1, "headlines": 1.2, "content": 1 }, "column_widths": { "feeds": 240, "headlines": 340 } }`. `sound` is the «Sound» checkbox: off, and an automatic load plays no signal. `font_scales` is the font size of every reader column: a multiplier from the ladder `0.85 / 1 / 1.2 / 1.45` (`store.FONT_SCALES`), chosen by the switcher in the head of that column. `column_widths` is the width in pixels of every column the mouse can size — the feed column and the headline column — each clamped to 160..900 px (`store.MIN_PANEL_WIDTH`, `store.MAX_PANEL_WIDTH`); the article column takes the width the other two leave in the window. `first_feed_done` is the feed screen's mark that a feed has already been added and its headlines have come: it is absent before the first successful add, is set once and never taken back (not even after the feeds are deleted), so the confirmation of a first add does not repeat on every saved row. A first run is an empty feed table with no such mark (`store.getFirstFeedDone` / `store.setFirstFeedDone`).
 
 Other storage properties:
 
@@ -806,6 +829,18 @@ background.
   failure would never be read at all. Only a live ticket of a read this request did not start answers
   `busy` — that request fetched nothing and has no numbers of its own, and the most such a ticket
   can cost its feed is `FETCH_LOCK_TTL_MS`.
+- **A first run says what it is in its own words**: the card of an empty reader lies in the markup
+  (`#start-card` in `src/index.html`), so `applyI18n()` re-glues its captions on a language change
+  exactly like the captions of the rest of the screen, while `renderStartCard()` only decides whether
+  it stands there at all: without feeds it takes precisely the place where the future list begins.
+  Everything the reader takes off the screen before the first feed is hidden by a rule of the screen
+  where it sits (`.panel-head [hidden]` and `.start-card[hidden]` in `src/styles/reader.css`): an
+  author rule about `display` outweighs the browser's `[hidden]`, so `hidden` alone on a button whose
+  own class names its `display` would hide nothing. The `settings.first_feed_done` mark lives in
+  storage rather than in one tab: the feed screen reads it, so the confirmation of a first add comes
+  once — no matter in which tab the feed was saved (the test
+  `the reader greets a first run that has no feeds` keeps the markup, the script, the stylesheet,
+  the storage and the seven dictionaries in step).
 - **No third-party dependencies**: feed polling and parsing are done by `fetch` under
   `host_permissions: <all_urls>`, the manifest requires no RSS parsing library: XML is parsed
   by the built-in `DOMParser` — but exactly where it is allowed — and JSON Feed by `JSON.parse`.
@@ -814,7 +849,7 @@ background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js and rss.js) and the guards over the screen markup: 98 tests
+                             # storage.js and rss.js) and the guards over the screen markup: 106 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -966,6 +1001,15 @@ rules are covered by the tests.
     it. On the global settings screen press “Write” → what was written is read out loud, while the
     «changes are not written yet» hint stays where it stands. Turn on “reduce motion” in the OS → the
     colours of a button stop fading and the reader's refresh glyph stops spinning.
+34. Delete every feed and open the reader again (or open it straight after the install) → the middle
+    column is filled by the card “No feeds yet” with words about where the headlines and the news
+    text will appear, and its button leads to the feed screen in the same tab; the search field and
+    the load and clear buttons of that column are hidden, `/` takes the focus nowhere, and the right
+    panel speaks about a first feed instead of “select a headline”. Save the first feed → the line
+    “Feed added, its first headlines loaded” appears under the table, and the card disappears, giving
+    its place back to the list. Save a second feed → no such line: the confirmation of a first add has
+    already been given (`first_feed_done` in `settings`). Add a feed that cannot be read → nothing
+    under the table, only the failure in the note of its own row.
 
 ## Limitations
 
