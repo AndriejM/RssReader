@@ -96,6 +96,24 @@ const DICTIONARIES = {
     'reader.search.aria': 'Поиск по заголовкам',
     'reader.published': 'опубл. {since}',
 
+    // Подсказка по клавишам самой читалки: кнопка «?» в её шапке и та же клавиша `?`. Её строки
+    // говорят то же, что перечисляет таблица README, — теперь рядом с тем, где клавиши применяются.
+    'reader.keys.toggle': 'Показать, чем управляется читалка',
+    'reader.keys.title': 'Клавиши читалки',
+    'reader.keys.close': 'Закрыть подсказку',
+    'reader.keys.caption': 'Клавиши читалки и то, что делает каждая из них',
+    'reader.keys.columnKey': 'Клавиша',
+    'reader.keys.columnWhat': 'Что делает',
+    'reader.keys.search': 'перейти в поле поиска',
+    'reader.keys.next': 'открыть следующий заголовок выбранного',
+    'reader.keys.prev': 'открыть предыдущий заголовок выбранного',
+    'reader.keys.original': 'открыть оригинал открытого заголовка в новой вкладке',
+    'reader.keys.refresh': 'перечитать выбранную ленту («Все ленты» — все)',
+    'reader.keys.delete': 'удалить открытый заголовок',
+    'reader.keys.escape': 'очистить поле поиска, оставив открытый заголовок',
+    'reader.keys.help': 'открыть или закрыть эту подсказку (Esc закрывает её тоже)',
+    'reader.keys.hint': 'Клавиши не работают, пока идёт набор в поле (в поиске те же буквы), и никогда не отнимаются у Ctrl/Meta/Alt. Стрелки работают и из поля поиска: набранные слова остаются, а курсор идёт по тем заголовкам, которые поиск оставляет.',
+
     'reader.content.panelAria': 'Содержание новости',
     'reader.content.delete.tooltip': 'Удалить заголовок из списка и из хранилища',
     'reader.content.delete.aria': 'Удалить',
@@ -330,6 +348,24 @@ const DICTIONARIES = {
     'reader.search.aria': 'Search headlines',
     'reader.published': 'pub. {since}',
 
+    // The reader's own key help: the «?» in its header and the `?` key itself. Its rows say what the
+    // table of the README lists — now where the keys are actually used.
+    'reader.keys.toggle': 'Show the keys the reader answers to',
+    'reader.keys.title': 'Reader keys',
+    'reader.keys.close': 'Close the key list',
+    'reader.keys.caption': 'The keys of the reader and what each of them does',
+    'reader.keys.columnKey': 'Key',
+    'reader.keys.columnWhat': 'What it does',
+    'reader.keys.search': 'put the cursor in the search field',
+    'reader.keys.next': 'open the next headline of the current selection',
+    'reader.keys.prev': 'open the previous headline of the current selection',
+    'reader.keys.original': 'open the original of the open headline in a new tab',
+    'reader.keys.refresh': 're-read the selected feed (“All feeds” — every feed)',
+    'reader.keys.delete': 'delete the open headline',
+    'reader.keys.escape': 'empty the search field, keeping the open headline',
+    'reader.keys.help': 'open or close this key list (Esc closes it too)',
+    'reader.keys.hint': 'The keys are held back while a field is being typed in (the search field holds the same letters) and are never taken from Ctrl/Meta/Alt. The arrows work from inside the search field too: the words stay, and the cursor moves through the headlines the search leaves.',
+
     'reader.content.panelAria': 'News content',
     'reader.content.delete.tooltip': 'Delete the headline from the list and from storage',
     'reader.content.delete.aria': 'Delete',
@@ -563,6 +599,24 @@ const DICTIONARIES = {
     'reader.search.aria': 'Пошук заголовків',
     'reader.published': 'опубл. {since}',
 
+    // Підказка про клавіші самої читалки: кнопка «?» у її шапці та та сама клавіша `?`. Її рядки
+    // кажуть те саме, що перелічує таблиця README, — тепер там, де клавіші справді вживаються.
+    'reader.keys.toggle': 'Показати клавіші, яким відповідає читалка',
+    'reader.keys.title': 'Клавіші читалки',
+    'reader.keys.close': 'Закрити підказку',
+    'reader.keys.caption': 'Клавіші читалки та те, що робить кожна з них',
+    'reader.keys.columnKey': 'Клавіша',
+    'reader.keys.columnWhat': 'Що робить',
+    'reader.keys.search': 'перейти до поля пошуку',
+    'reader.keys.next': 'відкрити наступний заголовок вибраного',
+    'reader.keys.prev': 'відкрити попередній заголовок вибраного',
+    'reader.keys.original': 'відкрити оригінал відкритого заголовка в новій вкладці',
+    'reader.keys.refresh': 'перечитати вибрану стрічку («Усі стрічки» — усі)',
+    'reader.keys.delete': 'видалити відкритий заголовок',
+    'reader.keys.escape': 'очистити поле пошуку, залишивши відкритий заголовок',
+    'reader.keys.help': 'відкрити або закрити цю підказку (Esc закриває її також)',
+    'reader.keys.hint': 'Клавіші не діють, поки триває набір у полі (у пошуку ті самі літери), і ніколи не відбираються в Ctrl/Meta/Alt. Стрілки працюють і з поля пошуку: набрані слова залишаються, а курсор іде тими заголовками, які пошук залишає.',
+
     'reader.content.panelAria': 'Зміст новини',
     'reader.content.delete.tooltip': 'Видалити заголовок зі списку та зі сховища',
     'reader.content.delete.aria': 'Видалити',
@@ -791,6 +845,24 @@ const DICTIONARIES = {
     'reader.search.placeholder': 'Szukaj wśród nagłówków',
     'reader.search.aria': 'Szukaj wśród nagłówków',
     'reader.published': 'opubl. {since}',
+
+    // Podpowiedź o klawiszach samego czytnika: przycisk «?» w jego nagłówku i ten sam klawisz `?`.
+    // Jej wiersze mówią to samo co tabela README — teraz tam, gdzie klawisze są naprawdę używane.
+    'reader.keys.toggle': 'Pokaż klawisze, którym czytnik odpowiada',
+    'reader.keys.title': 'Klawisze czytnika',
+    'reader.keys.close': 'Zamknij listę klawiszy',
+    'reader.keys.caption': 'Klawisze czytnika i to, co każdy z nich robi',
+    'reader.keys.columnKey': 'Klawisz',
+    'reader.keys.columnWhat': 'Co robi',
+    'reader.keys.search': 'przejdź do pola wyszukiwania',
+    'reader.keys.next': 'otwórz następny nagłówek bieżącego wyboru',
+    'reader.keys.prev': 'otwórz poprzedni nagłówek bieżącego wyboru',
+    'reader.keys.original': 'otwórz oryginał otwartego nagłówka w nowej karcie',
+    'reader.keys.refresh': 'wczytaj ponownie wybrany kanał („Wszystkie kanały” — wszystkie)',
+    'reader.keys.delete': 'usuń otwarty nagłówek',
+    'reader.keys.escape': 'wyczyść pole wyszukiwania, zachowując otwarty nagłówek',
+    'reader.keys.help': 'otwórz lub zamknij tę listę klawiszy (Esc też ją zamyka)',
+    'reader.keys.hint': 'Klawisze są wstrzymywane, gdy trwa pisanie w polu (pole wyszukiwania zawiera te same litery) i nigdy nie są odbierane Ctrl/Meta/Alt. Strzałki działają także z pola wyszukiwania: wpisane słowa zostają, a kursor wędruje po nagłówkach, których wyszukiwanie zostawia.',
 
     'reader.content.panelAria': 'Treść wiadomości',
     'reader.content.delete.tooltip': 'Usuń nagłówek z listy i z pamięci',
@@ -1022,6 +1094,24 @@ const DICTIONARIES = {
     'reader.search.aria': 'Schlagzeilen durchsuchen',
     'reader.published': 'veröff. {since}',
 
+    // Die eigene Tastaturhilfe des Readers: der Button »?“ in seinem Kopf und dieselbe Taste `?`.
+    // Ihre Zeilen sagen, was die Tabelle des README aufführt – jetzt dort, wo die Tasten gebraucht werden.
+    'reader.keys.toggle': 'Die Tasten des Readers zeigen',
+    'reader.keys.title': 'Tasten des Readers',
+    'reader.keys.close': 'Tastaturübersicht schließen',
+    'reader.keys.caption': 'Die Tasten des Readers und was jede von ihnen tut',
+    'reader.keys.columnKey': 'Taste',
+    'reader.keys.columnWhat': 'Wirkung',
+    'reader.keys.search': 'Cursor ins Suchfeld setzen',
+    'reader.keys.next': 'nächste Schlagzeile der Auswahl öffnen',
+    'reader.keys.prev': 'vorherige Schlagzeile der Auswahl öffnen',
+    'reader.keys.original': 'Original der geöffneten Schlagzeile in neuem Tab öffnen',
+    'reader.keys.refresh': 'ausgewählten Feed neu einlesen („Alle Feeds“ — alle)',
+    'reader.keys.delete': 'geöffnete Schlagzeile löschen',
+    'reader.keys.escape': 'Suchfeld leeren, die geöffnete Schlagzeile bleibt',
+    'reader.keys.help': 'diese Tastaturübersicht öffnen oder schließen (Esc schließt sie auch)',
+    'reader.keys.hint': 'Die Tasten sind zurückgehalten, während in ein Feld geschrieben wird (das Suchfeld belegt dieselben Buchstaben), und werden Ctrl/Meta/Alt nie entnommen. Die Pfeile funktionieren auch im Suchfeld: die Wörter bleiben, der Cursor wandert durch die Schlagzeilen, die die Suche übrig lässt.',
+
     'reader.content.panelAria': 'Inhalt der Nachricht',
     'reader.content.delete.tooltip': 'Schlagzeile aus der Liste und aus dem Speicher löschen',
     'reader.content.delete.aria': 'Löschen',
@@ -1252,6 +1342,24 @@ const DICTIONARIES = {
     'reader.search.aria': 'Rechercher dans les titres',
     'reader.published': 'publ. {since}',
 
+    // L’aide sur les touches du lecteur lui-même : le bouton « ? » dans son en-tête et la touche `?`
+    // elle-même. Ses lignes disent ce que la liste du README énumère — là où les touches servent.
+    'reader.keys.toggle': 'Afficher les touches auxquelles le lecteur répond',
+    'reader.keys.title': 'Touches du lecteur',
+    'reader.keys.close': 'Fermer la liste des touches',
+    'reader.keys.caption': 'Les touches du lecteur et ce que chacune fait',
+    'reader.keys.columnKey': 'Touche',
+    'reader.keys.columnWhat': 'Action',
+    'reader.keys.search': 'placer le curseur dans le champ de recherche',
+    'reader.keys.next': 'ouvrir le titre suivant de la sélection',
+    'reader.keys.prev': 'ouvrir le titre précédent de la sélection',
+    'reader.keys.original': 'ouvrir l’original du titre ouvert dans un nouvel onglet',
+    'reader.keys.refresh': 'recharger le flux sélectionné (« Tous les flux » — tous)',
+    'reader.keys.delete': 'supprimer le titre ouvert',
+    'reader.keys.escape': 'vider le champ de recherche, le titre ouvert reste',
+    'reader.keys.help': 'ouvrir ou fermer cette liste de touches (Esc la ferme aussi)',
+    'reader.keys.hint': 'Les touches sont tenues en réserve pendant la saisie d’un champ (le champ de recherche porte les mêmes lettres) et ne sont jamais prises à Ctrl/Meta/Alt. Les flèches fonctionnent aussi depuis le champ de recherche : les mots restent, le curseur parcourt les titres que la recherche laisse.',
+
     'reader.content.panelAria': 'Contenu de l’actualité',
     'reader.content.delete.tooltip': 'Supprimer le titre de la liste et du stockage',
     'reader.content.delete.aria': 'Supprimer',
@@ -1481,6 +1589,24 @@ const DICTIONARIES = {
     'reader.search.placeholder': 'Buscar titulares',
     'reader.search.aria': 'Buscar titulares',
     'reader.published': 'publ. {since}',
+
+    // Ayuda de teclas del propio lector: el botón «?» en su cabecera y la misma tecla `?`. Sus filas
+    // dicen lo mismo que enumera la tabla del README, ahora junto a donde las teclas se usan.
+    'reader.keys.toggle': 'Mostrar las teclas a las que responde el lector',
+    'reader.keys.title': 'Teclas del lector',
+    'reader.keys.close': 'Cerrar la lista de teclas',
+    'reader.keys.caption': 'Las teclas del lector y lo que cada una hace',
+    'reader.keys.columnKey': 'Tecla',
+    'reader.keys.columnWhat': 'Qué hace',
+    'reader.keys.search': 'llevar el cursor al campo de búsqueda',
+    'reader.keys.next': 'abrir el siguiente titular de la selección actual',
+    'reader.keys.prev': 'abrir el titular anterior de la selección actual',
+    'reader.keys.original': 'abrir el original del titular abierto en una pestaña nueva',
+    'reader.keys.refresh': 'volver a leer la fuente seleccionada («Todas las fuentes» — todas)',
+    'reader.keys.delete': 'eliminar el titular abierto',
+    'reader.keys.escape': 'vaciar el campo de búsqueda y conservar el titular abierto',
+    'reader.keys.help': 'abrir o cerrar esta lista de teclas (Esc también la cierra)',
+    'reader.keys.hint': 'Las teclas no actúan mientras se escribe en un campo (el campo de búsqueda usa las mismas letras) y nunca se le quitan a Ctrl/Meta/Alt. Las flechas funcionan también desde el campo de búsqueda: las palabras se quedan y el cursor recorre los titulares que la búsqueda deja.',
 
     'reader.content.panelAria': 'Contenido de la noticia',
     'reader.content.delete.tooltip': 'Eliminar el titular de la lista y del almacenamiento',

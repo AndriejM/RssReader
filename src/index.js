@@ -37,6 +37,12 @@ const els = {
 
   announce: document.getElementById('reader-announce'),
 
+  header: document.querySelector('.app-header'),
+  panels: document.querySelector('.panels'),
+  keysHelp: document.getElementById('keys-help'),
+  keysButton: document.getElementById('btn-keys'),
+  keysClose: document.getElementById('btn-keys-close'),
+
   contentDelete: document.getElementById('content-delete'),
   contentBody: document.getElementById('content-body'),
 };
@@ -811,6 +817,22 @@ els.refresh.addEventListener('click', () => void refreshSelectedFeed());
 els.load.addEventListener('click', () => void refreshSelection());
 els.clear.addEventListener('click', () => void clearSelectionHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
+/*
+ * Подсказка по клавишам: её открывает кнопка «?» шапки, закрывают её же крестик и клик по фону окна;
+ * сам список закрывается и клавишей `?` (см. обработчик ниже). Возврат фокуса — тот же во всех
+ * случаях: курсор становится на кнопку, которая окно открыла.
+ */
+els.keysButton.addEventListener('click', openKeysHelp);
+els.keysClose.addEventListener('click', closeKeysHelp);
+els.keysHelp.addEventListener('click', (event) => {
+  // Карточка подсказки лежит внутри окна: клик по самому окну — это клик мимо карточки.
+  if (event.target === els.keysHelp) closeKeysHelp();
+});
+els.keysHelp.addEventListener('close', () => {
+  els.header.removeAttribute('aria-hidden');
+  els.panels.removeAttribute('aria-hidden');
+  els.keysButton.focus();
+});
 /* Кнопка карточки первого запуска идёт той же дорогой, что и иконка лент в переключателе экранов:
  * переход в этой же вкладке, чтобы выбор и поиск остались там, где были. */
 els.openFeeds.addEventListener('click', () => window.location.assign(pageUrl(SETTINGS_PAGE)));
@@ -876,6 +898,25 @@ function openOriginal() {
 }
 
 /*
+ * Подсказка по клавишам читалки — тот же список, что ведёт README, только там, где клавиши применяются.
+ * `showModal()` ставит окно поверх экрана и запирает в нём клавиатурный курсор; шапка и колонки на это
+ * время получают `aria-hidden`, чтобы Tab не ушёл за окно и не остался на скрытом под ним элементе.
+ * Снимается `aria-hidden` по событию `close`, то есть любым способом, которым окно кончается: `Esc`,
+ * крестик, клик по фону или вторая же клавиша `?`.
+ */
+function openKeysHelp() {
+  if (els.keysHelp.open) return;
+  els.keysHelp.showModal();
+  els.header.setAttribute('aria-hidden', 'true');
+  els.panels.setAttribute('aria-hidden', 'true');
+}
+
+function closeKeysHelp() {
+  if (!els.keysHelp.open) return;
+  els.keysHelp.close();
+}
+
+/*
  * The keys of the reader. They are held back while a field is being typed in — the search field holds
  * the same letters — and never taken from Ctrl/Meta/Alt, which are the browser's own.
  *   /        focus the search field
@@ -884,9 +925,20 @@ function openOriginal() {
  *   r        re-read the selected feed («Все ленты» — every feed)
  *   d        delete the open headline
  *   Esc      empty the search field, while the cursor stands where it was
+ *   ?        the list of these keys, in the reader itself
  */
 document.addEventListener('keydown', (event) => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+  /* Пока подсказка открыта, окно забирает клавиатуру себе: `?` и `Esc` принадлежат ему, а заголовок
+   * не должен удалиться или открыться через тот список, который объясняет, как это делается. */
+  if (els.keysHelp.open) {
+    if (event.key === '?' || event.key === 'Escape') {
+      event.preventDefault();
+      closeKeysHelp();
+    }
+    return;
+  }
 
   if (event.key === 'Escape' && event.target === els.headlineSearch) {
     els.headlineSearch.value = '';
@@ -936,6 +988,10 @@ document.addEventListener('keydown', (event) => {
     case 'r':
       event.preventDefault();
       void refreshSelectedFeed();
+      break;
+    case '?':
+      event.preventDefault();
+      openKeysHelp();
       break;
     default:
       break;

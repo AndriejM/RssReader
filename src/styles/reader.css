@@ -416,6 +416,120 @@
 }
 
 /*
+  Подсказка по клавишам: окно поверх всех трёх колонок. Затемнение даёт само окно (`::backdrop`), а
+  его карточка носит цвета панелей, чтобы была частью читалки, а не чужим окном над ней.
+
+  Окно растянуто на весь экран и центрирует свою карточку: тогда клик мимо карточки — это клик по
+  самому окну, и `index.js` может по нему закрыть подсказку. Без этого поле клика ограничено карточкой,
+  а остальной экран — уже `::backdrop`, который клику не отвечает.
+
+  Раскладка стоит только на `[open]`: браузер прячет закрытое окно правилом
+  `dialog:not([open]) { display: none }`, а `display` без этого условия отменяет его — подсказка висит
+  над читалкой с её открытия и ни `Esc`, ни крестик её не закрывают, потому что окно никогда не было
+  открыто по-настоящему.
+*/
+.keys-help[open] {
+  background: transparent;
+  border: none;
+  display: flex;
+  height: 100%;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  overflow: auto;
+  padding: 0;
+  width: 100%;
+}
+
+.keys-help::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.keys-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  /* `margin: auto`, а не `align-items: center`: подсказка ниже, чем окно, её верхний край не уезжает
+     за прокрутку, которую `overflow: auto` уже не достаёт. */
+  margin: auto;
+  max-width: min(560px, 92vw);
+  padding: 14px 16px 16px;
+}
+
+.keys-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.keys-head h2 {
+  font-size: 1em;
+  letter-spacing: 0.04em;
+  margin: 0;
+  min-width: 0;
+  text-transform: uppercase;
+}
+
+.keys-head .icon-btn {
+  margin-left: auto;
+}
+
+.keys-table {
+  border-collapse: collapse;
+  font-size: 0.93em;
+  width: 100%;
+}
+
+.keys-table th {
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 4px 6px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.keys-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 6px;
+  vertical-align: top;
+}
+
+.keys-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Клавиша в колонке клавиш: квадратик с надписью, а не просто буква в строке текста. */
+.keys-keys {
+  white-space: nowrap;
+}
+
+.keys-keys kbd {
+  background: var(--bg-panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  font-family: inherit;
+  font-size: 0.95em;
+  font-weight: 600;
+  line-height: 1;
+  margin-right: 4px;
+  min-width: 22px;
+  padding: 4px 6px;
+  text-align: center;
+}
+
+.keys-hint {
+  font-size: 0.85em;
+  margin: 12px 0 0;
+  max-width: 60ch;
+}
+
+/*
   `hidden` на элементе, у которого свой класс называет `display`, его не прячет: авторское правило
   сильнее браузерного `[hidden] { display: none }`. Поэтому всё, что `index.js` снимает с экрана —
   поле поиска и кнопки средней колонки, карточка первого запуска, корзина правой панели, — скрыто

@@ -1900,6 +1900,103 @@ test('the middle column filters its headlines, and the reader answers to the key
   assert.ok(css.includes('.feed-health'), 'a feed that fails to load is not set apart from the others');
 });
 
+/* ---------------- the reader explains its own keys ---------------- */
+
+/**
+ * The keys the reader answers to are listed where they are used, not only in the README: the «?» of its
+ * header and the `?` key open a window whose table names every key the page script really handles.
+ * The window takes the keyboard while it stands, so no headline is deleted through the list that
+ * explains how to delete one. Markup, script, stylesheet and the seven dictionaries are kept in step.
+ */
+test('the reader explains its keys inside the reader', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const html = read('src/index.html');
+  const page = read('src/index.js');
+  const css = read('src/styles/reader.css');
+
+  /* The list is a window of its own, named by its own head and closed by its own button. */
+  assert.ok(html.includes('id="keys-help"'), 'the reader declares no key list of its own');
+  assert.ok(html.includes('aria-labelledby="keys-help-title"'), 'the key list is named by nothing a screen reader can read');
+  assert.ok(html.includes('id="btn-keys"'), 'no button of the reader opens the key list');
+  assert.ok(html.includes('id="btn-keys-close"'), 'the key list has no way out for a mouse');
+  assert.ok(html.includes('<symbol id="icon-help"'), 'the reader sprite never defines the «?» it asks for');
+  assert.ok(html.includes('<symbol id="icon-close"'), 'the reader sprite never defines the glyph that closes the list');
+
+  assert.ok(
+    page.includes("document.getElementById('btn-keys')"),
+    'the page does not know the button the markup declares',
+  );
+  assert.ok(page.includes('els.keysButton.addEventListener'), 'the button of the key list answers to no click');
+
+  /* A window that holds the keyboard: `showModal`, the neighbours hidden while it stands, and the
+   * same `?` that opened it closing it again. */
+  assert.ok(page.includes('els.keysHelp.showModal()'), 'the key list is no modal, so Esc and the tab order are its own problem');
+  assert.ok(page.includes("addEventListener('close'"), 'nothing puts back what opening the list took from the rest of the screen');
+  assert.ok(page.includes("els.header.setAttribute('aria-hidden', 'true')"), 'a tab can walk out of the list into the screen behind it');
+  assert.ok(page.includes("els.header.removeAttribute('aria-hidden')"), 'the screen behind the list stays voiceless once the list is gone');
+  assert.ok(page.includes('els.keysHelp.addEventListener'), 'a click beside the list closes nothing');
+  assert.ok(page.includes("case '?':"), 'no key opens the list the reader carries');
+  assert.ok(page.includes('if (els.keysHelp.open)'), 'the keys of the reader keep working through the list that explains them');
+
+  /* Every key the page really answers to stands in the table, and the table adds none it does not answer to. */
+  const handled = new Set([
+    ...page.matchAll(/^ {4}case '([^']+)':$/gm),
+    ...page.matchAll(/event\.key === '([^']+)'/g),
+  ].map(([, key]) => key));
+  const glyphs = new Map([
+    ['ArrowDown', '↓'],
+    ['ArrowUp', '↑'],
+    ['Escape', 'Esc'],
+  ]);
+  const keyOf = new Map([...glyphs].map(([key, glyph]) => [glyph, key]));
+  assert.ok(handled.size >= 7, 'the reader answers to too few keys for its own list to make sense');
+  for (const key of handled) {
+    const glyph = glyphs.get(key) ?? key;
+    assert.ok(html.includes(`<kbd>${glyph}</kbd>`), `the reader answers to ${key}, which its own list never names`);
+  }
+  const listed = new Set([...html.matchAll(/<kbd>([^<]+)<\/kbd>/g)].map(([, glyph]) => glyph));
+  assert.ok(listed.has('Esc'), 'the list names no key that ends the search it describes');
+  for (const glyph of listed) {
+    const key = keyOf.get(glyph) ?? glyph;
+    assert.ok(handled.has(key) || key === 'Escape', `the list names ${glyph}, which the reader never answers to`);
+  }
+
+  const captions = [
+    'reader.keys.toggle',
+    'reader.keys.title',
+    'reader.keys.close',
+    'reader.keys.caption',
+    'reader.keys.columnKey',
+    'reader.keys.columnWhat',
+    'reader.keys.search',
+    'reader.keys.next',
+    'reader.keys.prev',
+    'reader.keys.original',
+    'reader.keys.refresh',
+    'reader.keys.delete',
+    'reader.keys.escape',
+    'reader.keys.help',
+    'reader.keys.hint',
+  ];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the key list asks to show`);
+    }
+  }
+
+  /* The window is drawn as part of the reader, and it is the whole screen: only then is a click beside
+   * the card a click the page can see (see `reader.css`). */
+  assert.ok(css.includes('.keys-help[open]'), 'the layout of the key list is not held back until the window is opened');
+  assert.ok(
+    !/\.keys-help(?![\w-])(?!\[open\])(?!::)/.test(css),
+    'a rule for the bare key list overrides `dialog:not([open])`, so the reader opens with the list in front of it',
+  );
+  assert.ok(css.includes('.keys-help::backdrop'), 'the rest of the screen stays unshaded behind the list');
+  assert.ok(css.includes('.keys-keys kbd'), 'the keys of the list are typed as plain running text');
+  assert.ok(css.includes('.keys-table'), 'the list of keys is laid out as no table');
+});
+
 /* ---------------------- feed health on the settings screen ---------------------- */
 
 /**

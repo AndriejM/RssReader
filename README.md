@@ -276,11 +276,21 @@ search field holds the same letters) or while Ctrl/Meta/Alt are down:
 | `r` | re-read the selected feed («All feeds» — every feed) |
 | `d` | delete the open headline |
 | `Esc` (in the search field) | empty the field, keeping the open headline |
+| `?` | open (or close) the list of these keys, inside the reader |
 
 The arrows work from inside the search field too: they leave the words typed and move the cursor
 through the headlines the field filters. Every move brings the row it landed on back into view, and the
 row the keyboard opens also takes the focus, so its name is read out and the next arrow continues from
 it.
+
+The same list stands inside the reader, where the keys are used: the «?» icon at the right of the header
+and the `?` key open it, and a modal window shows a table of the keys with the shortcut of each one and
+a line about the keys being held back during typing. It is a real `<dialog>` opened with `showModal()`:
+its own close button, `?` and `Esc` close it, a click beside the card closes it, the keyboard cursor is
+locked inside it while it stands, and the header and the three columns carry `aria-hidden` for that time
+so a Tab never walks out of the list. None of the reader keys work through the open list — a headline is
+never deleted through the table that explains how to delete one. Its captions are ordinary dictionary
+keys (`reader.keys.*`), so the list speaks the language chosen on the global settings screen.
 
 The reader also says out loud what repainting a panel just did — how many headlines came in, how many
 feeds refused, what was removed («5 new headlines», «3 feeds could not be refreshed», «headline
@@ -947,7 +957,11 @@ rules are covered by the tests.
     in the search field, except the arrows. Every row the keyboard opens takes the focus, and a screen
     reader reads its name; the outcome of `r` is said out loud from the hidden status line («5 new
     headlines», «3 feeds could not be refreshed»).
-26. Add a feed whose address answers nothing (or disconnect the network) and wait for its period →
+26. Press `?` (or click the «?» icon in the reader header) → a window over the three columns lists every
+    key above with what it does. While it stands, `j`, `d`, `r` and `/` do nothing to the headlines;
+    `?` or `Esc` or the close icon or a click beside the card closes it, and the cursor returns to the
+    «?» icon.
+27. Add a feed whose address answers nothing (or disconnect the network) and wait for its period →
     in the left column a warning glyph stands beside its name, under the name the number of failures
     runs; its tooltip names the last check and the last failure in the interface language. On the
     feed screen the health line under the same feed now carries that failure with the number of
@@ -957,28 +971,28 @@ rules are covered by the tests.
     the failure on the settings line disappear, the counter is back to zero, the pause is over and the
     old failure is no longer shown. Change the feed's `rss_link` on the feed screen → the old failures
     are gone with the address they described.
-27. Add a feed whose server answers with validators (`ETag` or `Last-Modified` — many news sites do)
+28. Add a feed whose server answers with validators (`ETag` or `Last-Modified` — many news sites do)
     and open the service worker's console → the first read brings those answers, and `feeds` in
     `chrome.storage.local` grows `etag`, `lastModified` and `lastFetchedAt`. Press “Refresh” a minute
     later → the console says `nothing new (304)`, the headlines and the badge stay exactly as they
     were, and in the Network panel the request goes out with `If-None-Match` / `If-Modified-Since`
     and comes back with an empty body.
-28. Add a feed whose address opens the connection but never answers it → after 15 seconds the read
+29. Add a feed whose address opens the connection but never answers it → after 15 seconds the read
     fails with “the feed did not answer within 15 seconds” instead of holding the poll open, and
     “Refresh all feeds” still gets through the rest of the feeds one by one.
-29. Give a feed `delay_timeout: 1` and press the load button of its row on the feed screen the
+30. Give a feed `delay_timeout: 1` and press the load button of its row on the feed screen the
     moment its alarm fires → the service worker console says `already being read, this request takes
     its answer`, the Network panel shows **one** request to that address, not two, the row reports
     its ordinary numbers, and the headlines appear once. A row answers `busy` (the console says
     `read by another request, this one is skipped`) only while a read of another context holds the
     feed; then the row simply stays at “Loading…”.
-30. Open `chrome.storage.local` (`items`) and compare a headline's `link` with its `sourceId` →
+31. Open `chrome.storage.local` (`items`) and compare a headline's `link` with its `sourceId` →
     `sourceId` has no `utm_…`, no `www`, no trailing slash, while `link` is the address the feed
     wrote. On a feed that reissues the same news under another address (a `guid` with
     `isPermaLink="false"`, or a link that only grew tracking parameters) the list keeps **one**
     headline, `added 0` in the read's numbers; delete it and press “Refresh” → it does not come back
     while its read marker lives, and in `read` the marker carries the same `sourceId`.
-31. On the feed screen press the export icon → a `rss-reader-feeds.json` downloads with the name, the
+32. On the feed screen press the export icon → a `rss-reader-feeds.json` downloads with the name, the
     link and both minute fields of every feed, and nothing else: no `id`, no `etag`, no health record.
     Open that file in another profile (or delete the feeds first) and press the import icon → the
     feeds appear in the table with the same name and minutes, each with a fresh `id`, the worker
@@ -988,20 +1002,20 @@ rules are covered by the tests.
     not JSON, or one with rows that fail the row check → the line says what was refused, and nothing
     in storage changed.
 
-32. Open the reader on a feed that has been read → one line under the head of the middle column names
+33. Open the reader on a feed that has been read → one line under the head of the middle column names
     when its headlines came in and when they are next asked for; on «All feeds» the age is the
     freshest of those feeds and the next check is the earliest of their alarms. Leave the tab open →
     «4 min ago» becomes «5 min ago» on its own. Press “Refresh” → the line answers without a reload,
     because a read rewrites the feed row and the reader repaints from it, and the moment it names is
     the number that stands in `feeds[].nextAlarmAt` in `chrome.storage.local`.
-33. On the feed screen press Tab through the row of icons, a row of the table and the “?” → every one
+34. On the feed screen press Tab through the row of icons, a row of the table and the “?” → every one
     of them takes a visible outline, the “?” included, although it is a `<summary>` and no button. Press
     the “save” icon of a row whose link is empty → the row says “Check the fields” to the eye and the
     same words come from its hidden status line, which also names the table when a screen reader enters
     it. On the global settings screen press “Write” → what was written is read out loud, while the
     «changes are not written yet» hint stays where it stands. Turn on “reduce motion” in the OS → the
     colours of a button stop fading and the reader's refresh glyph stops spinning.
-34. Delete every feed and open the reader again (or open it straight after the install) → the middle
+35. Delete every feed and open the reader again (or open it straight after the install) → the middle
     column is filled by the card “No feeds yet” with words about where the headlines and the news
     text will appear, and its button leads to the feed screen in the same tab; the search field and
     the load and clear buttons of that column are hidden, `/` takes the focus nowhere, and the right

@@ -77,6 +77,16 @@
       <line x1="12" y1="9" x2="12" y2="13"></line>
       <line x1="12" y1="17" x2="12.01" y2="17"></line>
     </symbol>
+    <!-- The same «?» glyph the other two screens use for their explanation, the same hand draws it. -->
+    <symbol id="icon-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+      <line x1="12" y1="17" x2="12.01" y2="17"></line>
+    </symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
+    </symbol>
   </svg>
 
   <header class="app-header">
@@ -87,6 +97,10 @@
     <div class="actions">
       <!-- The switcher `lib/nav.js` fills with the three screen icons, current screen marked. -->
       <nav class="nav" data-nav-active="reader" data-i18n-aria="nav.group"></nav>
+      <!-- Подсказка по клавишам читалки: тот же список, что ведёт README, только внутри читалки. -->
+      <button id="btn-keys" class="icon-btn" type="button" data-i18n-title="reader.keys.toggle" data-i18n-aria="reader.keys.toggle">
+        <svg class="icon" aria-hidden="true"><use href="#icon-help"></use></svg>
+      </button>
       <button id="btn-theme" class="icon-btn theme-toggle" type="button" data-i18n-title="common.theme.toggle" data-i18n-aria="common.theme.toggle">
         <svg class="icon icon-moon" aria-hidden="true"><use href="#icon-moon"></use></svg>
         <svg class="icon icon-sun" aria-hidden="true"><use href="#icon-sun"></use></svg>
@@ -195,6 +209,67 @@
       </article>
     </section>
   </main>
+
+  <!--
+    Подсказка по клавишам: список, который раньше жил только в README, теперь стоит там, где клавиши
+    применяются. `showModal()` (см. `index.js`) даёт ему всё, что нужно клавиатуре: фокус запирается
+    внутри, `Esc` и клик по фону закрывают окно, а соседям по экрану `index.js` ставит `aria-hidden`,
+    чтобы указатель Tab не уходил за окно.
+  -->
+  <dialog id="keys-help" class="keys-help" aria-labelledby="keys-help-title">
+    <div class="keys-card">
+      <div class="keys-head">
+        <h2 id="keys-help-title" data-i18n="reader.keys.title"></h2>
+        <button id="btn-keys-close" class="icon-btn" type="button" data-i18n-title="reader.keys.close" data-i18n-aria="reader.keys.close">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <table class="keys-table">
+        <caption class="sr-only" data-i18n="reader.keys.caption"></caption>
+        <thead>
+          <tr>
+            <th scope="col" data-i18n="reader.keys.columnKey"></th>
+            <th scope="col" data-i18n="reader.keys.columnWhat"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="keys-keys"><kbd>/</kbd></td>
+            <td data-i18n="reader.keys.search"></td>
+          </tr>
+          <tr>
+            <td class="keys-keys"><kbd>↓</kbd><kbd>j</kbd></td>
+            <td data-i18n="reader.keys.next"></td>
+          </tr>
+          <tr>
+            <td class="keys-keys"><kbd>↑</kbd><kbd>k</kbd></td>
+            <td data-i18n="reader.keys.prev"></td>
+          </tr>
+          <tr>
+            <td class="keys-keys"><kbd>Enter</kbd></td>
+            <td data-i18n="reader.keys.original"></td>
+          </tr>
+          <tr>
+            <td class="keys-keys"><kbd>r</kbd></td>
+            <td data-i18n="reader.keys.refresh"></td>
+          </tr>
+          <tr>
+            <td class="keys-keys"><kbd>d</kbd></td>
+            <td data-i18n="reader.keys.delete"></td>
+          </tr>
+          <tr>
+            <td class="keys-keys"><kbd>Esc</kbd></td>
+            <td data-i18n="reader.keys.escape"></td>
+          </tr>
+          <tr>
+            <td class="keys-keys"><kbd>?</kbd></td>
+            <td data-i18n="reader.keys.help"></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted keys-hint" data-i18n="reader.keys.hint"></p>
+    </div>
+  </dialog>
 
   <!--
     Что читалка говорит вслух, когда перерисовывает панель: сколько заголовков пришло, сколько лент
