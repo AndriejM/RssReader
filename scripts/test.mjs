@@ -1336,6 +1336,193 @@ test('a failed XML parse is recognised whatever namespace the engine reports it 
   assert.ok(/anyTag\(doc, 'parsererror'\)/.test(source), 'and the tree is searched ignoring namespaces');
 });
 
+/* ---------------- the fields of one XML entry ---------------- */
+
+/**
+ * An element of a feed, made without a DOM. `rss.entryDate`, `rss.entryDescription` and
+ * `rss.entryImages` ask a node only what a node answers — `children`, `localName`, `namespaceURI`,
+ * `textContent`, `getAttribute` — so the rules that decide what the reader stores from an `<item>` can
+ * be held here instead of only in the browser.
+ */
+function el(localName, { ns = null, text = '', attrs = {}, children = [] } = {}) {
+  return {
+    localName,
+    namespaceURI: ns,
+    textContent: text,
+    children,
+    getAttribute: (name) => attrs[name] ?? null,
+  };
+}
+
+const ATOM_NS = 'http://www.w3.org/2005/Atom';
+const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
+const MEDIA_NS = 'http://search.yahoo.com/mrss/';
+const DC_NS = 'http://purl.org/dc/elements/1.1/';
+
+/**
+ * An RDF feed dates its news with `<dc:date>` and writes no `<pubDate>` at all. Read as having no
+ * date, the headline reaches storage with `pubDate: ''`, `util.itemTime` answers its load time, and
+ * `clean_timeout` counts from the poll that happened to read the feed — a news published a week ago is
+ * kept a fresh week longer, and one the feed shipped years ago is kept as long as the reader has known
+ * it.
+ */
+test('the date of an XML entry is the Dublin Core date of an RDF feed', () => {
+  const rdf = el('item', {
+    children: [
+      el('title', { text: 'A news of an RDF feed' }),
+      el('date', { ns: DC_NS, text: '2026-10-11T09:08:32+03:00' }),
+    ],
+  });
+
+  const published = util.pubDateTime(rss.entryDate(rdf));
+  assert.equal(published, Date.parse('2026-10-11T09:08:32+03:00'), 'the date is read, not invented');
+
+  const loadedAWeekLater = { pubDate: rss.entryDate(rdf), time: published + 7 * DAY };
+  assert.equal(util.itemTime(loadedAWeekLater), published, 'its age counts from the publication');
+  assert.ok(
+    util.isExpired(loadedAWeekLater, { clean_timeout: 7 * 24 * 60 }, published + 8 * DAY),
+    'so a feed of one week ago is expired one week after its news was published, not after the poll',
+  );
+
+  /* The same date under the stricter of the two Dublin Core namespaces, and the RSS/Atom dates asked
+   * before it: an RDF feed that states both is dated by the one its format calls the publication. */
+  assert.equal(rss.entryDate(el('item', { children: [el('issued', { ns: DC_NS, text: '2026-01-02' })] })), '2026-01-02');
+  assert.equal(
+    rss.entryDate(el('item', { children: [el('date', { ns: DC_NS, text: 'dc' }), el('pubDate', { text: 'rss' })] })),
+    'rss',
+    'a feed that states its own date is dated by it',
+  );
+  assert.equal(rss.entryDate(el('entry', { children: [el('updated', { ns: ATOM_NS, text: 'atom' })] })), 'atom');
+  assert.equal(rss.entryDate(el('item', { children: [el('title', { text: 'no date here' })] })), '', 'no date is invented');
+});
+
+/**
+ * A WordPress feed ships the whole post in `content:encoded` and an excerpt in `<description>`. Asked
+ * in the other order, the reader stores the excerpt and never shows the text the feed really shipped.
+ */
+test('the full text of an entry wins over its excerpt', () => {
+  const wordpress = el('item', {
+    children: [
+      el('title', { text: 'A post' }),
+      el('description', { text: 'Short excerpt.' }),
+      el('encoded', { ns: CONTENT_NS, text: '<p>The whole post.</p>' }),
+    ],
+  });
+  assert.equal(rss.entryDescription(wordpress), '<p>The whole post.</p>');
+
+  assert.equal(
+    rss.entryDescription(el('item', { children: [el('description', { text: 'Only an excerpt.' })] })),
+    'Only an excerpt.',
+    'a feed that ships nothing but an excerpt is read by its excerpt',
+  );
+  assert.equal(
+    rss.entryDescription(el('entry', { children: [el('summary', { ns: ATOM_NS, text: 'Atom excerpt.' })] })),
+    'Atom excerpt.',
+  );
+  assert.equal(
+    rss.entryDescription(el('entry', { children: [
+      el('summary', { ns: ATOM_NS, text: 'excerpt' }),
+      el('content', { ns: ATOM_NS, text: '<p>Atom full text.</p>' }),
+    ] })),
+    '<p>Atom full text.</p>',
+    'the `<content>` of an Atom entry is its text',
+  );
+
+  /* `<media:content>` shares the local name of the Atom text element and carries no text at all: asked
+   * by name alone it answers «no text» and the excerpt the feed wrote stays unread. */
+  const media = el('item', {
+    children: [
+      el('description', { text: 'The excerpt of a media feed.' }),
+      el('content', { ns: MEDIA_NS, attrs: { url: 'https://cdn.example/a.jpg', medium: 'image' } }),
+    ],
+  });
+  assert.equal(rss.entryDescription(media), 'The excerpt of a media feed.', 'a picture is not the text of a news');
+
+  assert.equal(
+    rss.entryDescription(el('item', { children: [el('content', { ns: 'http://turbo.yandex.ru', text: 'text of a turbo feed' })] })),
+    'text of a turbo feed',
+    'a full text of a feed that names it its own way is still read',
+  );
+  assert.equal(rss.entryDescription(el('item', { children: [] })), '', 'an entry with no text has none');
+});
+
+/**
+ * The preview picture of this reader is an `<img>` inside `description` and nothing else, so the
+ * pictures a media feed states in attributes have to become tags here, in the parser.
+ */
+test('the pictures a Media RSS entry states become its preview', () => {
+  const feedLink = 'https://example.com/news/a';
+
+  const withThumbnail = el('item', {
+    children: [
+      el('description', { text: '<p>Text of a media news.</p>' }),
+      el('thumbnail', { ns: MEDIA_NS, attrs: { url: 'https://cdn.example/preview.jpg' } }),
+    ],
+  });
+  assert.equal(
+    rss.entryDescription(withThumbnail),
+    '<p>Text of a media news.</p>',
+    'the text of the feed is not moved by the picture',
+  );
+  assert.equal(
+    rss.entryImages(withThumbnail, feedLink, rss.entryDescription(withThumbnail)),
+    '<p><img src="https://cdn.example/preview.jpg" alt="" /></p>',
+  );
+
+  /* A feed that groups its media writes neither element under `<item>`: a search over the direct
+   * children finds no picture and no text in such an entry. */
+  const grouped = el('item', {
+    children: [
+      el('group', { ns: MEDIA_NS, children: [
+        el('content', { ns: MEDIA_NS, attrs: { url: '/media/preview.jpg', medium: 'image', title: 'The picture' } }),
+        el('description', { ns: MEDIA_NS, text: '<p>Text inside a media group.</p>' }),
+      ] }),
+    ],
+  });
+  assert.equal(rss.entryDescription(grouped), '<p>Text inside a media group.</p>', 'media text is read from inside the group');
+  assert.equal(
+    rss.entryImages(grouped, feedLink, rss.entryDescription(grouped)),
+    '<p><img src="https://example.com/media/preview.jpg" alt="The picture" /></p>',
+    'a relative picture is resolved from the page of the news, which is where a media feed writes it',
+  );
+
+  const video = el('item', {
+    children: [
+      el('content', { ns: MEDIA_NS, attrs: { url: 'https://cdn.example/clip.mp4', medium: 'video' } }),
+      el('content', { ns: MEDIA_NS, attrs: { url: 'https://cdn.example/frame.jpg', type: 'image/jpeg' } }),
+      el('content', { ns: MEDIA_NS, attrs: { url: 'https://cdn.example/no-type.jpg' } }),
+    ],
+  });
+  assert.equal(
+    rss.entryImages(video, feedLink, ''),
+    '<p><img src="https://cdn.example/frame.jpg" alt="" /><img src="https://cdn.example/no-type.jpg" alt="" /></p>',
+    'a video is not a preview; a picture that names no type is one',
+  );
+
+  const repeats = el('item', {
+    children: [
+      el('thumbnail', { ns: MEDIA_NS, attrs: { url: 'https://cdn.example/a.jpg' } }),
+      el('thumbnail', { ns: MEDIA_NS, attrs: { url: 'https://cdn.example/a.jpg' } }),
+      el('thumbnail', { ns: MEDIA_NS, attrs: { url: 'data:image/png;base64,AAA' } }),
+      el('thumbnail', { ns: MEDIA_NS, attrs: { width: '120' } }),
+    ],
+  });
+  assert.equal(
+    rss.entryImages(repeats, feedLink, ''),
+    '<p><img src="https://cdn.example/a.jpg" alt="" /></p>',
+    'one picture once, and an element that states no address is no picture',
+  );
+
+  assert.equal(
+    rss.entryImages(repeats, feedLink, 'the text already carries https://cdn.example/a.jpg'),
+    '',
+    'a picture the text of the entry already shows is not put in front of it a second time',
+  );
+
+  const mediaTitleOnly = el('item', { children: [el('content', { ns: 'http://other.example', attrs: { url: 'https://cdn.example/x.jpg' } })] });
+  assert.equal(rss.entryImages(mediaTitleOnly, feedLink, ''), '', 'a picture of another vocabulary is not Media RSS');
+});
+
 /* ---------------------------- language ---------------------------- */
 
 test('every language dictionary translates every key of the base one', () => {

@@ -684,6 +684,19 @@ background.
   forum) still offers its fresh headlines. The RSS `guid` (an `isPermaLink="false"`
   one, above all) and the Atom `<id>` are kept as `sourceId` — the name the feed gives its news,
   which is what the dedup matches on.
+- **The namespaced fields of an entry are read too**, by namespace URI and not by prefix
+  (`rss.entryDate`, `rss.entryDescription`, `rss.entryImages`): the full text a WordPress feed ships in
+  `content:encoded` wins over the excerpt in `<description>` (the Atom `<content>` over `<summary>`),
+  because `storage.capPreview` is what cuts it anyway; the pictures a media feed states in
+  `media:thumbnail` / `media:content` become the `<img>` that leads the preview — a `<media:content>`
+  of a video is left out, and elements a feed grouped inside `<media:group>` are reached where the
+  direct children of `<item>` would find nothing; and the publication date of an RDF feed is its
+  `dc:date` (`dcterms:issued` / `dcterms:modified` likewise) — without it an RDF entry reaches storage
+  with no date, `util.itemTime` answers the load time, and `clean_timeout` counts from the poll that
+  read the feed instead of from the publication.
+  A `<media:content>` shares the local name of the Atom `<content>` and carries its address in an
+  attribute instead of text: the two are told apart by their namespace, so a media feed keeps its text
+  as well as its picture.
 - **An answer that is XML but not a feed is refused rather than read as an empty feed**: the root
   decides what the document is — `<rss>`, `<feed>` and `<rdf:RDF>` (whose local name is uppercase)
   are feeds even when they ship no headlines right now, while a well-formed error page in XHTML, a

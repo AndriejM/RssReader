@@ -30,6 +30,25 @@ const HTTP_DATE = /^[A-Za-z]{3}, \d{1,2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT
  */
 const FEED_ROOTS = new Set(['rss', 'feed', 'rdf']);
 
+/**
+ * The vocabularies whose fields the parser reads beside the plain RSS/Atom ones. They are named by
+ * namespace URI and not by prefix: a feed is free to bind any prefix it likes, and the URI is the one
+ * thing that says what an element means.
+ *
+ * `content:encoded` is the full text a WordPress feed ships next to its excerpt; Media RSS is the
+ * pictures and text of a video or image feed; Dublin Core `dc:date` is the publication date an RDF
+ * feed states and the only date such a feed states.
+ */
+const NS_ATOM = 'http://www.w3.org/2005/Atom';
+const NS_CONTENT = 'http://purl.org/rss/1.0/modules/content/';
+const NS_MEDIA = 'http://search.yahoo.com/mrss/';
+
+/** Media RSS is written under both `…/mrss/` and `…/mrss`; a feed that states neither is not read as one. */
+function isMediaNamespace(uri) {
+  const ns = String(uri ?? '');
+  return ns === NS_MEDIA || ns === 'http://search.yahoo.com/mrss';
+}
+
 /** A `Last-Modified` we may answer with: only a real HTTP-date, written the one way it is written. */
 export function httpDate(value) {
   if (typeof value !== 'string') return '';
@@ -206,23 +225,75 @@ export function readValidators(response) {
   };
 }
 
-/** Children of `parent` whose local name matches, ignoring namespaces. */
-function childNodes(parent, localName) {
+/**
+ * Children of `parent` whose local name matches, ignoring namespaces: `<pubDate>` and `<dc:date>` are
+ * read the same way whatever prefix the feed declared.
+ *
+ * `namespace` narrows the search to one vocabulary where two vocabularies mean different things by the
+ * *same* local name: the `<content>` of Atom is the text of an entry, a `<media:content>` is a picture
+ * that carries its address in an attribute and no text at all. Matched by name alone, the second one
+ * answers «no text» and the entry of a media feed is stored with no preview at all.
+ */
+function childNodes(parent, localName, namespace = '') {
   const found = [];
   for (const node of parent?.children ?? []) {
-    if (node.localName === localName) found.push(node);
+    if (node.localName !== localName) continue;
+    if (namespace && node.namespaceURI !== namespace) continue;
+    found.push(node);
   }
   return found;
 }
 
-function firstText(parent, localName) {
-  const [node] = childNodes(parent, localName);
+function firstText(parent, localName, namespace = '') {
+  const [node] = childNodes(parent, localName, namespace);
   return node?.textContent?.trim() ?? '';
 }
 
 function anyTag(doc, localName) {
   // '*' as the namespace matches elements in any (or no) namespace.
   return [...doc.getElementsByTagNameNS('*', localName)];
+}
+
+/**
+ * The Media RSS elements of one entry, however deep inside `<media:group>` the feed put them: a media
+ * feed nests its picture and its text under a group, so a search over the direct children of `<item>`
+ * finds neither.
+ */
+function mediaNodes(node, localName) {
+  if (!node) return [];
+
+  const found = [];
+  const walk = (parent) => {
+    for (const child of parent.children ?? []) {
+      if (!isMediaNamespace(child.namespaceURI)) continue;
+      if (child.localName === localName) {
+        found.push(child);
+        continue;
+      }
+      // `<media:group>` is not itself the picture or the text: it is how a feed groups them.
+      walk(child);
+    }
+  };
+  walk(node);
+
+  return found;
+}
+
+/**
+ * The text of one Media RSS field of an entry. `mediaNodes` already walks the subtree, so a feed that
+ * grouped its text inside `<media:group>` is read the same as one that wrote it under `<item>`.
+ */
+function mediaText(node, localName) {
+  return mediaNodes(node, localName)[0]?.textContent?.trim() ?? '';
+}
+
+/** Is this Media RSS element a picture: `medium="image"`, or a type that says so, or neither at all. */
+function isImageMedia(element) {
+  const medium = (element.getAttribute('medium') ?? '').trim().toLowerCase();
+  if (medium) return medium === 'image';
+
+  const type = (element.getAttribute('type') ?? '').trim().toLowerCase();
+  return !type || type.startsWith('image/');
 }
 
 /**
@@ -283,9 +354,56 @@ function newestFirst(values, dateOf) {
     .map((candidate) => candidate.value);
 }
 
-/** The publication date of an XML entry — the text `pubDate` of the entry record is built from. */
-function entryDate(node) {
-  return firstText(node, 'pubDate') || firstText(node, 'published') || firstText(node, 'updated');
+/**
+ * The publication date of an XML entry — the text `pubDate` of the entry record is built from.
+ *
+ * An RDF feed states its date as `<dc:date>` and knows no `<pubDate>`: missed, the entry reaches
+ * storage with no date at all, `util.itemTime` falls back to the load time, and `clean_timeout` counts
+ * from the poll that read the feed rather than from when the news was published.
+ * `<dcterms:issued>`/`<dcterms:modified>` are the same Dublin Core date under the stricter of its two
+ * namespaces; the Dublin Core names are matched by their local name because the prefixes are the feed's
+ * own choice, and `date`, `issued` and `modified` name no other field of a feed.
+ *
+ * `node` is only asked what a DOM element answers, which is what lets these rules of an XML entry be
+ * held by the tests (scripts/test.mjs) with a plain object, without a DOM.
+ */
+export function entryDate(node) {
+  return (
+    firstText(node, 'pubDate') ||
+    firstText(node, 'published') ||
+    firstText(node, 'updated') ||
+    firstText(node, 'date') ||
+    firstText(node, 'issued') ||
+    firstText(node, 'modified')
+  );
+}
+
+/**
+ * The body of one entry — the text `description` of the entry record is built from.
+ *
+ * A feed that ships its news in full writes it in `content:encoded` (a WordPress feed, above all) and
+ * leaves only an excerpt in `<description>`; asked in that order the reader stores the excerpt and
+ * never sees the text the feed really shipped. So the full text is asked first, and the excerpt stands
+ * for the feeds that ship nothing but an excerpt. `storage.capPreview` is what cuts the full text on
+ * the way into storage, so reading it costs nothing an excerpt costs.
+ *
+ * `content:encoded` and the Atom `<content>` are asked for by their namespace first: a `<media:content>`
+ * shares the local name of the Atom text element and is a picture that carries its address in an
+ * attribute and no text at all — matched by name alone it answers «no text» and hides the excerpt the
+ * feed really wrote. The lookups that follow them are unnamespaced on purpose: they catch the same
+ * text spelled without the namespace the modules document it in (`<turbo:content>`, a `<content:encoded>`
+ * of a feed that binds the prefix where it pleases).
+ */
+export function entryDescription(node) {
+  return (
+    firstText(node, 'encoded', NS_CONTENT) ||
+    firstText(node, 'content', NS_ATOM) ||
+    firstText(node, 'description') ||
+    firstText(node, 'summary') ||
+    mediaText(node, 'description') ||
+    firstText(node, 'encoded') ||
+    firstText(node, 'content')
+  );
 }
 
 /** The publication date of a JSON Feed item — the text `pubDate` of the entry record is built from. */
@@ -351,11 +469,15 @@ function parseXmlFeed(xml, baseUrl) {
     if (seen.has(key)) continue;
     seen.add(key);
 
+    // Kept verbatim: the text of an entry carries HTML — do not pipe it through cleanTitle, markup
+    // must survive.
+    const description = entryDescription(node);
+
     entries.push({
       title: cleanTitle(firstText(node, 'title') || node.getAttribute('title'), ''),
-      // Kept verbatim: `<description>` (or an Atom `<summary>`/`<content>` variant) carries
-      // short news text in HTML — do not pipe it through cleanTitle, markup must survive.
-      description: firstText(node, 'description') || firstText(node, 'summary') || firstText(node, 'content'),
+      // The pictures the feed states outside its text lead it, the way the picture of a usual
+      // `<description>` leads it.
+      description: `${entryImages(node, link, description)}${description}`,
       pubDate: entryDate(node),
       link,
       // What the feed calls this news: kept beside the link so a headline is still recognised when
@@ -462,10 +584,35 @@ function escapeText(value) {
 }
 
 /**
- * The pictures a JSON Feed item states beside its text — its `image` and its image `attachments` —
- * as `<img>` tags. A preview picture of this reader is an `<img>` inside `description` and nothing
- * else: that is the tag `storage.makeItem` puts in one uniform box and `extract.sanitizePreview`
- * is willing to render, so the fields have to become tags here, in the parser.
+ * The pictures a Media RSS entry states — its `<media:thumbnail>`, or the `<media:content>` of a
+ * picture when the feed states no thumbnail — as the `<img>` tags that lead its preview.
+ *
+ * A preview picture of this reader is an `<img>` inside `description` and nothing else: that is the tag
+ * `storage.makeItem` puts in one uniform box and `extract.sanitizePreview` is willing to render, so the
+ * fields of a feed have to become tags here, in the parser (both `entryImages` and `jsonImages` hand
+ * their candidates to `imageTags`).
+ *
+ * A `<media:content>` of a video is left out: the reader previews images and nothing else, and a
+ * video's address in an `<img>` is a broken picture where the feed's own `<description>` picture — or
+ * no picture at all — used to stand.
+ *
+ * The addresses are resolved against the news, not against the feed: a media feed writes them relative
+ * to the page of the news, and `entry.link` is the one address of that page the parser has.
+ */
+export function entryImages(node, baseUrl, content) {
+  const candidates = mediaNodes(node, 'thumbnail')
+    .map((element) => ({ url: element.getAttribute('url') }))
+    .concat(
+      mediaNodes(node, 'content')
+        .filter(isImageMedia)
+        .map((element) => ({ url: element.getAttribute('url'), alt: element.getAttribute('title') })),
+    );
+
+  return imageTags(candidates, baseUrl, content);
+}
+
+/**
+ * The pictures a JSON Feed item states — its `image` and its image `attachments` — as `<img>` tags.
  *
  * Two kinds of attachment are left out on purpose. One the feed marks `in_feed` — the feed says the
  * picture already stands in its `content_html`, and putting it twice is not an improvement — and one
@@ -479,9 +626,7 @@ function jsonImages(item, baseUrl, content) {
     ...(Array.isArray(item.attachments) ? item.attachments : []),
   ];
 
-  const tags = [];
-  const used = new Set();
-
+  const pictures = [];
   for (const attachment of candidates) {
     if (!attachment || typeof attachment !== 'object') continue;
     if (attachment.in_feed === true) continue;
@@ -490,14 +635,38 @@ function jsonImages(item, baseUrl, content) {
     // An attachment that names no type is an image: `image/jpeg` is the default JSON Feed gives it.
     if (mime && !mime.startsWith('image/')) continue;
 
-    const src = absoluteUrl(jsonText(attachment.url), baseUrl);
-    // A relative address is resolved from the feed, as a relative `<link>` is. The reader previews
-    // only http(s) pictures, so anything else (`data:`, `mailto:`) is not worth a tag.
+    pictures.push({ url: jsonText(attachment.url), alt: jsonText(attachment.title_text) });
+  }
+
+  return imageTags(pictures, baseUrl, content);
+}
+
+/**
+ * The pictures one entry states, made into the tags a preview is: `<img>` tags in one paragraph, in
+ * the order the feed wrote them.
+ *
+ * An address the text of the entry already carries is left out — the same picture twice in a preview is
+ * not an improvement — and a relative one is resolved from `baseUrl`, as a relative `<link>` is. Only
+ * http(s) pictures are previewed, so anything else (`data:`, `mailto:`) is not worth a tag, and an
+ * element that states no address at all is not a picture: resolving an empty one would put the address
+ * of the feed itself in an `<img>`.
+ */
+function imageTags(candidates, baseUrl, content) {
+  const tags = [];
+  const used = new Set();
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue;
+
+    const raw = String(candidate.url ?? '').trim();
+    if (!raw) continue;
+
+    const src = absoluteUrl(raw, baseUrl);
     if (!src || !isValidHttpUrl(src)) continue;
-    if (used.has(src) || content.includes(src)) continue;
+    if (used.has(src) || String(content ?? '').includes(src)) continue;
 
     used.add(src);
-    tags.push(`<img src="${src}" alt="${escapeText(jsonText(attachment.title_text))}" />`);
+    tags.push(`<img src="${src}" alt="${escapeText(String(candidate.alt ?? ''))}" />`);
   }
 
   return tags.length ? `<p>${tags.join('')}</p>` : '';
