@@ -13,6 +13,7 @@ import {
   READ_TTL_DAYS,
   alarmPeriodMinutes,
   capPreview,
+  dropUnpreviewableImages,
   feedBackoffMinutes,
   MAX_SOURCE_ID_CHARS,
   isExpired,
@@ -426,8 +427,9 @@ export async function clearItemsForFeed(feedId) {
 /**
  * Build the storage record for one news item from a feed `<item>`:
  * the field `title`, `description`, `pubDate`, `link` taken straight from the feed XML record —
- * `description` is kept as it often carries HTML text short news; its `<img>` tags are re-sized to
- * one uniform box on the way in (see `util.normalizePreviewImages`).
+ * `description` is kept as it often carries HTML text short news; the `<img>` tags it cannot show are
+ * dropped and the rest are re-sized to one uniform box on the way in (see
+ * `util.dropUnpreviewableImages` and `util.normalizePreviewImages`).
  * Service keys bind item to feed and allow dedup; the `pubDate` field acts as a timestamp for
  * the `clean_timeout` expiry (`time` — actual load time — as a fallback if feed has no date).
  *
@@ -452,7 +454,9 @@ export function makeItem({
     feedName: feed.name,
     rss_link: feed.rss_link,
     title,
-    description: capPreview(normalizePreviewImages(description)),
+    // Pictures the reader cannot show go first: a `data:` picture left in would take the whole
+    // `MAX_PREVIEW_CHARS` and the cap would fall inside its base64 instead of inside the news.
+    description: capPreview(normalizePreviewImages(dropUnpreviewableImages(description))),
     pubDate: String(pubDate ?? '').trim(),
     link,
     sourceId: identity.sourceId,

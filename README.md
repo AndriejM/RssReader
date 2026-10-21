@@ -639,6 +639,8 @@ background.
 | `READ_TTL_DAYS` | 7 days | `util.js` — the **default value** for the “read” mark lifetime; configurable via the `read_ttl_days` field |
 | `MIN_READ_TTL_DAYS` / `MAX_READ_TTL_DAYS` | 1 / 3650 | `util.js` — bounds of this field (`util.toDays`) |
 | `MAX_READ_RECORDS` | 1000 | `util.js` — how many such marks are stored; the oldest are evicted first |
+| `MAX_PREVIEW_CHARS` | 8000 | `util.js` — how much of a feed `<description>` a stored headline keeps |
+| `PREVIEW_IMAGE_WIDTH` / `PREVIEW_IMAGE_HEIGHT` | 180 / 240 | `util.js` — the box given to every `<img>` a feed ships inside `<description>` |
 | `MAX_PARAGRAPHS` / `MAX_CHARACTERS` | 60 / 16000 | `extract.js` — the limit of article text in the right panel |
 | `MIN_PARAGRAPH_LENGTH` | 40 | `extract.js` — short lines (menus, captions) are not counted as article text |
 | `ALARM_PREFIX` / `CLEANUP_ALARM_NAME` | `feed:<id>` / `rss-reader:cleanup` | `util.js` |
@@ -687,7 +689,7 @@ background.
 - **The namespaced fields of an entry are read too**, by namespace URI and not by prefix
   (`rss.entryDate`, `rss.entryDescription`, `rss.entryImages`): the full text a WordPress feed ships in
   `content:encoded` wins over the excerpt in `<description>` (the Atom `<content>` over `<summary>`),
-  because `storage.capPreview` is what cuts it anyway; the pictures a media feed states in
+  because `util.capPreview` is what cuts it anyway; the pictures a media feed states in
   `media:thumbnail` / `media:content` become the `<img>` that leads the preview — a `<media:content>`
   of a video is left out, and elements a feed grouped inside `<media:group>` are reached where the
   direct children of `<item>` would find nothing; and the publication date of an RDF feed is its
@@ -697,6 +699,16 @@ background.
   A `<media:content>` shares the local name of the Atom `<content>` and carries its address in an
   attribute instead of text: the two are told apart by their namespace, so a media feed keeps its text
   as well as its picture.
+- **What the stored preview of a headline is made of** (`storage.makeItem`): the pictures a feed
+  ships inside `<description>` are put in one box (`util.normalizePreviewImages`), and the pictures
+  this reader cannot show are taken out before the text is capped — a `data:` picture is a whole
+  article written as base64 inside the text of another one, and `extract.sanitizePreview` refuses a
+  `src` that is not http(s): left standing, it eats the whole `MAX_PREVIEW_CHARS` of its headline and
+  storage keeps the base64 instead of the news and the picture the news could have shown
+  (`util.dropUnpreviewableImages`). Only then `util.capPreview` cuts, and it cuts at the edge of the
+  markup the cut landed in: a tag cut in the middle leaves its attributes loose in the text as
+  characters no renderer was meant to read, and a character reference cut in the middle prints as the
+  letters it was written to escape.
 - **An answer that is XML but not a feed is refused rather than read as an empty feed**: the root
   decides what the document is — `<rss>`, `<feed>` and `<rdf:RDF>` (whose local name is uppercase)
   are feeds even when they ship no headlines right now, while a well-formed error page in XHTML, a
@@ -887,7 +899,7 @@ background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js and rss.js) and the guards over the screen markup: 106 tests
+                             # storage.js and rss.js) and the guards over the screen markup: 117 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```

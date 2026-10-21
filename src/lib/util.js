@@ -275,21 +275,63 @@ export function isReadExpired(record, now = Date.now(), ttlDays = READ_TTL_DAYS)
   return now - when >= ttl * 24 * 60 * 60000;
 }
 
+/** How far from the end of the cut a half-written character reference may stand to be worth cutting away. */
+const MAX_HALF_ENTITY_CHARS = 12;
+
+/**
+ * Move the cut back to the edge of the markup it fell into: the head of a tag whose tail is cut off
+ * is worse than no tag at all, and a character reference whose `;` was cut off is no longer one.
+ */
+function previewCut(value) {
+  const tag = value.lastIndexOf('<');
+  if (tag > value.lastIndexOf('>')) return value.slice(0, tag);
+
+  const entity = value.lastIndexOf('&');
+  if (entity > value.lastIndexOf(';') && value.length - entity <= MAX_HALF_ENTITY_CHARS) return value.slice(0, entity);
+
+  return value;
+}
+
 /**
  * Keep the head of stored preview HTML and mark where the feed text was cut, so
  * `chrome.storage.local` does not swallow whole articles shipped in `<description>`.
+ *
+ * The cut is moved back to the edge of the markup it landed in: a tag cut in the middle leaves its
+ * attributes loose in the text as characters no renderer was meant to read, and a character reference
+ * cut in the middle prints as the letters it was written to escape.
  */
 export function capPreview(text, max = MAX_PREVIEW_CHARS) {
   const value = String(text ?? '').trim();
-  if (max > 0 && value.length > max) return `${value.slice(0, max)} […]`;
-  return value;
+  if (!(max > 0) || value.length <= max) return value;
+  return `${previewCut(value.slice(0, max)).trimEnd()} […]`;
 }
 
 const IMG_TAG = /<img\b[^>]*>/gi;
 const IMG_NAME = /^<img\b/i;
+/** The `src` of an `<img>`, quoted or not, the way the feed wrote it — an attribute, not the `data-src` of a lazy picture. */
+const IMG_SRC_ATTR = /(?:^|[\s/])src\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i;
 /** Attributes that decide the size of the picture: the stored `width`/`height` must be the only ones. */
 const IMG_SIZE_ATTR = /\s(?:width|height|style|srcset)=("[^"]*"|'[^']*'|[^\s>]+)/gi;
 const IMG_TAG_CLOSE = /\s*\/?>$/;
+
+/**
+ * Drop every `<img>` whose address this reader cannot show.
+ *
+ * A `data:` picture is a whole news article written as base64 inside the text of another one, and
+ * `extract.sanitizePreview` refuses a `src` that is not http(s) — so such a tag is not merely a picture
+ * that will not render: it eats the `MAX_PREVIEW_CHARS` of its headline and pushes the text of the news,
+ * with the pictures it could have shown, out of what storage keeps.
+ */
+export function dropUnpreviewableImages(text) {
+  return String(text ?? '').replace(IMG_TAG, (tag) => {
+    const quoted = IMG_SRC_ATTR.exec(tag)?.[1] ?? '';
+    const src = quoted.replace(/^["']|["']$/g, '').trim();
+
+    // The two spellings `extract.safeExternalUrl` accepts, and nothing else: a protocol-relative
+    // address is the same address the page of the news is served under.
+    return /^https?:\/\//i.test(src) || src.startsWith('//') ? tag : '';
+  });
+}
 
 /**
  * Give every `<img>` of a feed description the same box, so headlines of different feeds line up

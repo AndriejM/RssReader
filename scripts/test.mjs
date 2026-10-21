@@ -27,6 +27,7 @@ const {
   FEED_FETCH_TIMEOUT_MS,
   MAX_FEED_BACKOFF_MINUTES,
   MAX_ITEMS_PER_FEED,
+  MAX_PREVIEW_CHARS,
   MAX_READ_RECORDS,
   MAX_READ_TTL_DAYS,
   MAX_SOURCE_ID_CHARS,
@@ -36,7 +37,9 @@ const {
   READ_TTL_DAYS,
   alarmPeriodMinutes,
   badgeText,
+  capPreview,
   cleanTitle,
+  dropUnpreviewableImages,
   feedBackoffMinutes,
   feedNextCheckAt,
   feedPauseRemaining,
@@ -473,6 +476,55 @@ test('normalizePreviewImages keeps the rest of the description untouched', () =>
   );
 });
 
+test('dropUnpreviewableImages removes the pictures the reader cannot show', () => {
+  // A `data:` picture is base64 of the whole article: it eats the storage cap of its headline and
+  // `extract.sanitizePreview` refuses to render it.
+  assert.equal(
+    dropUnpreviewableImages('<p><img src="data:image/jpeg;base64,U0laRVpPTkU=" /><b>Жанр</b></p>'),
+    '<p><b>Жанр</b></p>',
+  );
+  assert.equal(
+    dropUnpreviewableImages('<img src=data:image/png;base64,U0laRVpPTkU= alt="x">Читать'),
+    'Читать',
+  );
+  assert.equal(dropUnpreviewableImages("<IMG SRC='data:,Hello'>"), '');
+  // An `<img>` with no address at all is the same useless tag.
+  assert.equal(dropUnpreviewableImages('<a href="https://a/1"><img></a>Читать'), '<a href="https://a/1"></a>Читать');
+  assert.equal(dropUnpreviewableImages('<img src="./a.jpg">Читать'), 'Читать');
+  // A lazy picture of a feed: `data-src` is not an address the reader renders. Where the feed states
+  // both, the real `src` is what decides.
+  assert.equal(dropUnpreviewableImages('<img data-src="https://a/1.jpg">Читать'), 'Читать');
+  assert.equal(
+    dropUnpreviewableImages('<img data-src="data:image/png;base64,AAA" src="https://a/1.jpg">'),
+    '<img data-src="data:image/png;base64,AAA" src="https://a/1.jpg">',
+  );
+
+  // The two spellings `extract.safeExternalUrl` accepts are kept, and the rest of the markup stands.
+  assert.equal(
+    dropUnpreviewableImages('<img src="https://a/1.jpg"><img src="http://a/2.jpg"><img src="//a/3.jpg">'),
+    '<img src="https://a/1.jpg"><img src="http://a/2.jpg"><img src="//a/3.jpg">',
+  );
+  assert.equal(dropUnpreviewableImages('<b>Жанр</b>: анимация<br />'), '<b>Жанр</b>: анимация<br />');
+  assert.equal(dropUnpreviewableImages('plain text, no markup'), 'plain text, no markup');
+  assert.equal(dropUnpreviewableImages(''), '');
+});
+
+test('capPreview cuts at the edge of the markup, not inside it', () => {
+  // A tag cut in the middle leaves its attributes loose in the text; a cut moves back before it.
+  assert.equal(capPreview('<p>aaa</p><img src="https://a/b.jpg">', 10), '<p>aaa</p> […]');
+  // Same for a character reference cut in the middle, which would print as the letters it escapes.
+  assert.equal(capPreview('one &amp; two', 6), 'one […]');
+  // A `&` too far from the cut to be a reference the cut broke is left where the feed wrote it.
+  assert.equal(capPreview(`a&${'b'.repeat(40)}`, 25), `a&${'b'.repeat(23)} […]`);
+  // A cut that lands in the middle of a tag takes the space it left at the end with the tag.
+  assert.equal(capPreview('text <img src="https://a/b.jpg">', 6), 'text […]');
+  // Text the feed wrote plainly is cut wherever the cap falls: nothing of it is markup.
+  assert.equal(capPreview('abcdefghij', 5), 'abcde […]');
+  assert.equal(capPreview('short enough', 8000), 'short enough');
+  assert.equal(capPreview('', 8000), '');
+  assert.equal(capPreview('keep all of it', 0), 'keep all of it');
+});
+
 test('makeItem stores the preview pictures at the size the reader sets', () => {
   const feed = { id: 'f1', name: 'lostpix', rss_link: 'https://lostpix.com/rss' };
   const item = store.makeItem({
@@ -490,6 +542,23 @@ test('makeItem stores the preview pictures at the size the reader sets', () => {
     '<img src="https://a/1.jpg" width="180" height="240" />' +
       '<img src="https://a/2.jpg" width="180" height="240">',
   );
+});
+
+test('makeItem keeps the text of a headline whose description carries a data: picture', () => {
+  const feed = { id: 'f1', name: 'lostpix', rss_link: 'https://lostpix.com/rss' };
+  const item = store.makeItem({
+    feed,
+    title: 't',
+    link: 'https://lostpix.com/n/1',
+    // A feed that ships its picture as base64: the blob alone is longer than the storage cap, so a
+    // cap run over it would store the blob and none of the news.
+    description: `<img src="data:image/png;base64,${'AAAA'.repeat(MAX_PREVIEW_CHARS)}" />${'<p>Новости</p>'.repeat(2000)}`,
+  });
+
+  assert.ok(!item.description.includes('base64'));
+  assert.ok(item.description.startsWith('<p>Новости</p>'));
+  assert.ok(item.description.endsWith(' […]'));
+  assert.ok(item.description.length <= MAX_PREVIEW_CHARS + 6);
 });
 
 test('sortItems is newest first, title breaks ties, input is untouched', () => {
