@@ -158,6 +158,22 @@ function renderTotal() {
 }
 
 /**
+ * Откладывает вызов `fn`, пока вызывающий замолчит на `wait` мс: быстрые подряд идущие события
+ * (каждый символ поиска, каждая запись фона в `chrome.storage.onChanged`) перерисовывают панели
+ * один раз по окончании пачки, а не на каждое событие.
+ */
+function debounce(fn, wait) {
+  let timer = null;
+  return (...args) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      fn(...args);
+    }, wait);
+  };
+}
+
+/**
  * Что читалка говорит вслух, когда панель перерисовывается: строка `role="status"` (см. `index.html`)
  * нигде не рисуется — её только читает экран, и та же правда стоит в самих панелях. Пустая строка
  * не говорит ничего: так перезагрузка от `chrome.storage.onChanged` не пересказывает вслух то, о чём
@@ -392,6 +408,9 @@ function renderHeadlines() {
 
   for (const item of items) {
     const li = document.createElement('li');
+    // `data-uid` даёт строке имя, по которому `openItem()` находит её и переносит выделение, не
+    // перестраивая весь список (см. `selectHeadline`).
+    li.dataset.uid = item.uid;
     // Средняя колонка — `listbox` (см. `index.html`), поэтому её строка — `option`, а открытая
     // новость — та, что `aria-selected`; без этого экран назвал бы список списком кнопок.
     li.setAttribute('role', 'option');
@@ -479,7 +498,13 @@ function applyQuerySelection() {
   }
 
   const current = visible.find((item) => item.uid === state.uid);
-  openItem(current ?? visible[0]);
+  const target = current ?? visible[0];
+  /* Поиск меняет сам набор видимых строк, поэтому колонку перестраиваем заново: `openItem()`
+   * выделил бы нужную строку на месте, но старые — уже не подходящие под запрос — остались бы в списке. */
+  state.uid = target.uid;
+  saveSelection();
+  renderHeadlines();
+  renderArticle(target);
 }
 
 /** Clone one of the <symbol> icons declared in index.html. */
@@ -542,9 +567,37 @@ function titleHeading(text, link) {
 function openItem(item, { followFocus = false } = {}) {
   state.uid = item.uid;
   saveSelection();
-  renderHeadlines();
+  /* Перемещение курсора (`j`/`k`) не меняет, какие заголовки показывает колонка, поэтому новую
+   * строку выделяем на месте, а не перестраиваем всю среднюю колонку: полный `renderHeadlines()` —
+   * это несколько тысяч `<li>` и столько же замыканий на каждое нажатие клавиши. Если же строки на
+   * экране нет (набор видимых изменился), колонку приходится перестроить целиком. */
+  if (!selectHeadline(item.uid)) renderHeadlines();
   if (followFocus) els.headlineList.querySelector('.list-item.selected > button')?.focus();
 
+  renderArticle(item);
+}
+
+/**
+ * Переносит выделение средней колонки на строку `uid`, меняя только две строки: ту, что была
+ * открыта, и ту, что открылась. Возвращает `false`, когда строки на экране нет — значит, видимый
+ * набор изменился и колонку нужно перестроить, а не подправлять на месте.
+ */
+function selectHeadline(uid) {
+  const next = els.headlineList.querySelector(`.list-item[data-uid="${CSS.escape(uid)}"]`);
+  if (!next) return false;
+
+  const prev = els.headlineList.querySelector('.list-item.selected');
+  if (prev && prev !== next) {
+    prev.classList.remove('selected');
+    prev.setAttribute('aria-selected', 'false');
+  }
+  next.classList.add('selected');
+  next.setAttribute('aria-selected', 'true');
+  return true;
+}
+
+/** Правая панель открытой новости: заголовок-ссылка, источник и сохранённое `<description>`. */
+function renderArticle(item) {
   els.contentDelete.hidden = false;
 
   const title = titleHeading(item.title || t('common.untitled'), item.link);
@@ -787,6 +840,19 @@ function redraw() {
 }
 
 /* Storage is written by the background worker while this page is open, so react to it. */
+
+/* Фоновый рабочий может сделать несколько записей подряд (обход лент, метки прочитанного), и каждая
+ * из них поднимает `storage.onChanged`. Перерисовку складываем в один вызов по окончании пачки.
+ * Вкладку, которую никто не видит, не перерисовываем впустую: она догонит на `visibilitychange`. */
+let pendingStorageRender = false;
+const scheduleStorageRender = debounce(() => {
+  if (document.hidden) {
+    pendingStorageRender = true;
+    return;
+  }
+  void renderAll();
+}, 200);
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
 
@@ -799,7 +865,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     redraw();
   }
 
-  if (changes.items || changes.feeds) void renderAll();
+  if (changes.items || changes.feeds) scheduleStorageRender();
 });
 
 // The same screen switcher every screen has: it fills the header `<nav>` and jumps within this tab,
@@ -838,10 +904,13 @@ els.keysHelp.addEventListener('close', () => {
 els.openFeeds.addEventListener('click', () => window.location.assign(pageUrl(SETTINGS_PAGE)));
 void wireThemeButton(els.theme);
 
-els.headlineSearch.addEventListener('input', () => {
+/* Каждое нажатие клавиши в поле поиска перестраивает среднюю колонку целиком, поэтому колонку
+ * перерисовываем не на каждый символ, а когда читатель замолчит на мгновение. */
+const onSearchInput = debounce(() => {
   state.query = els.headlineSearch.value ?? '';
   applyQuerySelection();
-});
+}, 180);
+els.headlineSearch.addEventListener('input', onSearchInput);
 
 /*
  * «4 мин назад» должно оставаться правдой, пока читалка стоит открытой, — иначе строка говорит о
@@ -854,7 +923,15 @@ setInterval(() => {
 }, 60000);
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) renderFeedStatus();
+  if (document.hidden) return;
+  /* Вкладку прятали во время записи фона — перечитаем панели сейчас, одним `renderAll()`; он
+   * освежит и строку статуса, поэтому отдельный вызов не нужен. */
+  if (pendingStorageRender) {
+    pendingStorageRender = false;
+    void renderAll();
+  } else {
+    renderFeedStatus();
+  }
 });
 
 /** Whether the key belongs to the field being typed in, not to the reader around it. */
