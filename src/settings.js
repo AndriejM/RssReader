@@ -12,7 +12,13 @@ import { LANGUAGE_NAMES, adoptLanguage, applyI18n, currentLanguage, t } from './
 import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
 import { wireThemeButton } from './lib/theme.js';
-import { DEFAULT_SOUND_VOLUME, MAX_READ_TTL_DAYS, MIN_READ_TTL_DAYS, READ_TTL_DAYS } from './lib/util.js';
+import {
+  DEFAULT_SOUND_VOLUME,
+  MAX_READ_RECORDS,
+  MAX_READ_TTL_DAYS,
+  MIN_READ_TTL_DAYS,
+  READ_TTL_DAYS,
+} from './lib/util.js';
 
 const els = {
   days: document.getElementById('read-ttl-days'),
@@ -96,9 +102,24 @@ async function renderReadStats() {
   state.ttlDays = ttlDays;
   state.readCount = read.length;
 
-  els.readStats.textContent = state.readCount
-    ? t('settings.readStats', { count: state.readCount, ttl: describeTtl(state.ttlDays) })
-    : t('settings.readStats.none');
+  if (!state.readCount) {
+    els.readStats.textContent = t('settings.readStats.none');
+    return;
+  }
+
+  /*
+   * The cap on the number of markers is the one thing that can cut the horizon the user wrote: when
+   * the live markers no longer fit, the oldest are forgotten before their term and their news comes
+   * back early. The card names the horizon the storage really honours, not the one it was asked for.
+   */
+  const honored = store.readHonoredDays(read, ttlDays);
+  const parts = [t('settings.readStats', { count: state.readCount, ttl: describeTtl(honored) })];
+  if (honored < ttlDays) {
+    parts.push(
+      t('settings.readStats.capped', { max: MAX_READ_RECORDS, honored: describeTtl(honored) }),
+    );
+  }
+  els.readStats.textContent = parts.join(' · ');
 }
 
 /** Reflect the stored horizon in the field and clear any leftover error. */

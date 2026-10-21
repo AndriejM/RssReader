@@ -325,9 +325,11 @@ only via the **“Write”** button. While a field's value differs from what is 
 active and “Changes not saved” appears at the bottom of the card; after saving, the same spot
 shows “Saved: marks burn out in M days · sound: <file> · language: <language>”. Below the field
 are the value currently in storage and the number of marks it holds (“read marks: N · burn out
-in M days”). Next to the field is the **“Forget read items”** button (with a confirmation): one
-press clears the entire `read` list without waiting for `read_ttl_days` to expire, so news items
-you deleted earlier may come back on the next feed load.
+in M days”); when the list has grown past `MAX_READ_RECORDS` and the oldest marks had to be
+forgotten before their term, the same line names what is left of the period and says that the
+reader keeps no more than that many marks. Next to the field is the **“Forget read items”** button
+(with a confirmation): one press clears the entire `read` list without waiting for `read_ttl_days`
+to expire, so news items you deleted earlier may come back on the next feed load.
 
 All six values live under the `settings` key in `chrome.storage.local` — in the same place as
 the theme. The service worker reads them: the period — when it purges read items, so a horizon
@@ -635,10 +637,11 @@ background.
 | `DEFAULT_DELAY_TIMEOUT` | 30 min | `util.js` |
 | `DEFAULT_CLEAN_TIMEOUT` | 1440 min (1 day) | `util.js` |
 | `MAX_ITEMS_PER_FEED` | 250 | `util.js` — how many freshest headlines of one feed are stored |
+| `MAX_ITEMS_TOTAL` | 2000 | `util.js` — how many freshest headlines the whole shelf holds, whatever number of feeds they come from (`storage.capItems` applies both caps) |
 | `MAX_ENTRIES` | 250 | `rss.js` — how many entries are taken from one feed response: the freshest by their date, whatever order the feed listed them in |
 | `READ_TTL_DAYS` | 7 days | `util.js` — the **default value** for the “read” mark lifetime; configurable via the `read_ttl_days` field |
 | `MIN_READ_TTL_DAYS` / `MAX_READ_TTL_DAYS` | 1 / 3650 | `util.js` — bounds of this field (`util.toDays`) |
-| `MAX_READ_RECORDS` | 1000 | `util.js` — how many such marks are stored; the oldest are evicted first |
+| `MAX_READ_RECORDS` | 1000 | `util.js` — how many such marks are stored: the ones whose term has run out are evicted first, and only when the live ones no longer fit do the oldest live marks go |
 | `MAX_PREVIEW_CHARS` | 8000 | `util.js` — how much of a feed `<description>` a stored headline keeps |
 | `PREVIEW_IMAGE_WIDTH` / `PREVIEW_IMAGE_HEIGHT` | 180 / 240 | `util.js` — the box given to every `<img>` a feed ships inside `<description>` |
 | `MAX_PARAGRAPHS` / `MAX_CHARACTERS` | 60 / 16000 | `extract.js` — the limit of article text in the right panel |
@@ -789,8 +792,20 @@ background.
   this list, so a feed that has been serving the same set of news for years does not refill the
   reader every `delay_timeout`. A mark lives `read_ttl_days` days (by default `READ_TTL_DAYS` =
   7), `store.cleanupRead` cleans it with the same alarm once a minute, and the list holds at most
-  `MAX_READ_RECORDS` records: it does not grow without bound, but a once-very-old news item
-  eventually gets a chance to enter the reader again.
+  `MAX_READ_RECORDS` records.
+- **The cap of the read list never outruns the horizon in silence**: `store.capRead` takes the
+  marks whose `read_ttl_days` has already run out first — they hold no news back anyway — and only
+  when the live marks alone no longer fit does it let the oldest live marks go. `util.honoredReadDays`
+  (wrapped by `store.readHonoredDays`) computes the horizon the list can really keep: `read_ttl_days`
+  while the marks fit, otherwise the age of the oldest live mark the cap still holds. The foot of the
+  global settings screen names that horizon and says that the reader keeps at most
+  `MAX_READ_RECORDS` marks, so a horizon of 3650 days over a list that cannot hold it is a number
+  the user sees, not a promise the storage quietly breaks.
+- **The shelf is capped twice**: `MAX_ITEMS_PER_FEED` bounds the headlines of one feed, and
+  `MAX_ITEMS_TOTAL` bounds the headlines of all of them together — nothing bounds the number of
+  feeds a user adds, and every headline carries a preview of up to `MAX_PREVIEW_CHARS` characters.
+  `storage.capItems` applies both: first the freshest of every feed, then the freshest of the whole
+  shelf, so the headlines that go are the oldest the reader holds, whoever brought them.
 - **The read-item lifetime is a user setting, not a constant**: `store.cleanupRead` reads
   `read_ttl_days` from `settings` every time, so a value saved on the global settings screen via
   the “Write” button already applies at the next check: shorten the period — marks older than the
@@ -903,7 +918,8 @@ background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js and rss.js) and the guards over the screen markup: 118 tests
+                             # storage.js and rss.js), the guards over the screen markup and over what
+                             # one module borrows from another: 125 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -1075,6 +1091,12 @@ rules are covered by the tests.
   runs once a minute) — Chrome will not allow finer.
 - **At least 1 day** for `read_ttl_days`: “forget read items immediately” is the “Forget read
   items” button, not a zero term.
+- **A horizon longer than the read list can hold is shortened, and said so**: the list keeps at most
+  `MAX_READ_RECORDS` marks, so a `read_ttl_days` of 3650 over a reader that deletes hundreds of
+  headlines a day cannot be honoured in full. What is left of it — the age of the oldest mark the
+  list can still hold — is what the settings screen shows.
+- **The number of stored headlines is bounded** by `MAX_ITEMS_TOTAL` across all feeds: a reader of
+  many feeds loses its oldest headlines, not the newest ones.
 - **Article text cannot always be extracted**: pages built by JavaScript, pages behind paywalls,
   or feeds that serve only an excerpt will show a message about it and the link to the original.
 - **The service worker “sleeps”** between Chrome events; this is normal for MV3. Alarms survive a

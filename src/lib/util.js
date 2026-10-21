@@ -24,6 +24,13 @@ export const MAX_FEED_BACKOFF_MINUTES = 1440; // 1 day
 /** Storage guard: newest headlines kept per feed. */
 export const MAX_ITEMS_PER_FEED = 250;
 
+/**
+ * Storage guard: newest headlines kept in total. A feed is capped on its own (`MAX_ITEMS_PER_FEED`),
+ * but feeds are not: a reader of a hundred feeds would otherwise hold twenty-five thousand headlines
+ * and their previews. When the total overflows, the oldest headlines of the whole shelf go first.
+ */
+export const MAX_ITEMS_TOTAL = 2000;
+
 /** Storage guard: feed `<description>` blobs are capped so `chrome.storage.local` stays lean. */
 export const MAX_PREVIEW_CHARS = 8000;
 
@@ -41,7 +48,11 @@ export const READ_TTL_DAYS = 7;
 export const MIN_READ_TTL_DAYS = 1;
 export const MAX_READ_TTL_DAYS = 3650;
 
-/** Storage guard: how many read markers are kept; the oldest fall out first. */
+/**
+ * Storage guard: how many read markers are kept. Expired markers fall out first — they hold nothing
+ * back anyway; only when the live ones alone overflow the list do the oldest live markers go, and
+ * that is when `read_ttl_days` stops being the whole truth (see `honoredReadDays`).
+ */
 export const MAX_READ_RECORDS = 1000;
 
 /**
@@ -273,6 +284,33 @@ export function isReadExpired(record, now = Date.now(), ttlDays = READ_TTL_DAYS)
   if (!when) return true;
   const ttl = Math.max(1, Number(ttlDays) || READ_TTL_DAYS);
   return now - when >= ttl * 24 * 60 * 60000;
+}
+
+/**
+ * The horizon the read list really honours — `ttlDays` while every live marker fits in
+ * `maxRecords`, otherwise the age of the oldest live marker the cap is forced to keep.
+ *
+ * A cap smaller than what the horizon asks for is the one way a deleted news comes back before its
+ * term runs out. The horizon is a user setting, so the reader cannot keep that silent: whatever is
+ * left of it is what the screens name.
+ */
+export function honoredReadDays(
+  read,
+  ttlDays = READ_TTL_DAYS,
+  maxRecords = MAX_READ_RECORDS,
+  now = Date.now(),
+) {
+  const ttl = Math.max(1, Number(ttlDays) || READ_TTL_DAYS);
+  const list = Array.isArray(read) ? read.filter(Boolean) : [];
+  if (list.length <= maxRecords) return ttl;
+
+  const live = list
+    .filter((record) => !isReadExpired(record, now, ttl))
+    .sort((a, b) => readTime(b) - readTime(a));
+  if (live.length <= maxRecords) return ttl;
+
+  const age = now - readTime(live[maxRecords - 1]);
+  return Math.max(0, Math.min(ttl, Math.floor(age / (24 * 60 * 60000))));
 }
 
 /** How far from the end of the cut a half-written character reference may stand to be worth cutting away. */

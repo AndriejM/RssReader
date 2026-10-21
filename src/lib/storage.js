@@ -9,12 +9,14 @@ import {
   DEFAULT_SOUND_VOLUME,
   FEED_FETCH_TIMEOUT_MS,
   MAX_ITEMS_PER_FEED,
+  MAX_ITEMS_TOTAL,
   MAX_READ_RECORDS,
   READ_TTL_DAYS,
   alarmPeriodMinutes,
   capPreview,
   dropUnpreviewableImages,
   feedBackoffMinutes,
+  honoredReadDays,
   MAX_SOURCE_ID_CHARS,
   isExpired,
   isReadExpired,
@@ -521,13 +523,28 @@ export function capPerFeed(items) {
 }
 
 /**
+ * The shelf as a whole is capped too: `capPerFeed` bounds one feed, nothing bounds the number of
+ * feeds. The oldest headlines of the whole shelf are the ones that go.
+ */
+export function capTotal(items) {
+  const sorted = sortItems(items);
+  return sorted.length <= MAX_ITEMS_TOTAL ? sorted : sorted.slice(0, MAX_ITEMS_TOTAL);
+}
+
+/** Both caps at once: the freshest headlines of every feed, of every feed the freshest overall. */
+export function capItems(items) {
+  return capTotal(capPerFeed(items));
+}
+
+/**
  * Store freshly read headlines, skipping the duplicates already in storage and the headlines the
  * user has deleted before — a feed server keeps shipping its old items, so without the read list
  * a deleted news would come back on the next `delay_timeout`.
  *
  * Duplicates are recognised by the identity of the headline (`sourceId`, its link where the feed
  * states no id) inside one feed; a read marker is matched across feeds.
- * @returns {{ added: number, skipped: number, seen: number }}
+ * @returns {{ added: number, skipped: number, seen: number }} `added` counts the headlines that
+ * stayed in storage after both caps ran.
  */
 export async function addItems(candidates) {
   const fresh = candidates.filter((item) => item?.uid && item?.link);
@@ -540,7 +557,7 @@ export async function addItems(candidates) {
    * than this field is still recognised by its own link. */
   const knownSources = new Set(items.map((item) => identityOf(item)));
   const readKeys = new Set(read.map((record) => readIdentity(record)));
-  let added = 0;
+  const accepted = new Set();
   let skipped = 0;
 
   for (const candidate of fresh) {
@@ -552,11 +569,17 @@ export async function addItems(candidates) {
     }
     known.add(candidate.uid);
     knownSources.add(identity);
+    accepted.add(candidate.uid);
     items.push(candidate);
-    added += 1;
   }
 
-  if (added > 0) await saveItems(capPerFeed(items));
+  /* A headline a cap cut back is not a headline the reader has, so the numbers a load reports are
+   * counted after the caps ran: they name the headlines that really are on the shelf. */
+  if (accepted.size === 0) return { added: 0, skipped, seen: candidates.length };
+
+  const kept = capItems(items);
+  await saveItems(kept);
+  const added = kept.reduce((n, item) => (accepted.has(item.uid) ? n + 1 : n), 0);
   return { added, skipped, seen: candidates.length };
 }
 
@@ -620,7 +643,7 @@ export async function markRead(items) {
   if (fresh.length === 0) return 0;
 
   const now = Date.now();
-  const read = await getRead();
+  const [read, ttlDays] = await Promise.all([getRead(), getReadTtlDays()]);
   const known = new Set(read.map((record) => readIdentity(record)));
   let added = 0;
 
@@ -632,15 +655,34 @@ export async function markRead(items) {
     added += 1;
   }
 
-  if (added > 0) await saveRead(capRead(read));
+  if (added > 0) await saveRead(capRead(read, ttlDays, now).read);
   return added;
 }
 
-/** Keep the newest `MAX_READ_RECORDS` markers; markers are small, but the list must not grow forever. */
-export function capRead(read) {
-  if (read.length <= MAX_READ_RECORDS) return read;
-  const byAge = [...read].sort((a, b) => readTime(b) - readTime(a));
-  return byAge.slice(0, MAX_READ_RECORDS);
+/**
+ * Keep the read list within `MAX_READ_RECORDS`: the markers whose horizon has already run out go
+ * first (they hold no news back anyway), and only when the live markers alone overflow the list do
+ * the oldest live markers go with them — which shortens the horizon the user asked for, so the
+ * number of markers sacrificed that way is reported instead of being decided in silence.
+ * @returns {{ read: object[], droppedLive: number }}
+ */
+export function capRead(read, ttlDays = READ_TTL_DAYS, now = Date.now()) {
+  const list = Array.isArray(read) ? read : [];
+  if (list.length <= MAX_READ_RECORDS) return { read: list, droppedLive: 0 };
+
+  const live = [];
+  for (const record of list) {
+    if (!isReadExpired(record, now, ttlDays)) live.push(record);
+  }
+  if (live.length <= MAX_READ_RECORDS) return { read: live, droppedLive: 0 };
+
+  live.sort((a, b) => readTime(b) - readTime(a));
+  return { read: live.slice(0, MAX_READ_RECORDS), droppedLive: live.length - MAX_READ_RECORDS };
+}
+
+/** How long the markers the list can actually keep live: `ttlDays`, or less once the cap bites. */
+export function readHonoredDays(read, ttlDays = READ_TTL_DAYS, now = Date.now()) {
+  return honoredReadDays(read, ttlDays, MAX_READ_RECORDS, now);
 }
 
 /**

@@ -27,6 +27,7 @@ const {
   FEED_FETCH_TIMEOUT_MS,
   MAX_FEED_BACKOFF_MINUTES,
   MAX_ITEMS_PER_FEED,
+  MAX_ITEMS_TOTAL,
   MAX_PREVIEW_CHARS,
   MAX_READ_RECORDS,
   MAX_READ_TTL_DAYS,
@@ -45,6 +46,7 @@ const {
   feedPauseRemaining,
   formatSince,
   humanDuration,
+  honoredReadDays,
   isExpired,
   isReadExpired,
   isValidHttpUrl,
@@ -588,6 +590,40 @@ test('capPerFeed keeps the newest headlines of every feed', () => {
   assert.equal(store.capPerFeed([]).length, 0);
 });
 
+test('capTotal bounds the headlines of every feed together', () => {
+  const fullFeeds = MAX_ITEMS_TOTAL / MAX_ITEMS_PER_FEED;
+  assert.ok(Number.isInteger(fullFeeds), 'the total cap is a whole number of full feeds');
+
+  const feed = (id, from) =>
+    Array.from({ length: MAX_ITEMS_PER_FEED }, (_, i) => ({
+      uid: `${id}-${i}`,
+      feedId: id,
+      title: `${id} ${i}`,
+      time: from + i,
+    }));
+
+  const items = [];
+  for (let f = 0; f < fullFeeds; f += 1) items.push(...feed(`f${f}`, (f + 1) * MAX_ITEMS_PER_FEED));
+  assert.equal(store.capTotal(items).length, MAX_ITEMS_TOTAL, 'a shelf exactly full is left alone');
+
+  /* A feed older than the whole shelf: every headline of every other feed is fresher than any of
+   * its own, so there is room for the newcomer only by dropping what the shelf holds oldest. */
+  items.push(...feed('old', 0));
+  const kept = store.capTotal(items);
+  assert.equal(kept.length, MAX_ITEMS_TOTAL, 'the shelf does not grow with every feed added to it');
+  assert.equal(
+    kept.filter((item) => item.feedId === 'old').length,
+    0,
+    'the oldest headlines of the whole shelf go first, whoever they belong to',
+  );
+  assert.equal(kept[0].feedId, `f${fullFeeds - 1}`, 'newest first');
+  assert.equal(
+    store.capItems(items).length,
+    MAX_ITEMS_TOTAL,
+    'the cap of one feed and the cap of all of them are applied together',
+  );
+});
+
 /* ---------------------------- read list ---------------------------- */
 
 test('makeReadRecord keeps the link, the publication date and the delete time', () => {
@@ -692,15 +728,56 @@ test('normalizeFontScales gives every reader column a size from the ladder', () 
   );
 });
 
-test('capRead keeps the newest read markers', () => {
-  const read = [];
-  for (let i = 0; i < MAX_READ_RECORDS + 5; i += 1) read.push({ link: `l${i}`, time: i });
+test('capRead burns the expired markers before it touches a live one', () => {
+  const now = 1_700_000_000_000;
+  const live = Array.from({ length: MAX_READ_RECORDS }, (_, i) => ({ link: `l${i}`, time: now - i * DAY }));
+  const dead = Array.from({ length: 5 }, (_, i) => ({ link: `d${i}`, time: now - (MAX_READ_TTL_DAYS + 1) * DAY }));
 
-  const kept = store.capRead(read);
-  assert.equal(kept.length, MAX_READ_RECORDS);
-  assert.equal(kept[0].link, `l${MAX_READ_RECORDS + 4}`, 'newest first');
-  assert.equal(kept.at(-1).link, 'l5', 'the 5 oldest dropped');
-  assert.equal(store.capRead(read.slice(0, 10)).length, 10, 'a list under the cap is untouched');
+  const capped = store.capRead([...live, ...dead], MAX_READ_TTL_DAYS, now);
+  assert.equal(capped.read.length, MAX_READ_RECORDS);
+  assert.equal(capped.droppedLive, 0, 'the horizon survived: what went had already burned out');
+  assert.deepEqual(
+    capped.read.map((record) => record.link),
+    live.map((record) => record.link),
+    'a marker that still keeps its news out is not what the cap sacrifices',
+  );
+
+  const untouched = store.capRead(live.slice(0, 10), MAX_READ_TTL_DAYS, now);
+  assert.equal(untouched.read.length, 10, 'a list under the cap is untouched');
+  assert.equal(untouched.droppedLive, 0);
+});
+
+test('capRead sacrifices the oldest live markers only when they no longer fit — and says so', () => {
+  const now = 1_700_000_000_000;
+  const live = Array.from({ length: MAX_READ_RECORDS + 5 }, (_, i) => ({ link: `l${i}`, time: now - i * DAY }));
+
+  const capped = store.capRead(live, MAX_READ_TTL_DAYS, now);
+  assert.equal(capped.read.length, MAX_READ_RECORDS);
+  assert.equal(capped.droppedLive, 5, 'the five live markers the list has no room for are named, not lost in silence');
+  assert.equal(capped.read[0].link, 'l0', 'newest first');
+  assert.equal(capped.read.at(-1).link, `l${MAX_READ_RECORDS - 1}`, 'the oldest live markers went');
+  assert.equal(capped.read.some((record) => record.link.startsWith('d')), false);
+});
+
+test('honoredReadDays names the horizon the read list really keeps', () => {
+  const now = 1_700_000_000_000;
+  const live = Array.from({ length: MAX_READ_RECORDS }, (_, i) => ({ link: `l${i}`, time: now - i * DAY }));
+
+  assert.equal(honoredReadDays(live, MAX_READ_TTL_DAYS, MAX_READ_RECORDS, now), MAX_READ_TTL_DAYS);
+  assert.equal(
+    honoredReadDays([...live, { link: 'dead', time: now - (MAX_READ_TTL_DAYS + 1) * DAY }], MAX_READ_TTL_DAYS, MAX_READ_RECORDS, now),
+    MAX_READ_TTL_DAYS,
+    'a marker whose term has run out is not what shortens the horizon',
+  );
+
+  const overflow = Array.from({ length: MAX_READ_RECORDS + 3 }, (_, i) => ({ link: `l${i}`, time: now - i * DAY }));
+  assert.equal(
+    honoredReadDays(overflow, MAX_READ_TTL_DAYS, MAX_READ_RECORDS, now),
+    MAX_READ_RECORDS - 1,
+    'the cap bites: the horizon left is the age of the oldest marker the list can still hold',
+  );
+  assert.equal(honoredReadDays([], MAX_READ_TTL_DAYS, MAX_READ_RECORDS, now), MAX_READ_TTL_DAYS);
+  assert.equal(honoredReadDays(undefined, MAX_READ_TTL_DAYS, MAX_READ_RECORDS, now), MAX_READ_TTL_DAYS);
 });
 
 /* -------------------- dedup by what the feed calls a headline -------------------- */
@@ -864,6 +941,51 @@ test('markRead keeps one marker for a news two feeds of one site ship twice', as
   }
 });
 
+test('the cap of the read list burns its dead markers, not the ones that still hold a news', async () => {
+  const feed = { id: 'f1', name: 'Site', rss_link: 'https://a.b/rss' };
+  const forget = storageMemory();
+
+  try {
+    await store.setReadTtlDays(MAX_READ_TTL_DAYS);
+
+    const marker = (path, ageDays) => ({
+      link: `https://a.b/${path}`,
+      sourceId: `https://a.b/${path}`,
+      sourceIdType: 'link',
+      pubDate: '',
+      time: Date.now() - ageDays * DAY,
+    });
+
+    const stored = [];
+    for (let i = 0; i < MAX_READ_RECORDS - 100; i += 1) stored.push(marker(`live/${i}`, 1));
+    for (let i = 0; i < 100; i += 1) stored.push(marker(`dead/${i}`, MAX_READ_TTL_DAYS + 1));
+    assert.equal(stored.length, MAX_READ_RECORDS, 'a full list of markers, a hundred of them burned out');
+    await store.saveRead(stored);
+
+    const extra = Array.from({ length: 10 }, (_, i) =>
+      store.makeItem({ feed, title: `extra ${i}`, link: `https://a.b/extra/${i}` }),
+    );
+    assert.equal(await store.markRead(extra), extra.length);
+
+    const read = await store.getRead();
+    assert.equal(read.length, MAX_READ_RECORDS - 90, 'the list stays capped');
+    assert.equal(read.filter((record) => record.link.includes('/dead/')).length, 0, 'burned-out markers were the first to go');
+    assert.equal(
+      read.filter((record) => record.link.includes('/live/')).length,
+      MAX_READ_RECORDS - 100,
+      'a marker that still keeps its news out is not what the cap sacrifices: the horizon is not broken to fit the list',
+    );
+    assert.equal(
+      read.filter((record) => record.link.includes('/extra/')).length,
+      10,
+      'the news deleted just now is held back too',
+    );
+    assert.equal(store.readHonoredDays(read, MAX_READ_TTL_DAYS), MAX_READ_TTL_DAYS);
+  } finally {
+    forget();
+  }
+});
+
 test('the same news of two feeds stays two headlines', async () => {
   const syndicated = 'https://a.b/news/1/?utm_source=rss';
   const forget = storageMemory();
@@ -874,6 +996,44 @@ test('the same news of two feeds stays two headlines', async () => {
 
     assert.equal((await store.addItems([first, second])).added, 2, 'each feed keeps its own copy of a news it ships');
     assert.equal((await store.itemsForFeed('f2'))[0].feedName, 'Mirror');
+  } finally {
+    forget();
+  }
+});
+
+test('the stored headlines of all feeds together do not grow without bound', async () => {
+  const forget = storageMemory();
+  const feeds = MAX_ITEMS_TOTAL / MAX_ITEMS_PER_FEED + 1;
+
+  try {
+    /* Nine feeds of 250 headlines each, every headline of the last one older than every headline
+     * of every feed before it. */
+    const candidates = [];
+    for (let f = 0; f < feeds; f += 1) {
+      const feed = { id: `f${f}`, name: `Feed ${f}`, rss_link: `https://a.b/${f}/rss` };
+      for (let i = 0; i < MAX_ITEMS_PER_FEED; i += 1) {
+        candidates.push(store.makeItem({
+          feed,
+          title: `news ${f}-${i}`,
+          link: `https://a.b/${f}/news/${i}`,
+          pubDate: new Date(Date.now() - (f * MAX_ITEMS_PER_FEED + i) * DAY).toUTCString(),
+        }));
+      }
+    }
+
+    assert.equal(
+      (await store.addItems(candidates)).added,
+      MAX_ITEMS_TOTAL,
+      'the load reports the headlines that stayed on the shelf, not the ones its caps threw back out',
+    );
+    const items = await store.getItems();
+    assert.equal(items.length, MAX_ITEMS_TOTAL, 'a feed is capped on its own, and now the shelf of all of them is capped too');
+    assert.equal(
+      items.filter((item) => item.feedId === `f${feeds - 1}`).length,
+      0,
+      'the freshest headlines of the eight feeds stayed, the oldest feed of the shelf is the one with no room left',
+    );
+    assert.equal(await store.countItems(), MAX_ITEMS_TOTAL, 'the badge counts the shelf the reader really holds');
   } finally {
     forget();
   }
@@ -2758,6 +2918,103 @@ test('the feeds and settings screens say what their buttons did', () => {
     const keys = new Set(i18n.dictionaryKeys(lang));
     for (const key of captions) {
       assert.ok(keys.has(key), `${lang} has no ${key}, which a table of this screen asks to be named`);
+    }
+  }
+});
+
+test('the settings screen names the horizon its read list can really hold', () => {
+  const page = fs.readFileSync(new URL('../src/settings.js', import.meta.url), 'utf8');
+
+  assert.match(
+    page,
+    /store\.readHonoredDays\(read, ttlDays\)/,
+    'the foot of the card shows the horizon the storage honours, not only the one it was asked for',
+  );
+  assert.match(
+    page,
+    /settings\.readStats\.capped/,
+    'a cap that cut the horizon short is said out loud instead of decided in silence',
+  );
+
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of ['settings.readStats', 'settings.readStats.capped']) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the foot of the settings card asks to show`);
+    }
+  }
+});
+
+/*
+ * A name taken from a module that does not export it is not an error a browser reports: it is
+ * `undefined`, and a card that says «at most undefined markers» is exactly the kind of mistake a
+ * test should meet before a user reads it. Every module of the extension exports its names on their
+ * own line, so both ways a file borrows — by name, or through a whole module it names — can be
+ * checked against what the borrowed module really exports.
+ */
+test('every name a file borrows from another is one that module really exports', () => {
+  const src = new URL('../src/', import.meta.url);
+  const files = fs
+    .readdirSync(src, { recursive: true })
+    .filter((entry) => String(entry).endsWith('.js'))
+    .map((entry) => String(entry).split('\\').join('/'));
+
+  assert.ok(files.length > 10, 'the scan of the sources found almost nothing to check');
+
+  const exportsOf = (url) => {
+    const source = fs.readFileSync(url, 'utf8');
+    const names = new Set();
+    for (const match of source.matchAll(/^export\s+(?:async\s+)?(?:const|let|var|function|class)\s+(\w+)/gm)) {
+      names.add(match[1]);
+    }
+    for (const match of source.matchAll(/^export\s*\{([^}]*)\}/gm)) {
+      for (const part of match[1].split(',')) {
+        const name = part.split(/\s+as\s+/).pop().trim();
+        if (name) names.add(name);
+      }
+    }
+    return names;
+  };
+
+  const exported = new Map();
+  for (const file of files) {
+    exported.set(new URL(file, src).href, exportsOf(new URL(file, src)));
+  }
+
+  for (const file of files) {
+    const url = new URL(file, src);
+    const source = fs.readFileSync(url, 'utf8');
+
+    for (const match of source.matchAll(/^import\s+\{([^}]*)\}\s+from\s+'([^']+)'/gm)) {
+      const [, names, spec] = match;
+      if (!spec.startsWith('.')) continue;
+
+      const target = new URL(spec, url);
+      const available = exported.get(target.href);
+      assert.ok(available, `${file} imports ${spec}, which is not a module of this extension`);
+
+      for (const part of names.split(',')) {
+        const name = part.split(/\s+as\s+/)[0].trim();
+        if (!name) continue;
+        assert.ok(
+          available.has(name),
+          `${file} takes ${name} from ${spec}, which does not export it`,
+        );
+      }
+    }
+
+    /* A namespace import answers for every name the file reaches through it — the way a screen asks
+     * the storage for a constant it has no copy of of its own. */
+    for (const match of source.matchAll(/^import\s+\*\s+as\s+(\w+)\s+from\s+'(\.[^']+)'/gm)) {
+      const [, alias, spec] = match;
+      const available = exported.get(new URL(spec, url).href);
+      assert.ok(available, `${file} borrows ${spec}, which is not a module of this extension`);
+
+      for (const used of source.matchAll(new RegExp(`\\b${alias}\\.(\\w+)`, 'g'))) {
+        assert.ok(
+          available.has(used[1]),
+          `${file} reads ${alias}.${used[1]}, which ${spec} does not export`,
+        );
+      }
     }
   }
 });

@@ -225,6 +225,8 @@ const DICTIONARIES = {
       'Заголовок, удалённый из читалки, помечается прочитанным, чтобы лента не вернула его при следующей загрузке. Через несколько дней метка сгорает, и новость может появиться снова. «Забыть прочитанные» удаляет все метки сразу — удалённые новости вернутся в ленты.',
     'settings.readStats.none': 'прочитанных меток нет',
     'settings.readStats': 'прочитанных меток: {count} · горят через {ttl}',
+    'settings.readStats.capped':
+      'читалка держит не больше {max} меток: самые старые забыты раньше срока, эти горят через {honored}',
     'settings.soundStats': 'сейчас играет: {name}',
     'settings.save.tooltipDirty': 'Записать срок, звук и язык в хранилище',
     'settings.save.tooltipClean': 'Все поля уже записаны',
@@ -479,6 +481,8 @@ const DICTIONARIES = {
       'A headline deleted from the reader is marked as read so a feed does not bring it back on the next load. After a few days the marker burns out and the news may appear again. “Forget read” deletes every marker at once — the headlines you removed before come back to the feeds.',
     'settings.readStats.none': 'no read markers',
     'settings.readStats': 'read markers: {count} · burn out after {ttl}',
+    'settings.readStats.capped':
+      'the reader keeps at most {max} markers: the oldest were forgotten before their term, these burn out after {honored}',
     'settings.soundStats': 'now playing: {name}',
     'settings.save.tooltipDirty': 'Write the horizon, the sound and the language to storage',
     'settings.save.tooltipClean': 'Every field is already saved',
@@ -727,6 +731,8 @@ const DICTIONARIES = {
       'Заголовок, видалений із читалки, позначається як прочитаний, щоб стрічка не повернула його під час наступного завантаження. За кілька днів мітка згорає, і новина може з’явитися знову. «Забути прочитані» видаляє всі мітки одразу — видалені новини повернуться у стрічки.',
     'settings.readStats.none': 'міток прочитаного немає',
     'settings.readStats': 'міток прочитаного: {count} · згорають через {ttl}',
+    'settings.readStats.capped':
+      'читалка тримає не більше {max} міток: найдатовіші забуті достроково, ці згорають через {honored}',
     'settings.soundStats': 'зараз грає: {name}',
     'settings.save.tooltipDirty': 'Записати строк, звук і мову до сховища',
     'settings.save.tooltipClean': 'Усі поля вже записані',
@@ -976,6 +982,8 @@ const DICTIONARIES = {
       'Nagłówek usunięty z czytnika jest oznaczany jako przeczytany, aby kanał nie przywrócił go przy następnym wczytywaniu. Po kilku dniach znacznik wygasa i wiadomość może pojawić się ponownie. „Zapomnij przeczytane” usuwa wszystkie znaczniki naraz — usunięte wiadomości wrócą do kanałów.',
     'settings.readStats.none': 'brak znaczników przeczytanych',
     'settings.readStats': 'znaczniki przeczytanych: {count} · wygasają po {ttl}',
+    'settings.readStats.capped':
+      'czytnik przechowuje nie więcej niż {max} znaczników: najstarsze zapomniano przed terminem, te wygasają po {honored}',
     'settings.soundStats': 'teraz gra: {name}',
     'settings.save.tooltipDirty': 'Zapisz horyzont, dźwięk i język w pamięci',
     'settings.save.tooltipClean': 'Wszystkie pola są już zapisane',
@@ -1226,6 +1234,8 @@ const DICTIONARIES = {
       'Eine aus der Lesefenster-Liste gelöschte Schlagzeile wird als gelesen markiert, damit der Feed sie beim nächsten Laden nicht zurückbringt. Nach einigen Tagen verfällt die Markierung, und die Nachricht kann wieder erscheinen. „Gelesene vergessen“ löscht alle Markierungen auf einmal — gelöschte Nachrichten kehren in die Feeds zurück.',
     'settings.readStats.none': 'keine gelesenen Markierungen',
     'settings.readStats': 'gelesene Markierungen: {count} · verfallen in {ttl}',
+    'settings.readStats.capped':
+      'der Leser hält höchstens {max} Markierungen: die ältesten wurden vor ihrer Frist vergessen, diese verfallen in {honored}',
     'settings.soundStats': 'spielt gerade: {name}',
     'settings.save.tooltipDirty': 'Frist, Ton und Sprache im Speicher ablegen',
     'settings.save.tooltipClean': 'Alle Felder sind bereits gespeichert',
@@ -1476,6 +1486,8 @@ const DICTIONARIES = {
       'Un titre supprimé du lecteur est marqué comme lu pour que le flux ne le ramène pas au chargement suivant. Au bout de quelques jours, la marque s’éteint et l’actualité peut réapparaître. « Oublier les lus » supprime toutes les marques d’un coup — les actualités supprimées reviennent dans les flux.',
     'settings.readStats.none': 'aucune marque de lecture',
     'settings.readStats': 'marques de lecture : {count} · expiration dans {ttl}',
+    'settings.readStats.capped':
+      'le lecteur garde au plus {max} marques : les plus anciennes ont été oubliées avant leur délai, celles-ci expirent dans {honored}',
     'settings.soundStats': 'en lecture : {name}',
     'settings.save.tooltipDirty': 'Enregistrer le délai, le son et la langue dans le stockage',
     'settings.save.tooltipClean': 'Tous les champs sont déjà enregistrés',
@@ -1726,6 +1738,8 @@ const DICTIONARIES = {
       'Un titular eliminado del lector se marca como leído para que la fuente no lo devuelva en la siguiente carga. Pasados unos días la marca se agota y la noticia puede volver a aparecer. «Olvidar los leídos» elimina todas las marcas de una vez — las noticias eliminadas vuelven a las fuentes.',
     'settings.readStats.none': 'no hay marcas de lectura',
     'settings.readStats': 'marcas de lectura: {count} · caducan en {ttl}',
+    'settings.readStats.capped':
+      'el lector guarda como máximo {max} marcas: las más antiguas se olvidaron antes de plazo, estas caducan en {honored}',
     'settings.soundStats': 'suena ahora: {name}',
     'settings.save.tooltipDirty': 'Grabar el plazo, el sonido y el idioma en el almacenamiento',
     'settings.save.tooltipClean': 'Todos los campos ya están grabados',
