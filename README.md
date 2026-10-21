@@ -189,14 +189,17 @@ Three vertical panels:
    labelled with the name of the feed it came from. A headline whose news a read mark holds out of
    the feeds carries a check glyph after its title and is drawn muted: it is still on the shelf and
    still opens its text, but no feed brings its news back while the mark lives.
-3. **Content** — the article text loaded at the moment of the click. The article headline in the
-   right panel is itself a link to the original (new tab); in the corner above the text there are
-   two icons: a check icon marks the open headline read, or — when it already carries a mark —
-   takes that mark off, and the headline stays exactly where it stands; a delete icon removes the
-   headline from the list and from storage, immediately opens the next headline of the same feed
-   (or, when “All feeds” is selected, the next headline by date), and marks the deleted one read.
-   When the open headline is marked, a note above its text says what that means for the feeds, and
-   a delete leaves a line under the toolbar that names the headline it took and offers **Undo**.
+3. **Content** — the stored `<description>` of the open headline, shown the moment it is clicked. The
+   article headline in the right panel is itself a link to the original (new tab); in the corner above
+   the text there are three icons: a document icon pulls the full text of the news from its page — the
+   `f` key does the same — and sets it over the stored description; a check icon marks the open headline
+   read, or — when it already carries a mark — takes that mark off, and the headline stays exactly where
+   it stands; a delete icon removes the headline from the list and from storage, immediately opens the
+   next headline of the same feed (or, when “All feeds” is selected, the next headline by date), and marks
+   the deleted one read. The full text is fetched only on that click — never for every headline at once —
+   and a page that will not answer within `ARTICLE_FETCH_TIMEOUT_MS` is named in the reader's own language.
+   When the open headline is marked, a note above its text says what that means for the feeds, and a
+   delete leaves a line under the toolbar that names the headline it took and offers **Undo**.
 
 In the head of every panel there is its own font size switcher: four buttons drawn as the letter “A”,
 each at the size it stands for. A button scales only the column it sits in — the feed list, the
@@ -283,6 +286,7 @@ search field holds the same letters) or while Ctrl/Meta/Alt are down:
 | `↓` or `j` | open the next headline of the current selection |
 | `↑` or `k` | open the previous headline of the current selection |
 | `Enter` | open the original of the open headline in a new tab |
+| `f` | pull the full text of the open headline from its page, over the stored description |
 | `r` | re-read the selected feed («All feeds» — every feed) |
 | `m` | mark the open headline read, or take that mark back |
 | `d` | delete the open headline (it can still be taken back) |
@@ -292,7 +296,7 @@ search field holds the same letters) or while Ctrl/Meta/Alt are down:
 | `?` | open (or close) the list of these keys, inside the reader |
 
 A letter answers to its place on the keyboard, not to the character the current layout prints: on a
-Cyrillic layout the very keys of this table print `о`, `л`, `к`, `ь`, `в`, `г`, and no key there prints
+Cyrillic layout the very keys of this table print `а`, `о`, `л`, `к`, `ь`, `в`, `г`, and no key there prints
 `/` at all, so the search field opens from the key standing under `/` (the one printing `.` there).
 What was printed is answered to first, so a layout that moves its letters (Dvorak, AZERTY) keeps its own
 glyph working.
@@ -420,7 +424,9 @@ src/lib/rss.js                loading and parsing RSS 2.0 / Atom / RDF / JSON Fe
                               the offscreen document)
 src/lib/encoding.js           response bytes → text: find the feed's encoding (BOM, `Content-Type`,
                               the XML declaration) and decode it with it (covered by tests)
-src/lib/extract.js            article text extraction on a headline click
+src/lib/extract.js            article text pulled from the page when the reader loads the full text of a
+                              headline (`fetchArticle` / `extractArticle`), and the safe preview of a stored
+                              `<description>` (`sanitizePreview`)
 src/lib/favicon.js            read a feed's site page and find the favicon it declares: the link is
                               stored on the feed when the feed is added (the pure reading is covered
                               by tests)
@@ -467,7 +473,7 @@ examples/                     example_rss.xml — a sample feed; neither the rea
 | # | Requirement | Where it is implemented |
 |---|---|---|
 | 1 | Configuration screen with a feed list, add/edit/delete; a feed has `rss_link`, `name`, `delay_timeout`, `clean_timeout`. Headlines are stored with a link to the feed, the headline, the http link to the news and the loading time | `src/feeds.html`, `src/feeds.js`, `util.normalizeFeed`, `store.makeItem` |
-| 2 | Three vertical panels: feeds → headlines from storage → content; the content is fetched dynamically on a click; above it a delete button (from the list and from storage), the link to the original is in the article headline itself | `src/index.html`, `src/index.js`, `src/lib/extract.js`, `store.removeItem` |
+| 2 | Three vertical panels: feeds → headlines from storage → content; the stored `<description>` opens on a click and the full article text is pulled from its page on demand (the document icon / `f`); above it a delete button (from the list and from storage), the link to the original is in the article headline itself | `src/index.html`, `src/index.js`, `src/lib/extract.js`, `store.removeItem` |
 | 3 | Clicking the icon opens the reading screen in a new tab, and if it is already open — the existing tab is activated rather than a new one created | `chrome.action.onClicked` in `src/background.js` → `tabs.focusOrCreateTab` (no `default_popup` in the manifest) |
 | 4 | Automatic headline deletion once `clean_timeout` expires | `store.cleanup` + `CLEANUP_ALARM_NAME` in `src/lib/alarms.js` (checked once a minute), plus `store.cleanup()` when the reader opens |
 | 5 | Light/dark theme toggle | `src/lib/theme.js`, `src/styles/theme.css`; the value is in `chrome.storage.local`, so it is synchronous across all pages |
@@ -1092,12 +1098,14 @@ rules are covered by the tests.
     return to the reader → the same feed is open with the same word in the field.
 25. Press `/`, then a few letters → the search filters as you type. Press `↓` / `↑` (or `j` / `k`) →
     the cursor moves through the headlines and the text in the right panel follows, the row staying in
-    view; `Enter` opens the original of the open headline in a new tab; `d` deletes it and opens the
+    view; `Enter` opens the original of the open headline in a new tab; `f` pulls the full text of
+    that headline from its page, over the stored description; `d` deletes it and opens the
     next visible one; `r` re-reads the selected feed. None of these keys fires while the cursor stands
     in the search field, except the arrows. Every row the keyboard opens takes the focus, and a screen
     reader reads its name; the outcome of `r` is said out loud from the hidden status line («5 new
     headlines», «3 feeds could not be refreshed»). Switch the keyboard to a Cyrillic layout and press
-    the same places: `j`, `k`, `r`, `m`, `d`, `u` answer there too, as does the key standing under `/`.
+    the same places: `j`, `k`, `r`, `m`, `d`, `u` answer there too, as does the key standing under `/`,
+    and the key printing `а` there answers to `f`.
 26. Press `?` (or click the «?» icon in the reader header) → a window over the three columns lists every
     key above with what it does. While it stands, `j`, `d`, `r` and `/` do nothing to the headlines;
     `?` or `Esc` or the close icon or a click beside the card closes it, and the cursor returns to the

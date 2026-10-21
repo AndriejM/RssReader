@@ -3064,6 +3064,60 @@ test('the reader shows the read mark, its toggle and the way back from a delete'
   assert.equal(setMarks, fromStorage, 'the reader sets its read marks by something other than the match the storage itself uses');
 });
 
+/**
+ * The README promises «содержание подгружается динамически в момент клика»: a headline click shows
+ * the stored `<description>`, and the full text of the page is pulled over it on demand — by the
+ * button in the article toolbar or by the `f` key. `extract.fetchArticle` and `extract.extractArticle`
+ * stand only for this, so the guard keeps the whole trip — the import, the button, its glyph, the key,
+ * the race guard and the seven dictionaries — from going dark and turning them back into dead code.
+ */
+test('the reader pulls the full text of an open headline from its page', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const html = read('src/index.html');
+  const page = read('src/index.js');
+
+  /* The extraction is not left unused: the page imports `fetchArticle` and reaches the open headline's
+   * page with it, under the reader's own timeout. */
+  assert.ok(/import \{[^}]*\bfetchArticle\b[^}]*\} from '\.\/lib\/extract\.js'/.test(page), 'the reader never imports the article fetch it promises');
+  assert.ok(page.includes('await fetchArticle(item.link)'), 'the full-text request is sent to no headline');
+
+  /* The button: declared, drawn by a glyph the reader really defines, and wired to the load. */
+  assert.ok(html.includes('id="content-article"'), 'the reader declares no button that pulls the full text');
+  assert.ok(html.includes('<symbol id="icon-article"'), 'the reader asks for a full-text glyph its sprite never defines');
+  assert.ok(html.includes('data-i18n-title="reader.content.article.tooltip"'), 'the full-text button is named by nothing a language translates');
+  assert.ok(page.includes("document.getElementById('content-article')"), 'the page does not know the full-text button the markup declares');
+  assert.ok(page.includes('els.contentArticle.addEventListener'), 'the full-text button answers to no click');
+  assert.ok(page.includes('els.contentArticle.hidden = true'), 'a placeholder leaves the full-text button standing over no headline');
+
+  /* The key stands in the switch and in the reader's own key list, both ways. */
+  assert.ok(page.includes("case 'f':"), 'no key asks the reader to pull the full text');
+  assert.ok(html.includes('<kbd>f</kbd>'), 'the reader answers to f, which its own list never names');
+
+  /* A page that answers late must not overwrite a headline the cursor has already moved on to. */
+  assert.ok(page.includes('state.articleToken += 1'), 'opening a headline does not retire the page still loading for the last one');
+  assert.ok(page.includes('const token = ++state.articleToken'), 'the full-text load keeps no token to judge a late answer by');
+  assert.ok(page.includes('token !== state.articleToken'), 'a late page is allowed to overwrite the article that opened since it was asked');
+
+  /* An extraction that finds nothing, and a page that refuses, are said in the reader's own language. */
+  assert.ok(page.includes("note(t('reader.content.articleNone'))"), 'a page with no article text is left without a word about it');
+  assert.ok(page.includes('note(describeError(error)'), 'a page that refuses its full text is not named by a key every language translates');
+
+  const captions = [
+    'reader.keys.fullText',
+    'reader.content.article.tooltip',
+    'reader.content.article.aria',
+    'reader.content.articleLoading',
+    'reader.content.articleTruncated',
+    'reader.content.articleNone',
+  ];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the full-text article asks to show`);
+    }
+  }
+});
+
 /* ---------------------- feed health on the settings screen ---------------------- */
 
 /**

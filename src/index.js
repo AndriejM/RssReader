@@ -1,6 +1,6 @@
 // Three-panel reader: feeds -> stored headlines (title + pubDate) -> stored <description> rendered on click.
 
-import { sanitizePreview } from './lib/extract.js';
+import { fetchArticle, sanitizePreview } from './lib/extract.js';
 import { describeError } from './lib/errors.js';
 import { loadColumnWidths, mountColumnResizers, wireColumnWidthChanges } from './lib/columns.js';
 import { loadFontScales, mountFontScales, wireFontScaleChanges } from './lib/fontsize.js';
@@ -46,6 +46,7 @@ const els = {
 
   contentDelete: document.getElementById('content-delete'),
   contentRead: document.getElementById('content-read'),
+  contentArticle: document.getElementById('content-article'),
   contentBody: document.getElementById('content-body'),
   /* Плейсхолдер правой панели и сама статья — два соседа, а не одно место: панель говорит то одно,
    * то другое, живой регион при этом не пересоздаётся (см. `showPlaceholder`). */
@@ -68,6 +69,12 @@ const state = {
   query: '',
   /** Заголовок, который читалка ещё может вернуть: сам он и сколько живёт его строка отмены. */
   undo: null,
+  /**
+   * Номер запроса полного текста: `renderArticle` поднимает его при каждом открытии заголовка, а
+   * `loadArticleText` сверяет свой номер с этим — чтобы страница, пришедшая поздно, не растёрла
+   * уже открытый заголовок.
+   */
+  articleToken: 0,
   /**
    * Отказ последней попытки прочесть то, что выбрано сейчас: ключ словаря и сам отказ. Его держит
    * строка под головой средней колонки, а не правая панель: отказ сети не имеет права затирать
@@ -542,6 +549,7 @@ function showPlaceholder(message, { alert = false } = {}) {
   state.uid = null;
   els.contentDelete.hidden = true;
   els.contentRead.hidden = true;
+  els.contentArticle.hidden = true;
   els.articleBody.replaceChildren();
 
   const p = els.contentEmpty;
@@ -685,27 +693,20 @@ function selectHeadline(uid) {
 
 /** Правая панель открытой новости: заголовок-ссылка, источник и сохранённое `<description>`. */
 function renderArticle(item) {
+  /* Новая открытая новость начинается с её сохранённого превью; полный текст, если читатель его
+   * запросит, подтянется поверх. Поднятый номер отменяет страницу, которую грузили для прежнего
+   * заголовка: она не должна прийти позже и растереть этот. */
+  state.articleToken += 1;
   els.contentDelete.hidden = false;
   els.contentEmpty.hidden = true;
   paintReadButton(item);
+  paintArticleButton(item);
 
-  const title = titleHeading(item.title || t('common.untitled'), item.link);
-  const source = document.createElement('div');
-  source.className = 'source';
-  const name = item.feedName || item.rss_link;
-  const when = itemTime(item);
-  source.textContent = when
-    ? t('reader.source', { name, since: formatSince(when, Date.now(), unitLabels()) })
-    : name;
-
-  const preview = sanitizePreview(item.description);
-  /* Метка «прочитано» сказана и в самой статье: строка средней колонки показывает её глифом, здесь
-   * она названа словами — тому, кто читает панель вслух. */
   const marked = state.read.has(item.uid) ? [note(t('reader.content.marked'), 'marked')] : [];
+  const preview = sanitizePreview(item.description);
   if (!preview.node) {
     els.articleBody.replaceChildren(
-      title,
-      source,
+      ...articleHead(item),
       ...marked,
       note(t('reader.content.noDescription'), 'error'),
       note(t('reader.content.originalByLink')),
@@ -714,7 +715,85 @@ function renderArticle(item) {
   }
 
   const notes = preview.truncated ? [note(t('reader.content.truncated'))] : [];
-  els.articleBody.replaceChildren(title, source, ...marked, preview.node, ...notes);
+  els.articleBody.replaceChildren(...articleHead(item), ...marked, preview.node, ...notes);
+}
+
+/** Заголовок-ссылка и строка источника — общая шапка правой панели для превью и для полного текста. */
+function articleHead(item) {
+  const title = titleHeading(item.title || t('common.untitled'), item.link);
+  const source = document.createElement('div');
+  source.className = 'source';
+  const name = item.feedName || item.rss_link;
+  const when = itemTime(item);
+  source.textContent = when
+    ? t('reader.source', { name, since: formatSince(when, Date.now(), unitLabels()) })
+    : name;
+  return [title, source];
+}
+
+/**
+ * Кнопка полного текста есть только у заголовка, куда можно сходить: без ссылки идти некуда, а
+ * кнопка, которая не может ничего сделать, была бы пустой дырой в панели.
+ */
+function paintArticleButton(item) {
+  els.contentArticle.hidden = !item.link;
+  els.contentArticle.disabled = false;
+}
+
+/**
+ * Требование «содержание подгружается динамически»: по кнопке (или клавише `f`) читалка идёт на
+ * страницу заголовка и вынимает из неё текст статьи, ставя его поверх сохранённого превью.
+ * Страница грузится ровно `ARTICLE_FETCH_TIMEOUT_MS`; отказ назван своим кодом и подписан языком
+ * читалки (`describeError`). Номер запроса сторожит гонку: если за это время курсор ушёл на другой
+ * заголовок, поздняя страница не должна растереть то, что открылось сейчас.
+ */
+async function loadArticleText() {
+  const item = openHeadline();
+  if (!item?.link) return;
+
+  const token = ++state.articleToken;
+  els.contentArticle.disabled = true;
+
+  const marked = state.read.has(item.uid) ? [note(t('reader.content.marked'), 'marked')] : [];
+  els.articleBody.replaceChildren(...articleHead(item), ...marked, note(t('reader.content.articleLoading')));
+
+  let article;
+  try {
+    article = await fetchArticle(item.link);
+  } catch (error) {
+    if (token !== state.articleToken) return;
+    els.articleBody.replaceChildren(
+      ...articleHead(item),
+      ...marked,
+      note(describeError(error), 'error'),
+      note(t('reader.content.originalByLink')),
+    );
+    return;
+  } finally {
+    /* Кнопка возвращается в строй, только если этот заголовок ещё открыт: иначе за неё уже
+     * отвечает `renderArticle` нового. */
+    if (token === state.articleToken) els.contentArticle.disabled = false;
+  }
+
+  if (token !== state.articleToken) return; // курсор ушёл: поздняя страница больше не нужна
+
+  const paragraphs = article.paragraphs.map((text) => {
+    const p = document.createElement('p');
+    p.textContent = text;
+    return p;
+  });
+  if (paragraphs.length === 0) {
+    els.articleBody.replaceChildren(
+      ...articleHead(item),
+      ...marked,
+      note(t('reader.content.articleNone')),
+      note(t('reader.content.originalByLink')),
+    );
+    return;
+  }
+
+  const notes = article.truncated ? [note(t('reader.content.articleTruncated'))] : [];
+  els.articleBody.replaceChildren(...articleHead(item), ...marked, ...paragraphs, ...notes);
 }
 
 function note(text, kind = '') {
@@ -1107,6 +1186,7 @@ els.load.addEventListener('click', () => void refreshSelection());
 els.clear.addEventListener('click', () => void clearSelectionHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
 els.contentRead.addEventListener('click', () => void toggleHeadlineRead());
+els.contentArticle.addEventListener('click', () => void loadArticleText());
 els.undoButton.addEventListener('click', () => void undoDelete());
 /*
  * Подсказка по клавишам: её открывает кнопка «?» шапки, закрывают её же крестик и клик по фону окна;
@@ -1227,6 +1307,7 @@ function closeKeysHelp() {
  *   /        focus the search field
  *   ↓ / j    next headline          ↑ / k  previous headline
  *   Enter    open the original of the open headline
+ *   f        pull the full text of the open headline from its page
  *   r        re-read the selected feed («Все ленты» — every feed)
  *   m        mark the open headline read, or take the mark back
  *   d        delete the open headline
@@ -1297,6 +1378,11 @@ document.addEventListener('keydown', (event) => {
         if (!state.uid) break;
         event.preventDefault();
         openOriginal();
+        return;
+      case 'f':
+        if (!state.uid) break;
+        event.preventDefault();
+        void loadArticleText();
         return;
       case 'm':
         if (!state.uid) break;

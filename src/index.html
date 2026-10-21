@@ -103,6 +103,13 @@
       <line x1="18" y1="6" x2="6" y2="18"></line>
       <line x1="6" y1="6" x2="18" y2="18"></line>
     </symbol>
+    <!-- Полный текст статьи: страница-документ со строками текста. -->
+    <symbol id="icon-article" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+      <polyline points="14 2 14 8 20 8"></polyline>
+      <line x1="16" y1="13" x2="8" y2="13"></line>
+      <line x1="16" y1="17" x2="8" y2="17"></line>
+    </symbol>
   </svg>
 
   <header class="app-header">
@@ -214,11 +221,21 @@
 
     <section id="panel-content" class="panel panel-content" data-i18n-aria="reader.content.panelAria">
       <!--
-        Original link now lives in the article title itself, so the toolbar holds the two things a
-        headline can be given: the mark that keeps its news out of the polls («прочитано») and the
-        trash that throws the headline itself away.
+        Original link now lives in the article title itself, so the toolbar holds the three things a
+        headline can be given: the full text the reader pulls from the page on demand, the mark that
+        keeps its news out of the polls («прочитано») and the trash that throws the headline itself away.
       -->
       <div class="content-toolbar">
+        <button
+          id="content-article"
+          class="icon-btn"
+          type="button"
+          data-i18n-title="reader.content.article.tooltip"
+          data-i18n-aria="reader.content.article.aria"
+          hidden
+        >
+          <svg class="icon" aria-hidden="true"><use href="#icon-article"></use></svg>
+        </button>
         <button
           id="content-read"
           class="icon-btn"
@@ -299,6 +316,10 @@
           <tr>
             <td class="keys-keys"><kbd>Enter</kbd></td>
             <td data-i18n="reader.keys.original"></td>
+          </tr>
+          <tr>
+            <td class="keys-keys"><kbd>f</kbd></td>
+            <td data-i18n="reader.keys.fullText"></td>
           </tr>
           <tr>
             <td class="keys-keys"><kbd>r</kbd></td>
