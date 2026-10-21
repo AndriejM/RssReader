@@ -227,26 +227,69 @@ export function badgeText(count) {
 }
 
 /**
+ * How far ahead of our own clock a feed's publication date is still believed: a server whose clock
+ * runs fast, a news scheduled for a later posting, a date written in the wrong timezone — all of them
+ * state a moment that has not happened yet. Anything further ahead is counted as this ceiling,
+ * because a headline dated in the future is one `clean_timeout` never overtakes (see `isExpired`).
+ */
+export const MAX_PUBDATE_SKEW_MS = 15 * 60 * 1000;
+
+/**
  * Epoch timestamp of a feed's publication date, as one field of text: 0 when it states no date or a
  * date no clock can read. This is the one reading of `pubDate` the reader orders and expires
  * headlines by — the parser's cap, `storage.sortItems` and `readTime` all agree on it.
+ *
+ * `Date.parse` resolves the offset the date states (`Z`, `GMT`, `+03:00`) and, when it states none —
+ * a bare `YYYY-MM-DD` or an RFC 822 date whose author forgot the offset, both common in the wild —
+ * the zone of whoever asks. That half of the answer belongs to the machine, not to the feed, which is
+ * why a date is stored as the ISO form of this number (see `normalizePubDate`) rather than as the
+ * feed's own spelling.
+ *
+ * A date further ahead of `now` than `MAX_PUBDATE_SKEW_MS` is not believed as written: it counts as
+ * that ceiling, so a headline of the future still ages out of the shelf. Call it with the moment the
+ * record was read, not with the moment asked (as `itemTime` does): a ceiling that moves with the clock
+ * would make a headline of the future permanently fifteen minutes old.
  */
-export function pubDateTime(pubDate) {
+export function pubDateTime(pubDate, now = Date.now()) {
   const published = String(pubDate ?? '').trim();
   if (!published) return 0;
   const parsed = Date.parse(published);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.min(parsed, now + MAX_PUBDATE_SKEW_MS);
+}
+
+/**
+ * The `pubDate` a storage record keeps: the instant `pubDateTime` read out of the feed's text, written
+ * back as one UTC ISO string — or nothing at all when the feed's date cannot be read.
+ *
+ * Storage does not keep the date the way the feed spelled it: a raw field is re-parsed wherever it is
+ * used, in the zone of the machine that parses it, so the same headline is a different age on the
+ * worker's clock and on the reader page; and a date ahead of the poll that read the feed keeps the
+ * headline fresh forever. Both are settled once, here, against `notAfter` — the moment the feed was
+ * read, the latest a publication date can honestly be, give or take a wrong server clock of
+ * `MAX_PUBDATE_SKEW_MS`. A record written by an older build, whose `pubDate` is still the feed's raw
+ * text, goes through the same reading on the way out (see `pubDateTime`).
+ */
+export function normalizePubDate(pubDate, notAfter = Date.now()) {
+  const at = pubDateTime(pubDate, notAfter);
+  return at ? new Date(at).toISOString() : '';
 }
 
 /**
  * Epoch timestamp of an item: the publication date (`pubDate`) when the feed record
  * carries one, the load time otherwise. 0 means "no usable date at all".
+ *
+ * The publication date is believed only up to the load time of the record — the moment the reader
+ * actually got the news — because that is the latest date the record can honestly carry, and unlike
+ * the clock it is a fact already stored: a headline dated a month ahead is dated by its own poll, and
+ * its `clean_timeout` runs from there (see `isExpired`).
  */
-export function itemTime(item) {
-  const published = pubDateTime(item?.pubDate);
-  if (published) return published;
+export function itemTime(item, now = Date.now()) {
   const stored = Number(item?.time ?? 0);
-  return Number.isFinite(stored) && stored > 0 ? stored : 0;
+  const loaded = Number.isFinite(stored) && stored > 0 ? stored : 0;
+  const published = pubDateTime(item?.pubDate, loaded || now);
+  if (published) return published;
+  return loaded;
 }
 
 /**
@@ -254,8 +297,8 @@ export function itemTime(item) {
  * Delete time is never earlier than publication, so a marker always lives its whole `ttlDays`
  * from the deletion instead of being born already expired.
  */
-export function readTime(record) {
-  const published = itemTime(record);
+export function readTime(record, now = Date.now()) {
+  const published = itemTime(record, now);
   const deleted = Number(record?.time ?? 0);
   return Math.max(published, Number.isFinite(deleted) && deleted > 0 ? deleted : 0);
 }
@@ -268,7 +311,7 @@ export function readTime(record) {
 export function isExpired(item, feed, now = Date.now(), fallbackClean = DEFAULT_CLEAN_TIMEOUT) {
   const clean = toMinutes(feed?.clean_timeout, fallbackClean);
   if (clean <= 0) return false;
-  const published = itemTime(item);
+  const published = itemTime(item, now);
   if (!published) return true;
   return now - published >= clean * 60000;
 }
@@ -280,7 +323,7 @@ export function isExpired(item, feed, now = Date.now(), fallbackClean = DEFAULT_
  * would come back on the very next `delay_timeout`.
  */
 export function isReadExpired(record, now = Date.now(), ttlDays = READ_TTL_DAYS) {
-  const when = readTime(record);
+  const when = readTime(record, now);
   if (!when) return true;
   const ttl = Math.max(1, Number(ttlDays) || READ_TTL_DAYS);
   return now - when >= ttl * 24 * 60 * 60000;
@@ -306,10 +349,10 @@ export function honoredReadDays(
 
   const live = list
     .filter((record) => !isReadExpired(record, now, ttl))
-    .sort((a, b) => readTime(b) - readTime(a));
+    .sort((a, b) => readTime(b, now) - readTime(a, now));
   if (live.length <= maxRecords) return ttl;
 
-  const age = now - readTime(live[maxRecords - 1]);
+  const age = now - readTime(live[maxRecords - 1], now);
   return Math.max(0, Math.min(ttl, Math.floor(age / (24 * 60 * 60000))));
 }
 

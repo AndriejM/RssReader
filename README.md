@@ -549,6 +549,7 @@ identify a headline and avoid duplicates.
   "link": "https://habr.com/ru/news/…/",            // http link to the news, as the feed wrote it
   "sourceId": "https://habr.com/ru/news/1",         // what the feed calls this news: its guid / Atom <id> / JSON Feed id, else its link
   "sourceIdType": "link",                          // 'link' | 'guid' | 'atom:id' | 'json:id'
+  "pubDate": "2024-10-01T08:00:00.000Z",           // the feed's publication date, as one UTC instant; '' when the feed states none
   "time": 1760000000000                             // headline loading time, ms
 }
 ```
@@ -563,7 +564,7 @@ so a mark survives both a feed edit and the server reissuing the news under anot
   "link": "https://habr.com/ru/news/…/",              // the address the news had when it was deleted
   "sourceId": "https://habr.com/ru/news/1",           // the identity the marker is matched by
   "sourceIdType": "link",                            // 'link' | 'guid' | 'atom:id' | 'json:id'
-  "pubDate": "Tue, 01 Oct 2024 08:00:00 GMT",        // the list is cleaned by this field's age
+  "pubDate": "2024-10-01T08:00:00.000Z",           // the list is cleaned by this field's age
   "time": 1760000000000                              // deletion moment, if pubDate is absent
 }
 ```
@@ -658,11 +659,21 @@ background.
   period under a minute (`util.alarmPeriodMinutes`). The value is stored in minutes as is. The
   first automatic load of a new feed happens `delay_timeout` after saving; right after saving
   the feed is re-read manually, so the reader is never left empty.
-- **`clean_timeout` is also in minutes**; the term is counted from the headline's `time`, so
-  editing a feed's `clean_timeout` immediately affects its already-stored headlines. Expired
+- **`clean_timeout` is also in minutes**; the term is counted from the headline's publication date
+  (`pubDate`) when the feed states one and from its `time` otherwise, so editing a feed's
+  `clean_timeout` immediately affects its already-stored headlines. Expired
   headlines are purged by an alarm once a minute, and also when the reader opens and on any feed
   change. A headline “without a parent feed” (the feed was deleted while the alarm was queued)
   is removed.
+- **`pubDate` is stored as one UTC instant** (`util.normalizePubDate`), not as the feed spelled it:
+  a date that states no offset (RFC 822 does not require one) is placed by `Date.parse` in the zone of
+  whoever reads it, so the raw field makes the same headline a different age on the worker's clock and
+  on the reader page. A date further ahead of the poll that read the feed than
+  `util.MAX_PUBDATE_SKEW_MS` (15 minutes: a server clock running fast, a news scheduled for a later
+  posting) is stored as that ceiling rather than as written — a headline dated in the future is
+  otherwise one `clean_timeout` never overtakes. A record an older build left with the feed's raw text
+  goes through the same clamp when it is read (`util.pubDateTime`); the ceiling is the record's own
+  stored load time, so such a headline ages out instead of staying fresh forever.
 - **Duplicates**: a headline is identified by `uid = feedId + "|" + sourceId`, where `sourceId` is
   the RSS `<guid>` or the Atom `<id>` when the feed states one and its link otherwise — the link
   read through `util.linkKey`, which drops what a feed varies between its own polls: `http` and

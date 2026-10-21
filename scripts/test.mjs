@@ -29,6 +29,7 @@ const {
   MAX_ITEMS_PER_FEED,
   MAX_ITEMS_TOTAL,
   MAX_PREVIEW_CHARS,
+  MAX_PUBDATE_SKEW_MS,
   MAX_READ_RECORDS,
   MAX_READ_TTL_DAYS,
   MAX_SOURCE_ID_CHARS,
@@ -51,11 +52,14 @@ const {
   isReadExpired,
   isValidHttpUrl,
   absoluteUrl,
+  itemTime,
   linkKey,
   newId,
   normalizeFeed,
   normalizePreviewImages,
+  normalizePubDate,
   normalizeUid,
+  pubDateTime,
   toDays,
   toFlag,
   toMinutes,
@@ -413,6 +417,70 @@ test('makeItem stores feed link, headline, article link and load time', () => {
   assert.equal(normalizeUid('f1', '  https://a '), 'f1|https://a');
 });
 
+test('a stored pubDate is one UTC instant, not the date the feed spelled', () => {
+  const feed = { id: 'f1', name: 'Хабр', rss_link: 'https://habr.com/ru/rss/all/' };
+  const time = Date.parse('2024-11-14T22:13:20Z');
+
+  const spelled = store.makeItem({ feed, title: 'a', link: 'u1', pubDate: 'Thu, 14 Nov 2024 22:13:20 GMT', time });
+  assert.equal(spelled.pubDate, '2024-11-14T22:13:20.000Z', 'the RFC 822 date of an RSS feed becomes the ISO form');
+
+  const offset = store.makeItem({ feed, title: 'b', link: 'u2', pubDate: '2024-11-14T15:00:00-05:00', time });
+  assert.equal(offset.pubDate, '2024-11-14T20:00:00.000Z', 'the offset the feed states is honoured, not the zone of the reader');
+
+  const reloaded = store.makeItem({ feed, title: 'c', link: 'u3', pubDate: '2024-11-14 22:13:20', time });
+  assert.ok(reloaded.pubDate.endsWith('Z'), 'a date that stated no zone is stored as one the record itself states');
+  assert.equal(
+    pubDateTime(reloaded.pubDate, time + 100 * DAY),
+    Date.parse(reloaded.pubDate),
+    'and it reads back as that same instant whenever anyone asks, in whichever zone they ask from',
+  );
+
+  assert.equal(store.makeItem({ feed, title: 'd', link: 'u4', pubDate: 'вчера после обеда', time }).pubDate, '', 'a date no clock can read is no date at all');
+  assert.equal(itemTime(spelled, time), time, 'so its age counts from the publication the feed stated');
+});
+
+test('a publication date of the future is believed only as far as the clock of the poll', () => {
+  const feed = { id: 'f1', name: 'Хабр', rss_link: 'https://habr.com/ru/rss/all/' };
+  const now = 1_700_000_000_000;
+
+  assert.equal(MAX_PUBDATE_SKEW_MS, 15 * MINUTE);
+  const ahead = new Date(now + 5 * MINUTE).toISOString();
+  assert.equal(pubDateTime(ahead, now), now + 5 * MINUTE, 'a server a few minutes ahead of our clock is not a lie');
+
+  const far = store.makeItem({ feed, title: 'a', link: 'u1', pubDate: new Date(now + 30 * DAY).toISOString(), time: now });
+  assert.equal(far.pubDate, new Date(now + MAX_PUBDATE_SKEW_MS).toISOString(), 'a news of next month is dated by the poll that shipped it');
+
+  assert.equal(isExpired(far, { clean_timeout: 60 }, now), false, 'it is not stale on the poll that read it');
+  assert.equal(
+    isExpired(far, { clean_timeout: 60 }, now + MAX_PUBDATE_SKEW_MS + 61 * MINUTE),
+    true,
+    'and it does age out: an unclamped date of the future is a headline `clean_timeout` never reaches',
+  );
+});
+
+test('a headline stored with the raw date an older build kept is read the same clamped way', () => {
+  const now = 1_700_000_000_000;
+  const legacy = { pubDate: 'Thu, 01 Jan 2038 00:00:00 GMT', time: now - DAY };
+
+  assert.equal(
+    itemTime(legacy, now),
+    legacy.time + MAX_PUBDATE_SKEW_MS,
+    'the stored text is not believed ahead of the poll that stored it, which — unlike the clock — does not move',
+  );
+  assert.ok(isExpired(legacy, { clean_timeout: 60 }, now), 'its age is a day old, so its shelf expires it at once');
+  assert.equal(isReadExpired({ link: 'a', pubDate: legacy.pubDate, time: now - DAY }, now), false, 'a read marker of the future still holds its news out');
+});
+
+test('normalizePubDate clamps to the moment the feed was read', () => {
+  const at = Date.parse('2024-11-14T22:13:20Z');
+  assert.equal(normalizePubDate('Thu, 14 Nov 2024 22:13:20 GMT', at), '2024-11-14T22:13:20.000Z');
+  assert.equal(normalizePubDate(new Date(at + DAY).toISOString(), at), new Date(at + MAX_PUBDATE_SKEW_MS).toISOString());
+  assert.equal(normalizePubDate('', at), '');
+  assert.equal(normalizePubDate(undefined, at), '');
+  assert.equal(normalizePubDate('  ', at), '');
+  assert.equal(normalizePubDate('not a date', at), '', 'a date no clock can read keeps the record without one');
+});
+
 test('makeItem keys a headline by what the feed calls it, not by its address', () => {
   const feed = { id: 'f1', name: 'Lenta', rss_link: 'https://lenta.ru/rss' };
   const opaque = 'urn:uuid:6f2c1c0a-1';
@@ -627,7 +695,7 @@ test('capTotal bounds the headlines of every feed together', () => {
 /* ---------------------------- read list ---------------------------- */
 
 test('makeReadRecord keeps the link, the publication date and the delete time', () => {
-  const time = 1_700_000_000_000;
+  const time = Date.parse('2024-10-05T00:00:00Z');
   const record = store.makeReadRecord(
     { link: '  https://habr.com/ru/news/1/ ', pubDate: 'Tue, 01 Oct 2024 08:00:00 GMT' },
     time,
@@ -636,7 +704,7 @@ test('makeReadRecord keeps the link, the publication date and the delete time', 
     link: 'https://habr.com/ru/news/1/',
     sourceId: 'https://habr.com/ru/news/1',
     sourceIdType: 'link',
-    pubDate: 'Tue, 01 Oct 2024 08:00:00 GMT',
+    pubDate: '2024-10-01T08:00:00.000Z',
     time,
   });
   assert.equal(store.makeReadRecord({ link: '' }).link, '', 'no link, nothing to match on');
@@ -646,6 +714,13 @@ test('makeReadRecord keeps the link, the publication date and the delete time', 
     { sourceId: byId.sourceId, sourceIdType: byId.sourceIdType },
     { sourceId: 'guid:99', sourceIdType: 'guid' },
     'the marker remembers the id the feed calls the news by: it must still match when the address moves',
+  );
+
+  const ahead = store.makeReadRecord({ link: 'https://a.b/y', pubDate: new Date(time + 30 * DAY).toISOString() }, time);
+  assert.equal(
+    ahead.pubDate,
+    new Date(time + MAX_PUBDATE_SKEW_MS).toISOString(),
+    'a marker is never dated ahead of the deletion that wrote it, or its horizon would never run out',
   );
 });
 

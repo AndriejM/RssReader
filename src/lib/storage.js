@@ -25,6 +25,7 @@ import {
   newId,
   normalizeFeed,
   normalizePreviewImages,
+  normalizePubDate,
   normalizeUid,
   readTime,
   toDays,
@@ -433,7 +434,10 @@ export async function clearItemsForFeed(feedId) {
  * dropped and the rest are re-sized to one uniform box on the way in (see
  * `util.dropUnpreviewableImages` and `util.normalizePreviewImages`).
  * Service keys bind item to feed and allow dedup; the `pubDate` field acts as a timestamp for
- * the `clean_timeout` expiry (`time` — actual load time — as a fallback if feed has no date).
+ * the `clean_timeout` expiry (`time` — actual load time — as a fallback if feed has no date). It is
+ * stored as the UTC instant `util.normalizePubDate` read out of the feed's text, not as the feed
+ * spelled it: the raw field is a different moment in the zone of every machine that re-parses it, and
+ * a date of the future is a headline `clean_timeout` never reaches.
  *
  * `sourceId`/`sourceIdType` are what the *feed* calls this news (its `<guid>` or its Atom `<id>`,
  * its link where the feed has neither — `rss.sourceIdentity`); `uid` is built on that id, not on the
@@ -459,7 +463,7 @@ export function makeItem({
     // Pictures the reader cannot show go first: a `data:` picture left in would take the whole
     // `MAX_PREVIEW_CHARS` and the cap would fall inside its base64 instead of inside the news.
     description: capPreview(normalizePreviewImages(dropUnpreviewableImages(description))),
-    pubDate: String(pubDate ?? '').trim(),
+    pubDate: normalizePubDate(pubDate, time),
     link,
     sourceId: identity.sourceId,
     sourceIdType: identity.sourceIdType,
@@ -612,7 +616,8 @@ export async function saveRead(read) {
 /**
  * Storage record for a headline the user deleted: `link` is the identity (a feed server reissues
  * the same link), while `pubDate` and `time` (the moment of deletion) together give the age of the
- * record — see `util.readTime`.
+ * record — see `util.readTime`. The date is normalized against the moment of deletion, the latest a
+ * publication date can honestly be by the time the reader had the news in hand.
  *
  * `sourceId`/`sourceIdType` go with it: when the feed later reissues the news under another address,
  * the marker is still found by the id the feed calls it, and the deleted news does not come back.
@@ -627,7 +632,7 @@ export function makeReadRecord(item, now = Date.now()) {
     link: String(item?.link ?? '').trim(),
     sourceId,
     sourceIdType,
-    pubDate: String(item?.pubDate ?? '').trim(),
+    pubDate: normalizePubDate(item?.pubDate, now),
     time: now,
   };
 }
@@ -676,7 +681,7 @@ export function capRead(read, ttlDays = READ_TTL_DAYS, now = Date.now()) {
   }
   if (live.length <= MAX_READ_RECORDS) return { read: live, droppedLive: 0 };
 
-  live.sort((a, b) => readTime(b) - readTime(a));
+  live.sort((a, b) => readTime(b, now) - readTime(a, now));
   return { read: live.slice(0, MAX_READ_RECORDS), droppedLive: live.length - MAX_READ_RECORDS };
 }
 
