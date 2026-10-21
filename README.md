@@ -327,10 +327,15 @@ The reader also says out loud what repainting a panel just did — how many head
 feeds refused, what was removed («5 new headlines», «3 feeds could not be refreshed», «headline
 deleted»). A line no eye sees (`#reader-announce`, `role="status" aria-live="polite"`, hidden through
 `.sr-only`) carries it, and the same facts stand where the eye reads them: the counters of the panels
-and the placeholders. The middle column is a `listbox` whose rows are `option`s, the open headline
-among them is `aria-selected`; the chosen row of the left column carries `aria-current`. A keyboard
-cursor is drawn around the whole row (`:focus-visible`, in a colour that reads against a filled row),
-and `prefers-reduced-motion: reduce` drops the spinning refresh glyph and the fade of a border handle.
+and the placeholders. The right panel keeps a live region of its own (`#content-empty`,
+`role="status"`) beside the article (`#article-body`): a placeholder is spoken by a screen reader
+without tearing the article out of the DOM, and the failure of a load that found an article open
+stands in red in the line under the head of the middle column — added to what the hidden line
+announces — instead of replacing what the reader was showing. The middle column is a `listbox` whose
+rows are `option`s, the open headline among them is `aria-selected`; the chosen row of the left
+column carries `aria-current`. A keyboard cursor is drawn around the whole row (`:focus-visible`, in a
+colour that reads against a filled row), and `prefers-reduced-motion: reduce` drops the spinning
+refresh glyph and the fade of a border handle.
 
 ## Global settings screen (`src/settings.html`)
 
@@ -1174,6 +1179,16 @@ rules are covered by the tests.
     icon and the aria-pressed state go with it, and the next load brings the news back. The same mark
     made from one feed covers the same news of another feed of the same site: a headline of the second
     feed stands marked, and unmarking either of them lets both through.
+
+37. Open a headline and press `r` with the network cut (or on a feed whose address refuses) → the
+    article stays open: the right panel does not change at all, only the line under the head of the
+    middle column takes the failure («Failed to refresh the feed: …» in red, next to the age and the
+    next check), and the same words go to the announcing line. Press `r` again with the network still
+    cut → nothing moves: a load that failed opens no headline of its own, the reader keeps whatever
+    stood open, and only a load that answered moves it to the top of the list. Switch to another feed
+    and back → the failure is dropped, the line speaks only about the load it knows now. With no
+    article open, the right panel shows the failure itself: its placeholder (`#content-empty`) carries
+    `role="alert"` for the time.
 
 ## Limitations
 

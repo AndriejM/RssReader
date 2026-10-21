@@ -47,6 +47,10 @@ const els = {
   contentDelete: document.getElementById('content-delete'),
   contentRead: document.getElementById('content-read'),
   contentBody: document.getElementById('content-body'),
+  /* Плейсхолдер правой панели и сама статья — два соседа, а не одно место: панель говорит то одно,
+   * то другое, живой регион при этом не пересоздаётся (см. `showPlaceholder`). */
+  contentEmpty: document.getElementById('content-empty'),
+  articleBody: document.getElementById('article-body'),
 
   /* Строка отмены: её ставит удаление заголовка, и она же возвращает его назад. */
   undoLine: document.getElementById('undo-line'),
@@ -64,6 +68,12 @@ const state = {
   query: '',
   /** Заголовок, который читалка ещё может вернуть: сам он и сколько живёт его строка отмены. */
   undo: null,
+  /**
+   * Отказ последней попытки прочесть то, что выбрано сейчас: ключ словаря и сам отказ. Его держит
+   * строка под головой средней колонки, а не правая панель: отказ сети не имеет права затирать
+   * открытую статью.
+   */
+  refreshError: null,
 };
 
 /*
@@ -107,6 +117,12 @@ function isAllFeeds() {
 
 function selectedFeed() {
   return state.feeds.find((feed) => feed.id === state.feedId) ?? null;
+}
+
+/** The open headline as the shelf holds it, or `null` when the right panel shows no article. */
+function openHeadline() {
+  if (!state.uid) return null;
+  return state.items.find((item) => item.uid === state.uid && inSelection(item)) ?? null;
 }
 
 function countForFeed(feedId) {
@@ -162,6 +178,27 @@ function refreshOutcome(response) {
   const parts = [added > 0 ? t('reader.announce.loaded', { count: added }) : t('reader.announce.none')];
   if (failed > 0) parts.push(t('reader.announce.failed', { count: failed }));
   return parts.join(' · ');
+}
+
+/**
+ * Отказ последней попытки прочесть ленты. `state.refreshError` держит сам отказ (`{ code, params,
+ * message }`, каким его приносит работник) и ключ его подписи, а не их перевод: строку статуса
+ * перечёркивают и на смене языка, и тогда о неисправности она должна сказать новым языком.
+ */
+function refreshFailureText(failure) {
+  return t(failure.key, { error: describeError(failure.error) });
+}
+
+/**
+ * Открытая статья остаётся статьёй: её текст лежит в хранилище, и временный сбой сети не имеет права
+ * выбрасывать читателя к первому заголовку. Поэтому отказ встаёт в строку под головой средней
+ * колонки — туда, где читалка уже говорит о загрузке того же выбора, — и только в правую панель,
+ * когда статьи в ней всё равно нет.
+ */
+function reportRefreshFailure(key, error) {
+  state.refreshError = { key, error: error ?? null };
+  if (openHeadline()) renderFeedStatus();
+  else showPlaceholder(refreshFailureText(state.refreshError), { alert: true });
 }
 
 function renderTotal() {
@@ -361,8 +398,13 @@ function renderFeedStatus() {
     parts.push(t('reader.status.nextCheck', { until: formatUntil(nextAt, now, unitLabels()) }));
   }
 
-  els.feedStatus.hidden = parts.length === 0;
-  els.feedStatus.textContent = parts.join(' · ');
+  /* Отказ последней попытки — о том же выборе, о котором говорит эта строка. Он стоит в её конце
+   * и берёт свой цвет (см. `.panel-status.error`), чтобы не выглядеть обычным сроком. */
+  const failed = state.refreshError ? [refreshFailureText(state.refreshError)] : [];
+
+  els.feedStatus.hidden = parts.length === 0 && failed.length === 0;
+  els.feedStatus.classList.toggle('error', failed.length > 0);
+  els.feedStatus.textContent = [...parts, ...failed].join(' · ');
 }
 
 /**
@@ -475,6 +517,9 @@ function selectFeed(feedId) {
   state.feedId = feedId;
   // Switching feeds drops whatever headline was open.
   state.uid = null;
+  /* Строка под головой средней колонки говорит о загрузке того, что выбрано сейчас: отказ другой
+   * ленты не должен переходить с неё на новую строку. */
+  state.refreshError = null;
   renderFeeds();
   renderHeadlines();
 
@@ -487,15 +532,23 @@ function selectFeed(feedId) {
   saveSelection();
 }
 
-function showPlaceholder(message) {
+/**
+ * Правая панель без статьи: вместо неё строка о том, почему показывать нечего. Она стоит в разметке
+ * и остаётся на месте, когда панель переходит то на неё, то на статью, — живой регион, который
+ * пересоздают, экрану сказать нельзя. `alert` значит отказ, о котором нужно сказать сразу;
+ * `status` — обычное «здесь пусто», которое не перебивает чтение.
+ */
+function showPlaceholder(message, { alert = false } = {}) {
   state.uid = null;
   els.contentDelete.hidden = true;
   els.contentRead.hidden = true;
+  els.articleBody.replaceChildren();
 
-  const p = document.createElement('p');
-  p.className = 'empty';
+  const p = els.contentEmpty;
+  p.hidden = false;
+  p.setAttribute('role', alert ? 'alert' : 'status');
+  p.classList.toggle('error', alert);
   p.textContent = message;
-  els.contentBody.replaceChildren(p);
 }
 
 /**
@@ -601,6 +654,17 @@ function openItem(item, { followFocus = false } = {}) {
 }
 
 /**
+ * Заголовок, который загрузка приносит читателю, когда у ней нет открытого: первый из тех,
+ * что показывает средняя колонка. Открытый заголовок загрузка не двигает — тем более когда она
+ * отказалась и новых заголовков нет.
+ */
+function openTopHeadline() {
+  if (state.uid) return;
+  const first = itemsOfSelectedFeed()[0];
+  if (first) openItem(first);
+}
+
+/**
  * Переносит выделение средней колонки на строку `uid`, меняя только две строки: ту, что была
  * открыта, и ту, что открылась. Возвращает `false`, когда строки на экране нет — значит, видимый
  * набор изменился и колонку нужно перестроить, а не подправлять на месте.
@@ -622,6 +686,7 @@ function selectHeadline(uid) {
 /** Правая панель открытой новости: заголовок-ссылка, источник и сохранённое `<description>`. */
 function renderArticle(item) {
   els.contentDelete.hidden = false;
+  els.contentEmpty.hidden = true;
   paintReadButton(item);
 
   const title = titleHeading(item.title || t('common.untitled'), item.link);
@@ -638,7 +703,7 @@ function renderArticle(item) {
    * она названа словами — тому, кто читает панель вслух. */
   const marked = state.read.has(item.uid) ? [note(t('reader.content.marked'), 'marked')] : [];
   if (!preview.node) {
-    els.contentBody.replaceChildren(
+    els.articleBody.replaceChildren(
       title,
       source,
       ...marked,
@@ -649,7 +714,7 @@ function renderArticle(item) {
   }
 
   const notes = preview.truncated ? [note(t('reader.content.truncated'))] : [];
-  els.contentBody.replaceChildren(title, source, ...marked, preview.node, ...notes);
+  els.articleBody.replaceChildren(title, source, ...marked, preview.node, ...notes);
 }
 
 function note(text, kind = '') {
@@ -657,12 +722,6 @@ function note(text, kind = '') {
   p.className = kind ? `note ${kind}` : 'note';
   p.textContent = text;
   return p;
-}
-
-/** The open headline as the shelf holds it, or `null` when the right panel shows no article. */
-function openHeadline() {
-  if (!state.uid) return null;
-  return state.items.find((item) => item.uid === state.uid && inSelection(item)) ?? null;
 }
 
 /**
@@ -766,6 +825,10 @@ async function undoDelete() {
 
   state.uid = removed.uid;
   await renderAll();
+  /* `renderAll()` перестраивает колонки, но статью не рисует: без этого средняя колонка вернула бы
+   * выделение на возвращённый заголовок, а правая панель осталась с тем, что стояло до удаления. */
+  const restoredItem = openHeadline();
+  if (restoredItem) renderArticle(restoredItem);
   saveSelection();
   announce(t('reader.announce.undone'));
 }
@@ -847,7 +910,7 @@ async function refreshSelection() {
 
   const feed = selectedFeed();
   if (!feed) {
-    showPlaceholder(t('reader.refresh.noFeed'));
+    showPlaceholder(t('reader.refresh.noFeed'), { alert: true });
     return;
   }
 
@@ -856,11 +919,13 @@ async function refreshSelection() {
   els.load.classList.add('busy');
   els.load.title = t('common.loading');
   try {
+    /* Строка статуса говорит о последней попытке: её прошлый отказ снимается, даже когда
+     * перерисовка панелей ещё не началась. */
+    state.refreshError = null;
     const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_FEED, feedId: feed.id });
-    if (!response?.ok) {
-      showPlaceholder(t('reader.refresh.failed', { error: describeError(response?.error) }));
-    }
+    if (!response?.ok) reportRefreshFailure('reader.refresh.failed', response?.error);
     await renderAll();
+    if (response?.ok) openTopHeadline();
     announce(refreshOutcome(response));
   } finally {
     els.load.disabled = false;
@@ -886,7 +951,7 @@ async function refreshSelectedFeed() {
 
   const feed = selectedFeed();
   if (!feed) {
-    showPlaceholder(t('reader.refresh.noFeed'));
+    showPlaceholder(t('reader.refresh.noFeed'), { alert: true });
     return;
   }
 
@@ -895,11 +960,11 @@ async function refreshSelectedFeed() {
   els.refresh.classList.add('busy');
   els.refresh.title = t('common.loading');
   try {
+    state.refreshError = null;
     const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_FEED, feedId: feed.id });
-    if (!response?.ok) {
-      showPlaceholder(t('reader.refresh.failed', { error: describeError(response?.error) }));
-    }
+    if (!response?.ok) reportRefreshFailure('reader.refresh.failed', response?.error);
     await renderAll();
+    if (response?.ok) openTopHeadline();
     announce(refreshOutcome(response));
   } finally {
     els.refresh.disabled = false;
@@ -926,14 +991,16 @@ async function refreshAllFeeds(target = els.refresh) {
   target.classList.add('busy');
   target.title = t('common.loading');
   try {
+    state.refreshError = null;
     const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_ALL_FEEDS });
     if (!response?.ok) {
-      showPlaceholder(t('reader.refresh.failed', { error: describeError(response?.error) }));
+      reportRefreshFailure('reader.refresh.failed', response?.error);
     } else if (response.failed > 0) {
       const failure = (response.results ?? []).find((entry) => !entry.ok);
-      showPlaceholder(t('reader.refreshAll.failed', { error: describeError(failure?.error) }));
+      reportRefreshFailure('reader.refreshAll.failed', failure?.error);
     }
     await renderAll();
+    if (response?.ok) openTopHeadline();
     announce(refreshOutcome(response));
   } finally {
     target.disabled = false;
@@ -986,11 +1053,11 @@ function redraw() {
   renderFeeds();
   renderHeadlines();
 
-  const item = state.uid
-    ? state.items.find((candidate) => candidate.uid === state.uid && inSelection(candidate))
-    : null;
+  const item = openHeadline();
   if (item) openItem(item);
   else if (state.feeds.length === 0) showPlaceholder(t('reader.start.contentHint'));
+  /* Отказ последней загрузки — то, что рисует сама страница: смена языка его тоже переводит. */
+  else if (state.refreshError) showPlaceholder(refreshFailureText(state.refreshError), { alert: true });
   /* Строка отмены тоже рисуется словами словаря: смена языка на экране настроек доходит и до неё. */
   renderUndo();
 }

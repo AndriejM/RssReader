@@ -248,7 +248,15 @@
         </button>
       </p>
       <article class="content-body" id="content-body">
-        <p class="empty" data-i18n="reader.content.empty"></p>
+        <!--
+          Плейсхолдер правой панели стоит в разметке и остаётся на месте, когда панель показывает
+          то себя, то статью: живой регион, который пересоздают, экрану объявить нельзя. Поэтому
+          строка статьи — отдельный сосед внутри той же панели. Роль строке (`status` или `alert`)
+          ставит `showPlaceholder()`: отказ загрузки — то, о чём нужно сказать сразу, пустота панели
+          — то, что не должно перебивать чтение (см. `index.js`).
+        -->
+        <p class="empty" id="content-empty" role="status" data-i18n="reader.content.empty"></p>
+        <div class="article-body" id="article-body"></div>
       </article>
     </section>
   </main>

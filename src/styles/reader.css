@@ -222,6 +222,11 @@
   padding: 6px 12px 7px;
 }
 
+/* Отказ последней попытки стоит в этой же строке, но глухим сроком он быть не должен. */
+.panel-status.error {
+  color: var(--danger);
+}
+
 .panel-scroll {
   flex: 1;
   min-height: 0;
@@ -403,6 +408,11 @@
   color: var(--text-muted);
   font-size: 0.93em;
   padding: 12px 10px;
+}
+
+/* Правая панель говорит об отказе загрузки — тем же цветом, что и заметка статьи о нём. */
+.empty.error {
+  color: var(--danger);
 }
 
 /*
