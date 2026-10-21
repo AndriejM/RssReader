@@ -61,6 +61,48 @@ export const MAX_READ_RECORDS = 1000;
  */
 export const MAX_SOURCE_ID_CHARS = 200;
 
+/** What marks the tail of an id the guard had to cut. */
+export const SOURCE_ID_CUT = '#…';
+
+/**
+ * An id longer than the guard is cut — and two headlines whose ids differ only past the cut are then
+ * the same id, so the reader would hold one of two news and never offer the other. The fingerprint of
+ * the *whole* id goes with the cut: the headlines the feed calls differently stay different, while one
+ * headline keeps the same shortened id across polls (which is the whole point of an id).
+ *
+ * The result can overflow what `MAX_SOURCE_ID_CHARS` allowed by the mark and the fingerprint, and it
+ * does so on purpose: guarding the byte budget by cutting the fingerprint back would reintroduce the
+ * merge it exists to prevent.
+ */
+export function shortenSourceId(raw) {
+  const id = String(raw ?? '').trim();
+  if (id.length <= MAX_SOURCE_ID_CHARS) return id;
+  return `${id.slice(0, MAX_SOURCE_ID_CHARS)}${SOURCE_ID_CUT}${fingerprint(id)}`;
+}
+
+const FNV_PRIME = 0x01000193;
+
+/** FNV-1a over the characters of a string, as 32 bits. */
+function fnv1a(value, offset) {
+  let hash = offset;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(i), FNV_PRIME);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * A short, stable fingerprint of a string: two FNV-1a runs over the same text from different starting
+ * states, so two ids that share a prefix — which is exactly the pair the cut would merge — differ here
+ * as often as a 64-bit number can differ.
+ */
+export function fingerprint(value) {
+  const text = String(value ?? '');
+  const a = fnv1a(text, 0x811c9dc5);
+  const b = fnv1a(text, (0x811c9dc5 ^ 0x9e3779b9) >>> 0);
+  return `${a.toString(16).padStart(8, '0')}${b.toString(16).padStart(8, '0')}`;
+}
+
 /**
  * Parameters that say nothing about *which* page is meant: the same article arrives with a
  * different tail of them from one poll of a feed to the next (a campaign tag added by a share

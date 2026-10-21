@@ -537,7 +537,9 @@ profile does not have yet, not to overwrite the ones it cares about.
 
 **`items`** — an array of headlines. The fields from the assignment are `rss_link`, `title`,
 `link`, `time`; `uid`/`feedId`/`feedName`/`sourceId`/`sourceIdType` were added internally: to
-identify a headline and avoid duplicates.
+identify a headline and avoid duplicates. A `sourceId` the feed states is stored short: one longer
+than 200 characters keeps its first 200 plus `#…` and a 16-digit fingerprint of the whole id, so
+two ids that differ only past the cut stay two different headlines.
 
 ```json
 {
@@ -556,8 +558,10 @@ identify a headline and avoid duplicates.
 
 **`read`** — an array of read (user-deleted) news items. The feed server does not remove its own
 headlines, so without this list a deleted news item would return on every next load. The record is
-matched by the identity of the news — its `sourceId`, or its `link` when the feed states no id —
-so a mark survives both a feed edit and the server reissuing the news under another address.
+matched by the identity of the news — its `sourceId`, or the address of its `link` when either side
+names no id — so a mark survives both a feed edit and the server reissuing the news under another
+address. A marker made from a headline the shelf keyed by its address takes the id the feed has
+started stating, the way the headline itself does (see “Implementation notes”).
 
 ```json
 {
@@ -680,7 +684,18 @@ background.
   `https`, `www`, the port the protocol implies, a trailing slash, the `#…` fragment and the
   tracking parameters (`utm_…`, `gclid`, `fbclid`, …). Re-polling a feed neither spawns copies nor
   resets the storage term of an existing record, and a news whose address moved is still recognised
-  as the news it already is.
+  as the news it already is. An id longer than `util.MAX_SOURCE_ID_CHARS` is kept by
+  `util.shortenSourceId`: its first 200 characters, then `#…` and a 16-digit fingerprint of the
+  whole id (`util.fingerprint`), so the cut never merges two headlines the way plain truncation did.
+- **A feed that changes the way it names its news is still one feed**: a candidate recognises a
+  stored headline by its id, or by its address when at least one of the two is keyed on the address
+  (`storage.indexOf`). So when a feed starts stating a `<guid>` after a CMS upgrade — the key of
+  every stored headline was then `link:…` — the address matches, and the stored record is re-typed
+  in place to the id the feed states now (`storage.adoptIdentity` also rewrites its `uid`); the
+  headlines the user deleted stay deleted instead of coming back under new keys. A feed that stops
+  stating its ids works the other way round: the headline keyed by an id is still recognised from
+  its address. Only when **both** sides name an id of their own are the ids the news: two ids at one
+  address stay two headlines, as a site that reuses an address for fresh news does.
 - **The badge counts the headlines of all feeds together** (the entire contents of `items`), as
   the assignment states: `1…99` as a number, `*` when over 99, empty at 0.
 - **Chrome picks the badge digits' color itself**: the `chrome.action` API does not allow setting
@@ -1062,7 +1077,13 @@ rules are covered by the tests.
     wrote. On a feed that reissues the same news under another address (a `guid` with
     `isPermaLink="false"`, or a link that only grew tracking parameters) the list keeps **one**
     headline, `added 0` in the read's numbers; delete it and press “Refresh” → it does not come back
-    while its read marker lives, and in `read` the marker carries the same `sourceId`.
+    while its read marker lives, and in `read` the marker carries the same `sourceId`. On a feed
+    whose `guid` is longer than 200 characters, `sourceId` is its first 200 characters plus `#…` and
+    a 16-digit fingerprint of the whole id: two such headlines keep different tails and are not
+    merged. On a feed that only started stating a `guid` after you had read and deleted its
+    headlines (a CMS upgrade), the row still reports `added 0` → in `items` the stored headlines are
+    re-typed in place, their `sourceIdType` becomes `guid`, and the headlines you deleted stay
+    deleted.
 32. On the feed screen press the export icon → a `rss-reader-feeds.json` downloads with the name, the
     link and both minute fields of every feed, and nothing else: no `id`, no `etag`, no health record.
     Open that file in another profile (or delete the feeds first) and press the import icon → the

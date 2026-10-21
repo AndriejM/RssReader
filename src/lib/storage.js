@@ -17,7 +17,6 @@ import {
   dropUnpreviewableImages,
   feedBackoffMinutes,
   honoredReadDays,
-  MAX_SOURCE_ID_CHARS,
   isExpired,
   isReadExpired,
   itemTime,
@@ -28,6 +27,7 @@ import {
   normalizePubDate,
   normalizeUid,
   readTime,
+  shortenSourceId,
   toDays,
   toFlag,
   toMinutes,
@@ -477,14 +477,16 @@ export function makeItem({
  *
  * `linkKey` is applied only to a link. An opaque `guid`/`<id>` is kept as the feed wrote it: `URL`
  * would read `12345:ru` as a scheme and cut the id to pieces, and an id is meant to be stable
- * byte-for-byte anyway.
+ * byte-for-byte anyway — which is why cutting it to the storage guard carries a fingerprint of the
+ * whole id (see `util.shortenSourceId`).
+ *
+ * The kind is stored with the id, because the kind is not something a feed keeps: the same news is
+ * addressed by its link until the day the feed starts stating a `<guid>` (see `identityIndex`).
  */
 function sourceOf({ link, sourceId, sourceIdType = 'link' }) {
   const raw = String(sourceId ?? '').trim();
-  if (raw) {
-    const cut = raw.length > MAX_SOURCE_ID_CHARS ? raw.slice(0, MAX_SOURCE_ID_CHARS) : raw;
-    return { sourceId: cut, sourceIdType };
-  }
+  const kind = String(sourceIdType ?? 'link').trim();
+  if (raw) return { sourceId: shortenSourceId(raw), sourceIdType: IDENTITY_KINDS.has(kind) ? kind : 'link' };
   return { sourceId: linkKey(link), sourceIdType: 'link' };
 }
 
@@ -509,6 +511,89 @@ function sourceKeyOf(item) {
     sourceIdType: item?.sourceIdType,
   });
   return `${sourceIdType}:${sourceId}`;
+}
+
+/** Kinds of identity a headline can be keyed on; anything else the storage reads as an address. */
+const IDENTITY_KINDS = new Set(['link', 'guid', 'atom:id', 'json:id']);
+
+/**
+ * Whether a record is keyed by an id its feed states or by its address alone — what decides whether an
+ * address may recognise it (see `identityIndex`).
+ *
+ * A record that names no id is keyed by its address whatever its field claims, and `sourceOf` already
+ * reads an unknown kind as an address: the address is the only identity left to read such a record by.
+ */
+function sourceKindOf(item) {
+  return sourceOf({
+    link: item?.link,
+    sourceId: item?.sourceId,
+    sourceIdType: item?.sourceIdType,
+  }).sourceIdType;
+}
+
+/**
+ * The address a headline is also known by — the same `linkKey` a link-typed identity is built on,
+ * held beside the feed that shipped it. An empty string when the record names no address.
+ *
+ * It exists for the poll where the *kind* of the identity changed: a feed that starts stating a
+ * `<guid>` after a CMS upgrade is describing the headlines it used to ship under their address, and
+ * the storage would otherwise offer them again as news it never had.
+ */
+function addressOf(item) {
+  const key = addressKeyOf(item);
+  return key ? `${item?.feedId}|${key}` : '';
+}
+
+/** The same address without the feed: what a read marker remembers, since a marker holds its news out of every feed. */
+function addressKeyOf(record) {
+  const key = linkKey(record?.link);
+  return key ? `link:${key}` : '';
+}
+
+/**
+ * Records indexed by what they are keyed on — the shelf's headlines or the read markers, which differ
+ * only in whether their keys carry a feed.
+ *
+ * `ids` is the identity of every record. An address is held twice over: every address the records
+ * name, and only the addresses of the records keyed by an address alone. A candidate is recognised by
+ * address only when at least one of the two sides has nothing but an address to say — where both name
+ * an id of their own, the ids are the news, and two of them at one address (a forum thread shipped
+ * under its `?p=` as well as its `?t=`) are two headlines. `idless` carries the record itself, so a
+ * candidate that brings an id for it can rename it instead of adding a copy.
+ */
+function identityIndex(records, { identityKey, addressKey }) {
+  const ids = new Set();
+  const addresses = new Set();
+  const idless = new Map();
+
+  for (const record of records) {
+    ids.add(identityKey(record));
+    const address = addressKey(record);
+    if (!address) continue;
+    addresses.add(address);
+    if (sourceKindOf(record) === 'link') idless.set(address, record);
+  }
+
+  return { ids, addresses, idless };
+}
+
+/** The identity keys of the shelf: a headline belongs to the feed that shipped it. */
+const SHELF_KEYS = { identityKey: identityOf, addressKey: addressOf };
+/** The identity keys of the read list: a deleted news is held out of every feed. */
+const MARKER_KEYS = { identityKey: readIdentity, addressKey: addressKeyOf };
+
+/** Whether `candidate` names a record of `index` — by its id, or by an address one of the two is keyed on. */
+function indexOf(candidate, index, { identityKey, addressKey }) {
+  const key = identityKey(candidate);
+  if (index.ids.has(key)) return { known: true, renamed: null };
+
+  const address = addressKey(candidate);
+  if (!address) return { known: false, renamed: null };
+
+  if (sourceKindOf(candidate) === 'link') {
+    return { known: index.addresses.has(address), renamed: null };
+  }
+  return { known: index.idless.has(address), renamed: index.idless.get(address) ?? null };
 }
 
 /** Keep only the newest MAX_ITEMS_PER_FEED headlines of every feed. */
@@ -546,7 +631,9 @@ export function capItems(items) {
  * a deleted news would come back on the next `delay_timeout`.
  *
  * Duplicates are recognised by the identity of the headline (`sourceId`, its link where the feed
- * states no id) inside one feed; a read marker is matched across feeds.
+ * states no id) inside one feed; a read marker is matched across feeds. A headline whose feed changed
+ * the *kind* of its identity — a `<guid>` appeared where the shelf only ever saw an address — is
+ * recognised by its address and re-typed in place, not stored a second time.
  * @returns {{ added: number, skipped: number, seen: number }} `added` counts the headlines that
  * stayed in storage after both caps ran.
  */
@@ -555,37 +642,77 @@ export async function addItems(candidates) {
   if (fresh.length === 0) return { added: 0, skipped: 0, seen: candidates.length };
 
   const [items, read] = await Promise.all([getItems(), getRead()]);
-  const known = new Set(items.map((item) => item.uid));
-  /* The same headline under another address: compared by what the feed calls it, which is what
-   * `makeItem` built `uid` on. Both sides of the match go through `identityOf`, so a record older
-   * than this field is still recognised by its own link. */
-  const knownSources = new Set(items.map((item) => identityOf(item)));
-  const readKeys = new Set(read.map((record) => readIdentity(record)));
+  const shelf = identityIndex(items, SHELF_KEYS);
+  const markers = identityIndex(read, MARKER_KEYS);
   const accepted = new Set();
   let skipped = 0;
+  let retyped = 0;
 
   for (const candidate of fresh) {
-    const identity = identityOf(candidate);
-    if (known.has(candidate.uid) || knownSources.has(identity)) continue;
-    if (readKeys.has(sourceKeyOf(candidate)) || readKeys.has(candidate.link)) {
+    const match = indexOf(candidate, shelf, SHELF_KEYS);
+
+    /* The poll changed the *kind* of the identity, not the news. A feed that started stating a
+     * `<guid>` — a CMS upgrade, a feed moved to another generator — describes the headlines it used
+     * to ship under their address alone: without this they would come back as news the reader never
+     * had, the ones it deleted among them. The record already on the shelf takes the id the feed now
+     * states, which is the identity that outlives the addresses that feed will change next. */
+    if (match.renamed) {
+      const stored = match.renamed;
+      shelf.idless.delete(addressOf(stored));
+      shelf.ids.delete(identityOf(stored));
+      adoptIdentity(stored, candidate);
+      shelf.ids.add(identityOf(stored));
+      retyped += 1;
+      continue;
+    }
+    if (match.known) continue;
+
+    if (indexOf(candidate, markers, MARKER_KEYS).known) {
       skipped += 1;
       continue;
     }
-    known.add(candidate.uid);
-    knownSources.add(identity);
+
+    const address = addressOf(candidate);
+    if (address) {
+      shelf.addresses.add(address);
+      if (sourceKindOf(candidate) === 'link') shelf.idless.set(address, candidate);
+    }
+    shelf.ids.add(identityOf(candidate));
     accepted.add(candidate.uid);
     items.push(candidate);
   }
 
   /* A headline a cap cut back is not a headline the reader has, so the numbers a load reports are
-   * counted after the caps ran: they name the headlines that really are on the shelf. */
-  if (accepted.size === 0) return { added: 0, skipped, seen: candidates.length };
+   * counted after the caps ran: they name the headlines that really are on the shelf. A record the
+   * poll only re-typed is not a new headline either, but its new identity has to be written down. */
+  if (accepted.size === 0 && retyped === 0) return { added: 0, skipped, seen: candidates.length };
 
   const kept = capItems(items);
   await saveItems(kept);
   const added = kept.reduce((n, item) => (accepted.has(item.uid) ? n + 1 : n), 0);
   return { added, skipped, seen: candidates.length };
 }
+
+/**
+ * Give a stored headline the id its feed has started stating: everything the record says about the
+ * news stays — its title, its preview, its address, the moment it arrived — and only the identity the
+ * shelf keys it on becomes the id the feed promises to keep.
+ *
+ * `uid` moves with it. It is the key the pages name a headline by, and they read it back from storage
+ * on every load; the alternative — keeping the record keyed by an address and matching it by address on
+ * every poll — would lose the headline the moment the feed moved its address too.
+ */
+function adoptIdentity(item, candidate) {
+  const { sourceId, sourceIdType } = sourceOf({
+    link: candidate.link,
+    sourceId: candidate.sourceId,
+    sourceIdType: candidate.sourceIdType,
+  });
+  item.sourceId = sourceId;
+  item.sourceIdType = sourceIdType;
+  item.uid = normalizeUid(item.feedId, sourceId);
+}
+
 
 /**
  * Remove one headline from the list and remember it as read, so the same news is not offered
@@ -649,18 +776,42 @@ export async function markRead(items) {
 
   const now = Date.now();
   const [read, ttlDays] = await Promise.all([getRead(), getReadTtlDays()]);
-  const known = new Set(read.map((record) => readIdentity(record)));
+  const markers = identityIndex(read, MARKER_KEYS);
   let added = 0;
+  let retyped = 0;
 
   for (const item of fresh) {
     const record = makeReadRecord(item, now);
-    if (known.has(readIdentity(record))) continue;
-    known.add(readIdentity(record));
+    const match = indexOf(record, markers, MARKER_KEYS);
+
+    /* One marker per news, whatever feed of one site shipped it — by the id the feed calls it by, and
+     * by its address when either side names no id. A marker made from a headline the shelf keyed by
+     * address takes the id the feed has started stating, the way the headline itself does: from there
+     * it holds the news out on the polls where its address moved along with the upgrade. */
+    if (match.renamed) {
+      markers.idless.delete(addressKeyOf(match.renamed));
+      markers.ids.delete(readIdentity(match.renamed));
+      match.renamed.sourceId = record.sourceId;
+      match.renamed.sourceIdType = record.sourceIdType;
+      markers.ids.add(readIdentity(match.renamed));
+      retyped += 1;
+      continue;
+    }
+    if (match.known) continue;
+
+    const address = addressKeyOf(record);
+    if (address) {
+      markers.addresses.add(address);
+      if (sourceKindOf(record) === 'link') markers.idless.set(address, record);
+    }
+    markers.ids.add(readIdentity(record));
     read.push(record);
     added += 1;
   }
 
-  if (added > 0) await saveRead(capRead(read, ttlDays, now).read);
+  /* A re-typed marker is not a new marker, but its new identity has to be written down: it is what
+   * holds the deleted news out of the polls that come after the feed started stating its ids. */
+  if (added > 0 || retyped > 0) await saveRead(capRead(read, ttlDays, now).read);
   return added;
 }
 

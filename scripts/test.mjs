@@ -37,6 +37,7 @@ const {
   MIN_READ_TTL_DAYS,
   MIN_SOUND_VOLUME,
   READ_TTL_DAYS,
+  SOURCE_ID_CUT,
   alarmPeriodMinutes,
   badgeText,
   capPreview,
@@ -45,6 +46,7 @@ const {
   feedBackoffMinutes,
   feedNextCheckAt,
   feedPauseRemaining,
+  fingerprint,
   formatSince,
   humanDuration,
   honoredReadDays,
@@ -60,6 +62,7 @@ const {
   normalizePubDate,
   normalizeUid,
   pubDateTime,
+  shortenSourceId,
   toDays,
   toFlag,
   toMinutes,
@@ -959,6 +962,162 @@ test('a headline stored before the ids were kept is not copied by the next poll'
   }
 });
 
+test('a feed that starts stating its own ids is one feed: its headlines do not come back', async () => {
+  const feed = { id: 'f1', name: 'Blog', rss_link: 'https://blog.example/rss' };
+  const forget = storageMemory();
+
+  try {
+    /* The shelf as every poll before the CMS upgrade wrote it: a headline keyed by its address. */
+    const before = store.makeItem({ feed, title: 'A', link: 'https://blog.example/posts/1?utm_source=rss' });
+    assert.equal((await store.addItems([before])).added, 1);
+
+    /* The same news on the first poll after the upgrade: the feed names it, and keeps the address. */
+    const upgraded = store.makeItem({
+      feed,
+      title: 'A',
+      link: 'https://www.blog.example/posts/1/',
+      sourceId: 'tag:blog,2024:1',
+      sourceIdType: 'guid',
+    });
+    assert.deepEqual(
+      await store.addItems([upgraded]),
+      { added: 0, skipped: 0, seen: 1 },
+      'a new kind of identity is not a new news',
+    );
+
+    const stored = await store.getItems();
+    assert.equal(stored.length, 1, 'the reader did not duplicate the headline it already had');
+    assert.equal(
+      stored[0].uid,
+      'f1|tag:blog,2024:1',
+      'the record the poll re-typed now carries the id the feed promises to keep',
+    );
+    assert.equal(stored[0].link, 'https://blog.example/posts/1?utm_source=rss', 'and keeps the address it read');
+
+    /* The upgrade moved the address too, a month later: the id is what holds the headline in place. */
+    const moved = store.makeItem({
+      feed,
+      title: 'A, renamed by the site',
+      link: 'https://blog.example/2024/01/a-renamed/',
+      sourceId: 'tag:blog,2024:1',
+      sourceIdType: 'guid',
+    });
+    assert.deepEqual(
+      await store.addItems([moved]),
+      { added: 0, skipped: 0, seen: 1 },
+      're-typing it was what made its address free to move',
+    );
+    assert.equal((await store.getItems()).length, 1);
+  } finally {
+    forget();
+  }
+});
+
+test('a headline deleted before the feed had ids stays deleted after it started stating them', async () => {
+  const feed = { id: 'f1', name: 'Blog', rss_link: 'https://blog.example/rss' };
+  const forget = storageMemory();
+
+  try {
+    const before = store.makeItem({ feed, title: 'A', link: 'https://blog.example/posts/1' });
+    await store.addItems([before]);
+    assert.equal(await store.removeItem(before.uid), true);
+
+    const marker = (await store.getRead())[0];
+    assert.equal(marker.sourceIdType, 'link', 'the marker was made from a headline keyed by its address');
+
+    const upgraded = store.makeItem({
+      feed,
+      title: 'A',
+      link: 'https://blog.example/posts/1/',
+      sourceId: 'tag:blog,2024:1',
+      sourceIdType: 'guid',
+    });
+    assert.deepEqual(
+      await store.addItems([upgraded]),
+      { added: 0, skipped: 1, seen: 1 },
+      'the removed headline is the one an upgrade brings back, and the marker is what stops it',
+    );
+    assert.equal((await store.getItems()).length, 0);
+  } finally {
+    forget();
+  }
+});
+
+test('a feed that stops stating its ids does not lose the headlines it keyed by them', async () => {
+  const feed = { id: 'f1', name: 'Blog', rss_link: 'https://blog.example/rss' };
+  const forget = storageMemory();
+
+  try {
+    const withId = store.makeItem({
+      feed,
+      title: 'A',
+      link: 'https://blog.example/posts/1',
+      sourceId: 'tag:blog,2024:1',
+      sourceIdType: 'guid',
+    });
+    await store.addItems([withId]);
+
+    const dropped = store.makeItem({ feed, title: 'A', link: 'https://blog.example/posts/1/' });
+    assert.deepEqual(
+      await store.addItems([dropped]),
+      { added: 0, skipped: 0, seen: 1 },
+      'the address is enough to recognise a headline the storage keys by an id',
+    );
+    assert.equal((await store.getItems()).length, 1, 'and it is not re-typed by a poll that states less');
+  } finally {
+    forget();
+  }
+});
+
+test('one deleted news is one marker, whichever way its feed calls it', async () => {
+  const feed = { id: 'f1', name: 'Blog', rss_link: 'https://blog.example/rss' };
+  const forget = storageMemory();
+
+  try {
+    const byAddress = store.makeItem({ feed, title: 'A', link: 'https://blog.example/posts/1' });
+    assert.equal(await store.markRead([byAddress]), 1);
+
+    const byId = store.makeItem({
+      feed,
+      title: 'A',
+      link: 'https://blog.example/posts/1/',
+      sourceId: 'tag:blog,2024:1',
+      sourceIdType: 'guid',
+    });
+    assert.equal(await store.markRead([byId]), 0, 'a marker keyed by an address holds out the same news by its id');
+
+    const retyped = await store.getRead();
+    assert.equal(retyped.length, 1, 'the marker was re-typed, not doubled');
+    assert.equal(retyped[0].sourceIdType, 'guid', 'it took the id the feed states now');
+    assert.equal(retyped[0].sourceId, 'tag:blog,2024:1', 'and holds its news out by that id from here on');
+
+    const secondId = store.makeItem({
+      feed,
+      title: 'A, now with another id',
+      link: 'https://blog.example/posts/1',
+      sourceId: 'tag:blog,2024:2',
+      sourceIdType: 'guid',
+    });
+    assert.equal(
+      await store.markRead([secondId]),
+      1,
+      'where both sides name an id of their own, the ids are the news: one address holds two markers',
+    );
+
+    const elsewhere = store.makeItem({
+      feed,
+      title: 'B',
+      link: 'https://blog.example/posts/2',
+      sourceId: 'tag:blog,2024:3',
+      sourceIdType: 'guid',
+    });
+    assert.equal(await store.markRead([elsewhere]), 1, 'another news is another marker');
+    assert.equal((await store.getRead()).length, 3);
+  } finally {
+    forget();
+  }
+});
+
 test('a deleted news stays deleted when the feed ships it under another link', async () => {
   const feed = { id: 'f1', name: 'Nnm', rss_link: 'https://nnmclub.to/rss' };
   const id = 'nnm:396698';
@@ -1116,16 +1275,33 @@ test('the stored headlines of all feeds together do not grow without bound', asy
 
 test('a guid is stored short: an id of a feed is not a whole article', () => {
   const feed = { id: 'f1', name: 'X', rss_link: 'https://a.b/rss' };
+  const long = 'x'.repeat(MAX_SOURCE_ID_CHARS + 400);
   const item = store.makeItem({
     feed,
     title: 't',
     link: 'https://a.b/x',
-    sourceId: 'x'.repeat(MAX_SOURCE_ID_CHARS + 400),
+    sourceId: long,
     sourceIdType: 'guid',
   });
 
-  assert.equal(item.sourceId.length, MAX_SOURCE_ID_CHARS);
+  assert.ok(
+    item.sourceId.startsWith(long.slice(0, MAX_SOURCE_ID_CHARS)),
+    'the id stays what the feed wrote, as far as the guard keeps it',
+  );
+  assert.equal(
+    item.sourceId,
+    `${long.slice(0, MAX_SOURCE_ID_CHARS)}${SOURCE_ID_CUT}${fingerprint(long)}`,
+    'the cut is marked, and the fingerprint of the whole id goes with it',
+  );
   assert.equal(item.uid, `f1|${item.sourceId}`);
+
+  const next = store.makeItem({ feed, title: 't', link: 'https://a.b/y', sourceId: long, sourceIdType: 'guid' });
+  assert.equal(next.sourceId, item.sourceId, 'one id is shortened to one id: the next poll knows its news');
+
+  const neighbour = store.makeItem({ feed, title: 'u', link: 'https://a.b/z', sourceId: `${long}1`, sourceIdType: 'guid' });
+  assert.notEqual(neighbour.sourceId, item.sourceId, 'the cut does not merge two ids that differ only past it');
+
+  assert.equal(shortenSourceId(' tag-42 '), 'tag-42', 'an id within the guard is kept whole');
 });
 
 /* ---------------------------- feed encoding ---------------------------- */
@@ -3300,8 +3476,13 @@ test('the id a feed states makes the whole trip: parse — record — next poll'
 
   const storageJs = read('src/lib/storage.js');
   assert.ok(
-    /const knownSources = new Set\(items\.map\(\(item\) => identityOf\(item\)\)\)/.test(storageJs),
+    /const shelf = identityIndex\(items, SHELF_KEYS\)/.test(storageJs),
     'a stored headline is recognised by its identity, not only by the uid of the address it had',
+  );
+  assert.ok(
+    /const match = indexOf\(candidate, shelf, SHELF_KEYS\)/.test(storageJs),
+    'and by the address it had when the storage has nothing but that address to say: a feed that '
+      + 'started stating a `<guid>` describes the headlines it already shipped',
   );
   assert.ok(
     /readIdentity\(record\)/.test(storageJs),
