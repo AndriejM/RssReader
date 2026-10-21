@@ -186,12 +186,17 @@ Three vertical panels:
 2. **Headlines** — headlines of the selected feed from storage, freshest on top, with a
    “loaded N min ago” label and a storage time counted down from `clean_timeout`. When “All feeds”
    is selected, the headlines of all the feeds stand here, also freshest on top, and each one is
-   labelled with the name of the feed it came from.
+   labelled with the name of the feed it came from. A headline whose news a read mark holds out of
+   the feeds carries a check glyph after its title and is drawn muted: it is still on the shelf and
+   still opens its text, but no feed brings its news back while the mark lives.
 3. **Content** — the article text loaded at the moment of the click. The article headline in the
-   right panel is itself a link to the original (new tab); in the corner above the text there is
-   a delete icon: it removes the headline from the list and from storage, immediately opens the
-   next headline of the same feed (or, when “All feeds” is selected, the next headline by date),
-   and remembers the deleted one as read — on the next feed load it will no longer appear.
+   right panel is itself a link to the original (new tab); in the corner above the text there are
+   two icons: a check icon marks the open headline read, or — when it already carries a mark —
+   takes that mark off, and the headline stays exactly where it stands; a delete icon removes the
+   headline from the list and from storage, immediately opens the next headline of the same feed
+   (or, when “All feeds” is selected, the next headline by date), and marks the deleted one read.
+   When the open headline is marked, a note above its text says what that means for the feeds, and
+   a delete leaves a line under the toolbar that names the headline it took and offers **Undo**.
 
 In the head of every panel there is its own font size switcher: four buttons drawn as the letter “A”,
 each at the size it stands for. A button scales only the column it sits in — the feed list, the
@@ -240,7 +245,9 @@ feed that refuses to be read does not stop the others (the reader says how many 
 headlines those feeds already have), and — as with a single refresh — no sound plays. A trash-icon
 button then removes from storage exactly what is selected: a single feed's headlines, or (with
 «Все ленты») every headline, remembering them as read so the next load does not bring them back
-(the feeds themselves remain). The counters update when the background downloads or cleans up
+(the feeds themselves remain). This is the one act on the screen no undo line takes back, so the
+button asks first — as deleting a feed or the whole read list does on the other two screens. The
+counters update when the background downloads or cleans up
 headlines, so an open reader never shows stale data.
 
 The “Feed settings” icon opens the settings in the same tab — no second tab appears — and the
@@ -277,14 +284,29 @@ search field holds the same letters) or while Ctrl/Meta/Alt are down:
 | `↑` or `k` | open the previous headline of the current selection |
 | `Enter` | open the original of the open headline in a new tab |
 | `r` | re-read the selected feed («All feeds» — every feed) |
-| `d` | delete the open headline |
+| `m` | mark the open headline read, or take that mark back |
+| `d` | delete the open headline (it can still be taken back) |
+| `u` | take back the headline just deleted |
 | `Esc` (in the search field) | empty the field, keeping the open headline |
+| `Esc` (outside it) | take back the headline just deleted, while the undo line stands |
 | `?` | open (or close) the list of these keys, inside the reader |
 
 The arrows work from inside the search field too: they leave the words typed and move the cursor
 through the headlines the field filters. Every move brings the row it landed on back into view, and the
 row the keyboard opens also takes the focus, so its name is read out and the next arrow continues from
 it.
+
+The mark `m` puts on is the very mark a delete leaves, only without the delete: the headline stays on
+the shelf, its row takes the check glyph and goes quiet, and a note above its text says that no feed
+will bring this news back while the mark lives. The key again — or the check icon in the corner of the
+right panel — takes the mark off, and the feed is free to bring the news back. A delete keeps the mark
+it puts on, but not the headline: for 15 seconds a line under the toolbar names the headline it took
+and offers **Undo**, which the button itself, `u`, or `Esc` outside a field (a field being typed in
+keeps its own `Esc`) takes back — the headline returns to the shelf and its read mark goes with it,
+otherwise the next load would delete it a second time. Once the window closes, the way back is the
+`read_ttl_days` horizon running out or the “Forget read items” button on the global settings screen.
+Clearing a whole selection with the trash icon is the one act no undo line covers, so it asks for a
+confirmation first.
 
 The same list stands inside the reader, where the keys are used: the «?» icon at the right of the header
 and the `?` key open it, and a modal window shows a table of the keys with the shortcut of each one and
@@ -556,11 +578,13 @@ two ids that differ only past the cut stay two different headlines.
 }
 ```
 
-**`read`** — an array of read (user-deleted) news items. The feed server does not remove its own
-headlines, so without this list a deleted news item would return on every next load. The record is
+**`read`** — an array of the news items the user marked read personally: by the check icon (or `m`)
+of the article panel, or by deleting them. The feed server does not remove its own
+headlines, so without this list a marked news item would return on every next load. The record is
 matched by the identity of the news — its `sourceId`, or the address of its `link` when either side
 names no id — so a mark survives both a feed edit and the server reissuing the news under another
-address. A marker made from a headline the shelf keyed by its address takes the id the feed has
+address, and reaches across the feeds of one site. A marker made from a headline the shelf keyed by
+its address takes the id the feed has
 started stating, the way the headline itself does (see “Implementation notes”).
 
 ```json
@@ -593,8 +617,11 @@ Other storage properties:
 
 - The order in `items` is freshest-first (`store.sortItems`; for equal `time` the order is
   stabilized by the headline).
-- Only headlines the user deleted personally (the delete icon in the reader and the clear icon in
-  the middle panel head, for one feed or for all) get into `read`. A headline expired by `clean_timeout` is not written to `read`: its term
+- Only the headlines the user marked read personally get into `read`: the check icon (or `m`) in the
+  corner of the right panel, the delete icon there, and the clear icon in the middle panel head, for
+  one feed or for all. A headline marked read stays on the shelf; a deleted one leaves it, and the
+  undo line gives it back together with its mark (`store.restoreItem`). A headline expired by
+  `clean_timeout` is not written to `read`: its term
   expired not by the user's will. A mark lives `read_ttl_days` days (7 by default; set on the
   global settings screen), counted from the later of `pubDate` and the deletion moment
   (`util.readTime`), so a recently deleted news item does not “come back to life” early even if
@@ -813,12 +840,20 @@ background.
   document has the `DOM_PARSER` permission). The background asks the document to read the feed
   (`MSG_FETCH_FEED`) and receives finished headlines rather than XML. The same document serves
   sound (`AUDIO_PLAYBACK`): there is one window, created as needed and reused.
-- **A deleted news item does not come back**: the `read` storage key holds the links of headlines
-  the user deleted personally. `store.addItems` does not add a headline whose link is already in
+- **A news item the user marked read does not come back**: the `read` storage key holds the
+  headlines the user marked read personally — by the check icon of the article panel or by deleting
+  them. `store.addItems` does not add a headline whose news is already in
   this list, so a feed that has been serving the same set of news for years does not refill the
   reader every `delay_timeout`. A mark lives `read_ttl_days` days (by default `READ_TTL_DAYS` =
   7), `store.cleanupRead` cleans it with the same alarm once a minute, and the list holds at most
   `MAX_READ_RECORDS` records.
+- **The read mark is a state of the storage, not of the page**: `store.readMarksFor(items, read)`
+  answers which headlines on the shelf a mark covers, matched exactly the way `store.addItems`
+  matches a fresh headline against the read list — by the id the feed states, or by an address one
+  of the two is keyed on, and across feeds, since a mark carries no feed. The middle column draws
+  its glyph from that answer and the right panel's toggle takes it back through
+  `store.unmarkRead` / `store.markRead`, so a news never stands marked in one column and fresh in
+  another, and an undo (`store.restoreItem`) puts the headline back with its mark gone.
 - **The cap of the read list never outruns the horizon in silence**: `store.capRead` takes the
   marks whose `read_ttl_days` has already run out first — they hold no news back anyway — and only
   when the live marks alone no longer fit does it let the oldest live marks go. `util.honoredReadDays`
@@ -945,7 +980,7 @@ background.
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
                              # storage.js and rss.js), the guards over the screen markup and over what
-                             # one module borrows from another: 125 tests
+                             # one module borrows from another: 138 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -963,12 +998,17 @@ rules are covered by the tests.
    resets to zero.
 4. More than 99 headlines → the icon shows `*`.
 5. The delete icon in the corner of the right panel → the headline vanishes from both the list
-   and storage, and the reader immediately opens the next headline of the same feed.
+   and storage, and the reader immediately opens the next headline of the same feed. Press the
+   **Undo** in the line that appeared under the toolbar (or `u`, or `Esc` with no field in the
+   focus) → the headline is back in its place, with the check glyph gone and its read mark taken
+   off; wait the 15 seconds out instead, and the line disappears with the way back.
 6. Switch the theme on one screen → the other screen repaints without a reload.
 7. Hover the reader icon → a tooltip explains what it does.
-8. Click the trash icon in the head of the middle panel while «All feeds» is selected → all
+8. Click the trash icon in the head of the middle panel while «All feeds» is selected → the reader
+   asks how many headlines it is about to delete; confirm → all
    headlines vanish from storage, the number in the header resets to zero, the icon badge empties.
-   Select one feed and press it again → only that feed's headlines are removed. The feeds
+   Refuse → nothing was removed, no headline was marked. Select one feed and press it again → only
+   that feed's headlines are removed. The feeds
    themselves remain.
 9. Click the plugin icon twice → there is no second reader tab: Chrome activated the already open
    one (and its window). Same for a reader open in another window.
@@ -1116,6 +1156,14 @@ rules are covered by the tests.
     its place back to the list. Save a second feed → no such line: the confirmation of a first add has
     already been given (`first_feed_done` in `settings`). Add a feed that cannot be read → nothing
     under the table, only the failure in the note of its own row.
+36. Open a headline and press `m` (or the check icon in the corner of the right panel) → the row of
+    the middle column takes the check glyph and goes quiet, the icon turns into the mark being taken
+    off, and a note above the text says no feed will bring this news back while the mark lives. Press
+    the load button of that feed → the headline is not offered again, while its neighbours arrive as
+    usual (`already read: N` on the feed screen). Press `m` again → the glyph goes, the text of the
+    icon and the aria-pressed state go with it, and the next load brings the news back. The same mark
+    made from one feed covers the same news of another feed of the same site: a headline of the second
+    feed stands marked, and unmarking either of them lets both through.
 
 ## Limitations
 

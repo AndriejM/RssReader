@@ -1159,6 +1159,183 @@ test('a deleted news stays deleted when the feed ships it under another link', a
   }
 });
 
+test('taking a read mark off lets the news back into every feed that ships it', async () => {
+  const blog = { id: 'f1', name: 'Blog', rss_link: 'https://blog.example/rss' };
+  const comments = { id: 'f2', name: 'Blog comments', rss_link: 'https://blog.example/comments/rss' };
+  const forget = storageMemory();
+
+  try {
+    await store.saveFeeds([blog, comments]);
+
+    /* A marker made by one feed holds its news out of the other; the marker is keyed without a feed,
+     * so taking it off has to work the same way round — from a headline of either feed. */
+    const byId = store.makeItem({
+      feed: blog,
+      title: 'A',
+      link: 'https://blog.example/posts/1',
+      sourceId: 'tag:blog,2024:1',
+      sourceIdType: 'guid',
+    });
+    const sameNews = store.makeItem({
+      feed: comments,
+      title: 'A',
+      link: 'https://blog.example/comments/posts/1',
+      sourceId: 'tag:blog,2024:1',
+      sourceIdType: 'guid',
+    });
+
+    assert.equal(await store.markRead([byId]), 1);
+    assert.deepEqual(await store.addItems([sameNews]), { added: 0, skipped: 1, seen: 1 }, 'the marker of the first feed holds the news out of the second');
+
+    assert.equal(await store.unmarkRead([sameNews]), 1, 'a headline of another feed names the same news, so its marker goes');
+    assert.equal((await store.getRead()).length, 0);
+    assert.equal((await store.addItems([sameNews])).added, 1, 'and the news is offered again');
+
+    /* The same for a marker the shelf keyed by an address alone: the address crosses feeds too. */
+    const byAddress = store.makeItem({ feed: blog, title: 'B', link: 'https://blog.example/posts/2' });
+    const sameAddress = store.makeItem({ feed: comments, title: 'B', link: 'https://blog.example/posts/2' });
+    await store.markRead([byAddress]);
+    assert.equal(await store.unmarkRead([sameAddress]), 1);
+    assert.equal((await store.getRead()).length, 0);
+
+    /* A marker keyed by an id is taken off by a headline that only knows the address of it: the two
+     * are the same news exactly when `addItems` would have recognised one as the other — an address
+     * matched because one of the two has nothing but an address to say. */
+    const idOnly = store.makeItem({
+      feed: blog,
+      title: 'C',
+      link: 'https://blog.example/posts/3',
+      sourceId: 'tag:blog,2024:3',
+      sourceIdType: 'guid',
+    });
+    await store.markRead([idOnly]);
+    const addressOnly = store.makeItem({ feed: comments, title: 'C', link: 'https://blog.example/posts/3' });
+    assert.equal(await store.unmarkRead([addressOnly]), 1, 'one side without an id is enough to name the news');
+    assert.equal((await store.getRead()).length, 0);
+
+    /* Where both sides name an id of their own, the ids are the news: one address holds two of them,
+     * and a headline of the other is not the marked one. */
+    const otherC = store.makeItem({
+      feed: comments,
+      title: 'C, another id',
+      link: 'https://blog.example/posts/3',
+      sourceId: 'tag:blog,2024:4',
+      sourceIdType: 'guid',
+    });
+    await store.markRead([idOnly]);
+    assert.equal(await store.unmarkRead([otherC]), 0, 'the marker of one id holds out another');
+    assert.equal((await store.getRead()).length, 1);
+
+    assert.equal(await store.unmarkRead([]), 0, 'nothing asked for, nothing taken');
+    assert.equal(await store.unmarkRead([null, { title: 'no link' }]), 0);
+  } finally {
+    forget();
+  }
+});
+
+test('undoing a delete puts the headline back and takes its marker with it', async () => {
+  const feed = { id: 'f1', name: 'Blog', rss_link: 'https://blog.example/rss' };
+  const forget = storageMemory();
+
+  try {
+    await store.saveFeeds([feed]);
+    const item = store.makeItem({ feed, title: 'A', link: 'https://blog.example/posts/1' });
+    const neighbour = store.makeItem({ feed, title: 'B', link: 'https://blog.example/posts/2' });
+    await store.addItems([item, neighbour]);
+
+    assert.equal(await store.removeItem(item.uid), true);
+    assert.equal((await store.getItems()).length, 1, 'the shelf lost the headline');
+    assert.equal((await store.getRead()).length, 1, 'and its news is held out by a marker');
+
+    assert.equal(await store.restoreItem(item), true);
+    const back = await store.getItems();
+    assert.equal(back.length, 2);
+    assert.ok(back.some((stored) => stored.uid === item.uid), 'the same headline, not a copy the next poll ships');
+    assert.equal((await store.getRead()).length, 0, 'the marker went with it, or the next read would delete it again');
+
+    assert.equal((await store.addItems([item])).added, 0, 'the poll that re-ships it is not a second headline');
+  } finally {
+    forget();
+  }
+});
+
+test('a delete is not undone where the headline has nowhere to live', async () => {
+  const feed = { id: 'f1', name: 'Blog', rss_link: 'https://blog.example/rss' };
+  const forget = storageMemory();
+
+  try {
+    await store.saveFeeds([feed]);
+    const item = store.makeItem({ feed, title: 'A', link: 'https://blog.example/posts/1' });
+    await store.addItems([item]);
+    await store.removeItem(item.uid);
+
+    await store.saveFeeds([]);
+    assert.equal(await store.restoreItem(item), false, 'the feed that owned the headline is gone');
+    assert.equal((await store.getItems()).length, 0, 'and no orphan headline was written back');
+    assert.equal((await store.getRead()).length, 1, 'the marker stays: the news is still held out of the feeds that remain');
+
+    await store.saveFeeds([feed]);
+    assert.equal(await store.restoreItem(item), true);
+    assert.equal(await store.restoreItem(item), false, 'a headline already on the shelf is not restored a second time');
+    assert.equal((await store.getItems()).length, 1);
+
+    assert.equal(await store.restoreItem(null), false);
+    assert.equal(await store.restoreItem({ title: 'no uid' }), false);
+  } finally {
+    forget();
+  }
+});
+
+test('readMarksFor calls a headline read by the marker that would hold it off the shelf', () => {
+  const blog = { id: 'f1', name: 'Blog', rss_link: 'https://blog.example/rss' };
+  const mirror = { id: 'f2', name: 'Mirror', rss_link: 'https://mirror.example/rss' };
+
+  const marked = store.makeItem({
+    feed: blog,
+    title: 'A',
+    link: 'https://blog.example/posts/1',
+    sourceId: 'tag:blog,2024:1',
+    sourceIdType: 'guid',
+  });
+  const marker = store.makeReadRecord(marked, 1000);
+
+  const sameNews = store.makeItem({
+    feed: mirror,
+    title: 'A',
+    link: 'https://mirror.example/a/1',
+    sourceId: 'tag:blog,2024:1',
+    sourceIdType: 'guid',
+  });
+  const byAddress = store.makeItem({ feed: mirror, title: 'A', link: 'https://blog.example/posts/1' });
+  const otherId = store.makeItem({
+    feed: mirror,
+    title: 'A, another id',
+    link: 'https://blog.example/posts/1',
+    sourceId: 'tag:blog,2024:2',
+    sourceIdType: 'guid',
+  });
+  const unmarked = store.makeItem({ feed: blog, title: 'B', link: 'https://blog.example/posts/2' });
+
+  const marks = store.readMarksFor([marked, sameNews, byAddress, otherId, unmarked], [marker]);
+  assert.deepEqual(
+    [...marks].sort(),
+    [marked.uid, sameNews.uid, byAddress.uid].sort(),
+    'the marked headline, the mirror of the same news, and the headline that meets the marker at its '
+      + 'address; another id at that address is another news',
+  );
+
+  assert.equal(store.readMarksFor([byAddress], [store.makeReadRecord(byAddress, 1000)]).size, 1, 'a marker keyed by an address covers the headline it holds');
+  assert.equal(store.readMarksFor([unmarked], [marker]).size, 0, 'another news is not covered');
+  assert.equal(store.readMarksFor([], [marker]).size, 0);
+  assert.equal(store.readMarksFor(null, null).size, 0);
+
+  /* A marker whose horizon has run out still sits in the list, so the reader still holds the news it
+   * stands for until `cleanupRead` sweeps it. */
+  const stale = store.makeReadRecord(unmarked, 1000);
+  assert.ok(util.isReadExpired(stale, Date.now(), 7), 'the horizon of this marker ran out long ago');
+  assert.ok(store.readMarksFor([unmarked], [stale]).has(unmarked.uid), 'and still counts as a mark in the reader');
+});
+
 test('markRead keeps one marker for a news two feeds of one site ship twice', async () => {
   const feed = { id: 'f1', name: 'Nnm', rss_link: 'https://nnmclub.to/rss' };
   const forget = storageMemory();
@@ -2715,7 +2892,9 @@ test('the reader explains its keys inside the reader', () => {
     'reader.keys.prev',
     'reader.keys.original',
     'reader.keys.refresh',
+    'reader.keys.mark',
     'reader.keys.delete',
+    'reader.keys.undo',
     'reader.keys.escape',
     'reader.keys.help',
     'reader.keys.hint',
@@ -2737,6 +2916,101 @@ test('the reader explains its keys inside the reader', () => {
   assert.ok(css.includes('.keys-help::backdrop'), 'the rest of the screen stays unshaded behind the list');
   assert.ok(css.includes('.keys-keys kbd'), 'the keys of the list are typed as plain running text');
   assert.ok(css.includes('.keys-table'), 'the list of keys is laid out as no table');
+});
+
+/**
+ * The mark "read" has a place on the screen: a toggle in the article panel, a glyph on the row of the
+ * middle column, a note above the text, and a window that takes a delete back. Every one of them is a
+ * name shared by the markup, the script that draws it, the stylesheet that styles it and the seven
+ * dictionaries, so the four are kept in step here as the rest of the reader's parts are.
+ */
+test('the reader shows the read mark, its toggle and the way back from a delete', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const html = read('src/index.html');
+  const page = read('src/index.js');
+  const css = read('src/styles/reader.css');
+
+  /* The three glyphs the mark, its removal and the undo borrow from the sprite. */
+  for (const glyph of ['icon-read', 'icon-unread', 'icon-undo']) {
+    assert.ok(html.includes(`<symbol id="${glyph}"`), `the reader sprite never defines ${glyph}`);
+  }
+  assert.ok(page.includes("icon(isRead ? 'unread' : 'read')"), 'the toggle never changes the glyph it shows');
+
+  /* The toggle of the article panel: declared, wired, and announced the way a toggle is announced. */
+  assert.ok(html.includes('id="content-read"'), 'the reader declares no button that marks a headline read');
+  assert.ok(page.includes("document.getElementById('content-read')"), 'the page does not know the button the markup declares');
+  assert.ok(page.includes('els.contentRead.addEventListener'), 'the read toggle answers to no click');
+  assert.ok(page.includes("els.contentRead.setAttribute('aria-pressed', String(isRead))"), 'the toggle never says which way it stands');
+  assert.ok(page.includes("els.contentRead.hidden = true"), 'a placeholder leaves the toggle standing over no headline');
+  assert.ok(/els\.contentRead\.title = t\(`reader\.content\.\$\{key\}\.tooltip`\)/.test(page), 'the toggle explains nothing about what a mark does to the feeds');
+
+  /* Marking is a storage act, not a flag of the page: both directions go through the read list. */
+  assert.ok(page.includes("await store.unmarkRead([item])"), 'taking the mark off asks the storage for nothing');
+  assert.ok(page.includes('await store.markRead([item])'), 'putting the mark on never reaches the read list');
+  assert.ok(page.includes('store.readMarksFor(state.items, read)'), 'the middle column draws no mark the storage really holds');
+
+  /* The glyph on the row, and the row itself going quiet under it. */
+  assert.ok(page.includes('title.append(readFlag())'), 'a read headline carries no mark in the middle column');
+  assert.ok(css.includes('.item-title .read-flag'), 'the mark of a headline is styled as no part of the reader');
+  assert.ok(css.includes('.list-item.read'), 'a read headline is laid out like every other headline');
+  assert.ok(css.includes('.list-item.selected .item-title .read-flag'), 'the mark disappears on the selected headline');
+
+  /* What the article says about its own mark. */
+  assert.ok(page.includes("note(t('reader.content.marked'), 'marked')"), 'the article never says its headline is held out of the feeds');
+  assert.ok(css.includes('.note.marked'), 'the note about the mark is styled as no part of the reader');
+
+  /* The window of an undo: its line, its button, its timer, and the keys that take a delete back. */
+  assert.ok(html.includes('id="undo-line"'), 'the reader declares no line that offers an undo');
+  assert.ok(html.includes('id="btn-undo"'), 'an undo is offered to a mouse by nothing');
+  assert.ok(page.includes("document.getElementById('btn-undo')"), 'the page does not know the undo button the markup declares');
+  assert.ok(page.includes('els.undoButton.addEventListener'), 'the undo button answers to no click');
+  assert.ok(page.includes('offerUndo(removed)'), 'a delete offers no way back');
+  assert.ok(page.includes('setTimeout(clearUndo, UNDO_MS)'), 'the window of an undo is never closed, or never timed at all');
+  assert.ok(page.includes('await store.restoreItem('), 'the undo asks the storage for nothing');
+  assert.ok(page.includes("announce(t('reader.announce.undoFailed'))"), 'an undo that could not happen is not announced');
+  assert.ok(page.includes("case 'u':"), 'no key takes a delete back');
+  assert.ok(page.includes("if (state.undo && event.key === 'Escape'"), 'nothing outside the button takes a delete back');
+  assert.ok(page.includes('!isTypingTarget(event.target)'), 'the undo window takes Esc from a field that is being typed in');
+
+  /* A line whose own class makes it a flex box is not hidden by `[hidden]` alone. */
+  assert.ok(css.includes('.undo-line[hidden]'), 'the undo line shows straight through its own `hidden`');
+  assert.ok(css.includes('.undo-btn'), 'the undo button is styled as no part of the reader');
+  assert.ok(css.includes('.undo-btn .icon'), 'the glyph of the undo is drawn at no size of its own');
+
+  /* The one bulk delete no undo window takes back asks first — as a feed and a read list do. */
+  assert.ok(/window\.confirm\(t\('reader\.confirmClear'/.test(page), 'the reader deletes a whole selection without asking');
+
+  /* Every caption these parts ask to show, in every language the reader speaks. */
+  const captions = [
+    'reader.keys.mark',
+    'reader.keys.undo',
+    'reader.keys.delete',
+    'reader.keys.escape',
+    'reader.content.mark.tooltip',
+    'reader.content.mark.aria',
+    'reader.content.unmark.tooltip',
+    'reader.content.unmark.aria',
+    'reader.content.marked',
+    'reader.undo.prompt',
+    'reader.undo.button',
+    'reader.confirmClear',
+    'reader.announce.marked',
+    'reader.announce.unmarked',
+    'reader.announce.undone',
+    'reader.announce.undoFailed',
+  ];
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of captions) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the read mark asks to show`);
+    }
+  }
+
+  /* A mark that reaches across the feeds is the mark the storage holds: the reader must not invent its
+   * own shorter match, or the same news would stand marked in one column and fresh in another. */
+  const setMarks = [...page.matchAll(/state\.read = /g)].length;
+  const fromStorage = [...page.matchAll(/state\.read = store\.readMarksFor/g)].length;
+  assert.equal(setMarks, fromStorage, 'the reader sets its read marks by something other than the match the storage itself uses');
 });
 
 /* ---------------------- feed health on the settings screen ---------------------- */

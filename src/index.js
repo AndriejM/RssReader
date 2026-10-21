@@ -44,15 +44,25 @@ const els = {
   keysClose: document.getElementById('btn-keys-close'),
 
   contentDelete: document.getElementById('content-delete'),
+  contentRead: document.getElementById('content-read'),
   contentBody: document.getElementById('content-body'),
+
+  /* Строка отмены: её ставит удаление заголовка, и она же возвращает его назад. */
+  undoLine: document.getElementById('undo-line'),
+  undoText: document.getElementById('undo-text'),
+  undoButton: document.getElementById('btn-undo'),
 };
 
 const state = {
   feeds: [],
   items: [],
+  /** `uid` тех заголовков, которых метка «прочитано» держит вне выборок (см. `store.readMarksFor`). */
+  read: new Set(),
   feedId: null,
   uid: null,
   query: '',
+  /** Заголовок, который читалка ещё может вернуть: сам он и сколько живёт его строка отмены. */
+  undo: null,
 };
 
 /*
@@ -415,8 +425,9 @@ function renderHeadlines() {
     // новость — та, что `aria-selected`; без этого экран назвал бы список списком кнопок.
     li.setAttribute('role', 'option');
     const selected = item.uid === state.uid;
+    const read = state.read.has(item.uid);
     li.setAttribute('aria-selected', selected ? 'true' : 'false');
-    li.className = `list-item${selected ? ' selected' : ''}`;
+    li.className = `list-item${selected ? ' selected' : ''}${read ? ' read' : ''}`;
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -430,6 +441,9 @@ function renderHeadlines() {
     title.className = 'item-title';
     // A headline the feed gave no title is labelled here, in the reader's language.
     title.textContent = item.title || t('common.untitled');
+    /* Глиф заголовка, помеченного прочитанным: то же состояние, что ставит и снимает его кнопка
+     * правой панели, и та причина, по которой выборки эту новость уже не приносят. */
+    if (read) title.append(readFlag());
 
     const meta = document.createElement('span');
     meta.className = 'item-meta muted';
@@ -475,6 +489,7 @@ function selectFeed(feedId) {
 function showPlaceholder(message) {
   state.uid = null;
   els.contentDelete.hidden = true;
+  els.contentRead.hidden = true;
 
   const p = document.createElement('p');
   p.className = 'empty';
@@ -505,6 +520,13 @@ function applyQuerySelection() {
   saveSelection();
   renderHeadlines();
   renderArticle(target);
+}
+
+/** The check glyph of a read headline: the sprite's «read» icon, named for the stylesheet. */
+function readFlag() {
+  const flag = icon('read');
+  flag.classList.add('read-flag');
+  return flag;
 }
 
 /** Clone one of the <symbol> icons declared in index.html. */
@@ -599,6 +621,7 @@ function selectHeadline(uid) {
 /** Правая панель открытой новости: заголовок-ссылка, источник и сохранённое `<description>`. */
 function renderArticle(item) {
   els.contentDelete.hidden = false;
+  paintReadButton(item);
 
   const title = titleHeading(item.title || t('common.untitled'), item.link);
   const source = document.createElement('div');
@@ -610,10 +633,14 @@ function renderArticle(item) {
     : name;
 
   const preview = sanitizePreview(item.description);
+  /* Метка «прочитано» сказана и в самой статье: строка средней колонки показывает её глифом, здесь
+   * она названа словами — тому, кто читает панель вслух. */
+  const marked = state.read.has(item.uid) ? [note(t('reader.content.marked'), 'marked')] : [];
   if (!preview.node) {
     els.contentBody.replaceChildren(
       title,
       source,
+      ...marked,
       note(t('reader.content.noDescription'), 'error'),
       note(t('reader.content.originalByLink')),
     );
@@ -621,7 +648,7 @@ function renderArticle(item) {
   }
 
   const notes = preview.truncated ? [note(t('reader.content.truncated'))] : [];
-  els.contentBody.replaceChildren(title, source, preview.node, ...notes);
+  els.contentBody.replaceChildren(title, source, ...marked, preview.node, ...notes);
 }
 
 function note(text, kind = '') {
@@ -631,7 +658,120 @@ function note(text, kind = '') {
   return p;
 }
 
-/** Deleting a headline hands the reader over to the next headline of the same selection. */
+/** The open headline as the shelf holds it, or `null` when the right panel shows no article. */
+function openHeadline() {
+  if (!state.uid) return null;
+  return state.items.find((item) => item.uid === state.uid && inSelection(item)) ?? null;
+}
+
+/**
+ * «Почитано» — the read model where the reader can see it: the headline stays exactly where it
+ * stands and takes the marker that keeps its news out of the polls for `read_ttl_days` (see
+ * `store.markRead`). The same button takes the marker back, so what the reader marks is something it
+ * can undo — unlike a delete, which throws the headline itself away.
+ */
+async function toggleHeadlineRead() {
+  const item = openHeadline();
+  if (!item) return;
+
+  const wasRead = state.read.has(item.uid);
+  els.contentRead.disabled = true;
+  try {
+    if (wasRead) await store.unmarkRead([item]);
+    else await store.markRead([item]);
+  } finally {
+    els.contentRead.disabled = false;
+  }
+
+  /* Сам заголовок никуда не двигался, поэтому перекрашивается только его метка: строка средней
+   * колонки и кнопка правой панели, а не вся колонка. */
+  state.read = store.readMarksFor(state.items, await store.getRead());
+  paintReadRow(item.uid, state.read.has(item.uid));
+  paintReadButton(item);
+  announce(t(wasRead ? 'reader.announce.unmarked' : 'reader.announce.marked'));
+}
+
+/** Кнопка правой панели: она называет, в какую сторону действует сейчас, и стоит нажатой, когда метка стоит. */
+function paintReadButton(item) {
+  const isRead = state.read.has(item.uid);
+  const key = isRead ? 'unmark' : 'mark';
+
+  els.contentRead.hidden = false;
+  els.contentRead.setAttribute('aria-pressed', String(isRead));
+  els.contentRead.title = t(`reader.content.${key}.tooltip`);
+  els.contentRead.setAttribute('aria-label', t(`reader.content.${key}.aria`));
+  els.contentRead.replaceChildren(icon(isRead ? 'unread' : 'read'));
+}
+
+/** Ставит или снимает метку с одной строки, не перестраивая среднюю колонку. */
+function paintReadRow(uid, isRead) {
+  const li = els.headlineList.querySelector(`.list-item[data-uid="${CSS.escape(uid)}"]`);
+  const title = li?.querySelector('.item-title');
+  if (!li || !title) return;
+
+  li.classList.toggle('read', isRead);
+  title.querySelector('.read-flag')?.remove();
+  if (isRead) title.append(readFlag());
+}
+
+/** How long the window of an undo stands before the reader stops offering it. */
+const UNDO_MS = 15000;
+
+/**
+ * Строка отмены удаления: она стоит между панелью статьи и её текстом и называет, что именно
+ * читалка может вернуть. Окно стоит `UNDO_MS` и закрывается по `Esc`, поэтому клавиша не трогает
+ * ни открытый заголовок, ни то, что набрано в поле поиска.
+ */
+function offerUndo(item) {
+  clearUndo();
+  state.undo = { item, timer: setTimeout(clearUndo, UNDO_MS) };
+  renderUndo();
+}
+
+function clearUndo() {
+  if (!state.undo) return;
+  clearTimeout(state.undo.timer);
+  state.undo = null;
+  els.undoLine.hidden = true;
+  els.undoText.textContent = '';
+}
+
+/** Перекладывает строку отмены на новый язык: её текст называет удалённый заголовок. */
+function renderUndo() {
+  if (!state.undo) {
+    els.undoLine.hidden = true;
+    return;
+  }
+  const item = state.undo.item;
+  els.undoText.textContent = t('reader.undo.prompt', { title: item.title || t('common.untitled') });
+  els.undoLine.hidden = false;
+}
+
+/**
+ * Возвращает удалённый заголовок: он встаёт на полку там, где был, а метка, которая держала его вне
+ * выборок, снимается (см. `store.restoreItem`) — иначе возвращённая новость не пришла бы обратно из
+ * ленты, хотя читатель именно об этом и просил.
+ */
+async function undoDelete() {
+  const removed = state.undo?.item;
+  if (!removed) return;
+
+  clearUndo();
+  const restored = await store.restoreItem(removed);
+  if (!restored) {
+    announce(t('reader.announce.undoFailed'));
+    return;
+  }
+
+  state.uid = removed.uid;
+  await renderAll();
+  saveSelection();
+  announce(t('reader.announce.undone'));
+}
+
+/**
+ * Удаление заголовка передаёт читалку следующему заголовку того же выделения.
+ */
 async function deleteItem() {
   if (!state.uid) return;
 
@@ -639,11 +779,13 @@ async function deleteItem() {
   const position = itemsOfSelectedFeed().findIndex((item) => item.uid === state.uid);
 
   const uid = state.uid;
+  const removed = state.items.find((item) => item.uid === uid) ?? null;
   await store.removeItem(uid);
   state.uid = null;
   saveSelection();
   await renderAll();
   announce(t('reader.announce.deleted'));
+  if (removed) offerUndo(removed);
 
   // «Все ленты» keeps the whole list: the next headline is the one that stood below the removed
   // one, whatever feed it belongs to. The search field filters that list exactly as it filters the
@@ -670,13 +812,16 @@ async function deleteItem() {
 /**
  * The trash icon beside the middle panel's title: it removes from storage the headlines the left
  * column has selected — one feed's headlines, or (with «Все ленты») every headline. They are
- * remembered as read so the next feed read does not hand them straight back. The storage write also
- * makes the background worker refresh the badge, and this page's storage.onChanged listener repaints
- * the panels, so no extra bookkeeping is needed.
+ * remembered as read so the next feed read does not hand them straight back. Deleting the whole
+ * selection at once is the one thing on this screen that no undo window takes back, so it is
+ * confirmed before it happens — the way a feed and a read list are deleted on the other two screens.
+ * The storage write also makes the background worker refresh the badge, and this page's
+ * storage.onChanged listener repaints the panels, so no extra bookkeeping is needed.
  */
 async function clearSelectionHeadlines() {
   const targets = itemsOfSelectedFeed();
   if (targets.length === 0) return;
+  if (!window.confirm(t('reader.confirmClear', { count: targets.length }))) return;
 
   els.clear.disabled = true;
   try {
@@ -797,8 +942,16 @@ async function refreshAllFeeds(target = els.refresh) {
 }
 
 async function renderAll() {
-  state.feeds = await store.getFeeds();
-  state.items = store.sortItems(await store.getItems());
+  const [feeds, items, read] = await Promise.all([
+    store.getFeeds(),
+    store.getItems(),
+    store.getRead(),
+  ]);
+  state.feeds = feeds;
+  state.items = store.sortItems(items);
+  /* Средняя колонка рисует метку «прочитано» там же, где её держит хранилище: по тому же совпадению,
+   * по которому свежий заголовок не проходит через список прочитанного (см. `store.addItems`). */
+  state.read = store.readMarksFor(state.items, read);
 
   // The selected feed may have been deleted on the settings screen; «Все ленты» is no feed, so it
   // is not looked for in the list.
@@ -837,6 +990,8 @@ function redraw() {
     : null;
   if (item) openItem(item);
   else if (state.feeds.length === 0) showPlaceholder(t('reader.start.contentHint'));
+  /* Строка отмены тоже рисуется словами словаря: смена языка на экране настроек доходит и до неё. */
+  renderUndo();
 }
 
 /* Storage is written by the background worker while this page is open, so react to it. */
@@ -865,7 +1020,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     redraw();
   }
 
-  if (changes.items || changes.feeds) scheduleStorageRender();
+  if (changes.items || changes.feeds || changes.read) scheduleStorageRender();
 });
 
 // The same screen switcher every screen has: it fills the header `<nav>` and jumps within this tab,
@@ -883,6 +1038,8 @@ els.refresh.addEventListener('click', () => void refreshSelectedFeed());
 els.load.addEventListener('click', () => void refreshSelection());
 els.clear.addEventListener('click', () => void clearSelectionHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
+els.contentRead.addEventListener('click', () => void toggleHeadlineRead());
+els.undoButton.addEventListener('click', () => void undoDelete());
 /*
  * Подсказка по клавишам: её открывает кнопка «?» шапки, закрывают её же крестик и клик по фону окна;
  * сам список закрывается и клавишей `?` (см. обработчик ниже). Возврат фокуса — тот же во всех
@@ -1000,8 +1157,10 @@ function closeKeysHelp() {
  *   ↓ / j    next headline          ↑ / k  previous headline
  *   Enter    open the original of the open headline
  *   r        re-read the selected feed («Все ленты» — every feed)
+ *   m        mark the open headline read, or take the mark back
  *   d        delete the open headline
- *   Esc      empty the search field, while the cursor stands where it was
+ *   u        take the last delete back, while its window stands
+ *   Esc      the same take-back; in the search field — empty the field, while the cursor stands where it was
  *   ?        the list of these keys, in the reader itself
  */
 document.addEventListener('keydown', (event) => {
@@ -1032,6 +1191,14 @@ document.addEventListener('keydown', (event) => {
     return;
   }
 
+  /* Окно отмены уступает полю поиска: там `Esc` принадлежит набранному. Вне поля он значит
+   * «отменить» и возвращает только что удалённый заголовок. */
+  if (state.undo && event.key === 'Escape' && !isTypingTarget(event.target)) {
+    event.preventDefault();
+    void undoDelete();
+    return;
+  }
+
   if (isTypingTarget(event.target)) return;
 
   switch (event.key) {
@@ -1057,10 +1224,20 @@ document.addEventListener('keydown', (event) => {
       event.preventDefault();
       openOriginal();
       break;
+    case 'm':
+      if (!state.uid) break;
+      event.preventDefault();
+      void toggleHeadlineRead();
+      break;
     case 'd':
       if (!state.uid) break;
       event.preventDefault();
       void deleteItem();
+      break;
+    case 'u':
+      if (!state.undo) break;
+      event.preventDefault();
+      void undoDelete();
       break;
     case 'r':
       event.preventDefault();

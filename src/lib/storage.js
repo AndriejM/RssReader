@@ -716,7 +716,7 @@ function adoptIdentity(item, candidate) {
 
 /**
  * Remove one headline from the list and remember it as read, so the same news is not offered
- * again until its read record expires (see `cleanupRead`).
+ * again until its read record expires (see `cleanupRead`). `restoreItem` is the way back from this.
  */
 export async function removeItem(uid) {
   const items = await getItems();
@@ -725,6 +725,26 @@ export async function removeItem(uid) {
 
   await saveItems(kept);
   await markRead(items.filter((item) => item.uid === uid));
+  return true;
+}
+
+/**
+ * Put back a headline the reader has just deleted and forget the marker that held its news out of the
+ * polls: undoing a delete has to take both back, or the headline that came back would be offered
+ * again the moment its feed is next read.
+ *
+ * A headline of a feed that no longer exists has nowhere to live, so it is not restored.
+ * @returns {boolean} whether the headline went back on the shelf
+ */
+export async function restoreItem(item) {
+  if (!item?.uid) return false;
+
+  const [items, feeds] = await Promise.all([getItems(), getFeeds()]);
+  if (items.some((stored) => stored.uid === item.uid)) return false;
+  if (!feeds.some((feed) => feed.id === item.feedId)) return false;
+
+  await saveItems(capItems([...items, item]));
+  await unmarkRead([item]);
   return true;
 }
 
@@ -767,6 +787,31 @@ export function makeReadRecord(item, now = Date.now()) {
 /** Identity a read marker is matched on, the same way a candidate's identity is computed. */
 function readIdentity(record) {
   return sourceKeyOf(record);
+}
+
+/**
+ * Forget the read markers of these headlines: the news they held back may be offered again.
+ *
+ * A marker is dropped by the same identity that put it there, so the marker one feed's headline made
+ * goes together with the same news as another feed of the same site calls it.
+ * @returns {number} how many markers the list lost
+ */
+export async function unmarkRead(items) {
+  const fresh = (items ?? []).filter((item) => item?.link);
+  if (fresh.length === 0) return 0;
+
+  const read = await getRead();
+  if (read.length === 0) return 0;
+
+  /* The match turned around: here the headlines are the index and the markers are the candidates,
+   * which is what it takes to drop a marker by the news it stands for rather than by the words its
+   * own record happens to hold. `MARKER_KEYS` keys both sides without a feed, which is how a marker
+   * reaches across the feeds of one site. */
+  const shelf = identityIndex(fresh, MARKER_KEYS);
+  const kept = read.filter((record) => !indexOf(record, shelf, MARKER_KEYS).known);
+  const removed = read.length - kept.length;
+  if (removed > 0) await saveRead(kept);
+  return removed;
 }
 
 /** Remember headlines as read, newest first, without repeating a headline already stored. */
@@ -834,6 +879,25 @@ export function capRead(read, ttlDays = READ_TTL_DAYS, now = Date.now()) {
 
   live.sort((a, b) => readTime(b, now) - readTime(a, now));
   return { read: live.slice(0, MAX_READ_RECORDS), droppedLive: live.length - MAX_READ_RECORDS };
+}
+
+/**
+ * Which of `items` a read marker covers: a `Set` of their `uid`, matched exactly the way `addItems`
+ * matches a fresh headline against the read list. A headline is therefore called read in the reader
+ * exactly when its news would not come back from the polls — not when a flag somewhere says so.
+ *
+ * The markers whose horizon has run out are counted too: they still sit in the list, and until the
+ * cleanup sweep takes them the reader still holds the news itself.
+ * @returns {Set<string>}
+ */
+export function readMarksFor(items, read) {
+  const markers = identityIndex(read ?? [], MARKER_KEYS);
+  const marks = new Set();
+  for (const item of items ?? []) {
+    if (!item?.uid || !item?.link) continue;
+    if (indexOf(item, markers, MARKER_KEYS).known) marks.add(item.uid);
+  }
+  return marks;
 }
 
 /** How long the markers the list can actually keep live: `ttlDays`, or less once the cap bites. */

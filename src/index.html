@@ -72,6 +72,22 @@
       <polyline points="15 3 21 3 21 9"></polyline>
       <line x1="10" y1="14" x2="21" y2="3"></line>
     </symbol>
+    <!-- Метка «прочитано»: галочка в круге. Та же метка стоит на строке средней колонки. -->
+    <symbol id="icon-read" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+    </symbol>
+    <!-- Та же метка, снятая: круг с крестом вместо галочки. -->
+    <symbol id="icon-unread" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="15" y1="9" x2="9" y2="15"></line>
+      <line x1="9" y1="9" x2="15" y2="15"></line>
+    </symbol>
+    <!-- Возврат удалённого заголовка: та же стрелка, что ведёт «назад» во всех экранах. -->
+    <symbol id="icon-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="1 4 1 10 7 10"></polyline>
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+    </symbol>
     <symbol id="icon-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
       <line x1="12" y1="9" x2="12" y2="13"></line>
@@ -197,13 +213,40 @@
     <div class="panel-gap" data-column-resize="headlines"></div>
 
     <section id="panel-content" class="panel panel-content" data-i18n-aria="reader.content.panelAria">
-      <!-- Original link now lives in the article title itself, so the toolbar only holds delete. -->
+      <!--
+        Original link now lives in the article title itself, so the toolbar holds the two things a
+        headline can be given: the mark that keeps its news out of the polls («прочитано») and the
+        trash that throws the headline itself away.
+      -->
       <div class="content-toolbar">
+        <button
+          id="content-read"
+          class="icon-btn"
+          type="button"
+          aria-pressed="false"
+          data-i18n-title="reader.content.mark.tooltip"
+          data-i18n-aria="reader.content.mark.aria"
+          hidden
+        >
+          <svg class="icon" aria-hidden="true"><use href="#icon-read"></use></svg>
+        </button>
         <button id="content-delete" class="icon-btn danger" type="button" data-i18n-title="reader.content.delete.tooltip" data-i18n-aria="reader.content.delete.aria" hidden>
           <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
         </button>
         <div class="font-scale" data-font-scale="content"></div>
       </div>
+      <!--
+        Строка отмены: её ставит удаление заголовка, и она же возвращает его назад, пока её окно
+        стоит. Подпись кнопки названа словарём, сам текст строки называет удалённый заголовок
+        (см. `index.js` -> `renderUndo`).
+      -->
+      <p class="undo-line" id="undo-line" hidden>
+        <span class="undo-text" id="undo-text"></span>
+        <button id="btn-undo" class="undo-btn" type="button">
+          <svg class="icon" aria-hidden="true"><use href="#icon-undo"></use></svg>
+          <span data-i18n="reader.undo.button"></span>
+        </button>
+      </p>
       <article class="content-body" id="content-body">
         <p class="empty" data-i18n="reader.content.empty"></p>
       </article>
@@ -254,8 +297,16 @@
             <td data-i18n="reader.keys.refresh"></td>
           </tr>
           <tr>
+            <td class="keys-keys"><kbd>m</kbd></td>
+            <td data-i18n="reader.keys.mark"></td>
+          </tr>
+          <tr>
             <td class="keys-keys"><kbd>d</kbd></td>
             <td data-i18n="reader.keys.delete"></td>
+          </tr>
+          <tr>
+            <td class="keys-keys"><kbd>u</kbd></td>
+            <td data-i18n="reader.keys.undo"></td>
           </tr>
           <tr>
             <td class="keys-keys"><kbd>Esc</kbd></td>
