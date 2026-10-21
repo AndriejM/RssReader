@@ -1221,6 +1221,49 @@ test('two items one JSON Feed calls the same news are one headline, and a long f
   assert.equal(rss.parseJsonFeed(JSON.stringify(many), 'https://a.b/feed.json').entries.length, 250);
 });
 
+test('a long feed is cut at its newest headlines, not at whatever it listed first', () => {
+  /* A WordPress archive, a forum, a blog in ascending order: the feed ships its oldest news first.
+   * Cutting the list where the document ends would keep 250 old headlines and drop the fresh ones —
+   * while `storage.capPerFeed` happily stores 250 newest, so they would never be seen. */
+  const archive = { title: 'Archive', items: [] };
+  for (let i = 0; i < 260; i += 1) {
+    archive.items.push({
+      id: `item-${i}`,
+      url: `https://a.b/${i}`,
+      title: `News ${i}`,
+      date_published: new Date(Date.UTC(2024, 0, 1) + i * DAY).toISOString(),
+    });
+  }
+
+  const kept = rss.parseJsonFeed(JSON.stringify(archive), 'https://a.b/feed.json').entries;
+
+  assert.equal(kept.length, 250);
+  assert.equal(kept[0].title, 'News 259', 'the newest news, however late the feed listed it');
+  assert.equal(kept.at(-1).title, 'News 10', 'the cut drops the oldest news, not the freshest');
+
+  const times = kept.map((entry) => util.pubDateTime(entry.pubDate));
+  assert.deepEqual([...times], [...times].sort((a, b) => b - a), 'the parser hands the newest first, as storage sorts them');
+});
+
+test('a feed gives no age to an entry it dates badly, and such entries keep their order', () => {
+  const parsed = rss
+    .parseJsonFeed(
+      JSON.stringify({
+        title: 'Mixed',
+        items: [
+          { id: 'undated-1', url: 'https://a.b/undated-1', title: 'Undated one' },
+          { id: 'dated', url: 'https://a.b/dated', title: 'Dated', date_modified: '2024-05-01T00:00:00Z' },
+          { id: 'undated-2', url: 'https://a.b/undated-2', title: 'Undated two' },
+          { id: 'bad-date', url: 'https://a.b/bad', title: 'Bad date', date_published: 'not a date' },
+        ],
+      }),
+      'https://a.b/feed.json',
+    )
+    .entries.map((entry) => entry.title);
+
+  assert.deepEqual(parsed, ['Dated', 'Undated one', 'Undated two', 'Bad date']);
+});
+
 test('a JSON document that is not a feed fails with a code every language translates', () => {
   for (const body of ['{ not json', '{"title": "no items"}', '{"items": {}}', '[{"id": 1}]']) {
     const error = thrownBy(() => rss.parseJsonFeed(body, 'https://a.b/feed.json'));
@@ -2599,10 +2642,19 @@ test('the id a feed states makes the whole trip: parse — record — next poll'
   const rssJs = read('src/lib/rss.js');
   const worker = read('src/background.js');
 
-  const entryLoop = rssJs.match(/for \(const node of nodes\.slice[\s\S]*?return \{ feedTitle, entries \}/);
+  const entryLoop = rssJs.match(/for \(const node of [\s\S]*?return \{ feedTitle, entries \}/);
   assert.ok(entryLoop, 'the loop that turns a feed node into an entry');
   const loop = entryLoop[0];
 
+  assert.ok(
+    /newestFirst\(nodes, entryDate\)\.slice\(0, MAX_ENTRIES\)/.test(loop),
+    'the cut is made after the nodes are ordered by their date, so a feed that lists its news oldest '
+      + 'first loses its oldest news and not the fresh ones `storage.capPerFeed` would have kept',
+  );
+  assert.ok(
+    /pubDate: entryDate\(node\)/.test(loop),
+    'the date the loop ordered the nodes by is the date the entry carries on to the record',
+  );
   assert.ok(/entryIdentity\(node\)/.test(loop), 'the guid and the Atom <id> are read off the node');
   assert.ok(
     /identity\.guidIsLink \? identity\.guid : ''/.test(loop),

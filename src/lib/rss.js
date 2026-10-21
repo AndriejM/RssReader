@@ -3,7 +3,7 @@
 // the extension that has DOMParser. `host_permissions` make the request same-
 // enough for the response to be readable (no CORS problem).
 
-import { FEED_FETCH_TIMEOUT_MS, absoluteUrl, cleanTitle, isValidHttpUrl, linkKey } from './util.js';
+import { FEED_FETCH_TIMEOUT_MS, absoluteUrl, cleanTitle, isValidHttpUrl, linkKey, pubDateTime } from './util.js';
 import { decodeResponseBytes, retargetXmlDeclaration } from './encoding.js';
 
 const ACCEPT =
@@ -245,6 +245,39 @@ export function parseFeed(text, baseUrl, contentType = '') {
   return parseXmlFeed(text, baseUrl);
 }
 
+/**
+ * The newest headlines of a feed first, whatever order the feed happened to write them in.
+ *
+ * A feed is not obliged to lead with its latest news: a WordPress archive, a forum or a blog lists
+ * its items oldest first, and cutting such a feed at `MAX_ENTRIES` would keep its oldest headlines
+ * and throw away the only ones the reader has not seen yet. So the candidate list is ordered by the
+ * date the entry carries before it is cut — the same date `storage.capPerFeed` orders the stored
+ * headlines by, which keeps the two caps cutting at the same headlines.
+ *
+ * An entry whose feed states no readable date is not invented an age: such entries keep the order
+ * the feed wrote them in, among themselves and behind every dated one.
+ *
+ * The rule works on values, not on nodes: `parseJsonFeed` applies it to plain objects, which is what
+ * lets the tests (scripts/test.mjs) hold it without a DOM.
+ */
+function newestFirst(values, dateOf) {
+  return [...values]
+    .map((value, index) => ({ value, index, at: pubDateTime(dateOf(value)) }))
+    .sort((a, b) => b.at - a.at || a.index - b.index)
+    .map((candidate) => candidate.value);
+}
+
+/** The publication date of an XML entry — the text `pubDate` of the entry record is built from. */
+function entryDate(node) {
+  return firstText(node, 'pubDate') || firstText(node, 'published') || firstText(node, 'updated');
+}
+
+/** The publication date of a JSON Feed item — the text `pubDate` of the entry record is built from. */
+function jsonDate(item) {
+  if (!item || typeof item !== 'object') return '';
+  return jsonText(item.date_published) || jsonText(item.date_modified);
+}
+
 function parseXmlFeed(xml, baseUrl) {
   // The text is already decoded by `lib/encoding.js`; the declaration inside it must not invite an
   // XML processor to decode the same bytes a second time, in an encoding they are no longer in.
@@ -269,7 +302,7 @@ function parseXmlFeed(xml, baseUrl) {
   const entries = [];
   const seen = new Set();
 
-  for (const node of nodes.slice(0, MAX_ENTRIES)) {
+  for (const node of newestFirst(nodes, entryDate).slice(0, MAX_ENTRIES)) {
     const identity = entryIdentity(node);
     const rawLink = firstText(node, 'link') || entryLink(node) || (identity.guidIsLink ? identity.guid : '');
     // Without a link there is nothing to open later, and absoluteUrl('') would resolve to
@@ -293,7 +326,7 @@ function parseXmlFeed(xml, baseUrl) {
       // Kept verbatim: `<description>` (or an Atom `<summary>`/`<content>` variant) carries
       // short news text in HTML — do not pipe it through cleanTitle, markup must survive.
       description: firstText(node, 'description') || firstText(node, 'summary') || firstText(node, 'content'),
-      pubDate: firstText(node, 'pubDate') || firstText(node, 'published') || firstText(node, 'updated'),
+      pubDate: entryDate(node),
       link,
       // What the feed calls this news: kept beside the link so a headline is still recognised when
       // the address it points at has moved (see `storage.makeItem`).
@@ -330,7 +363,7 @@ export function parseJsonFeed(text, baseUrl) {
   const entries = [];
   const seen = new Set();
 
-  for (const item of feed.items.slice(0, MAX_ENTRIES)) {
+  for (const item of newestFirst(feed.items, jsonDate).slice(0, MAX_ENTRIES)) {
     if (!item || typeof item !== 'object') continue;
 
     const rawId = jsonText(item.id);
@@ -364,7 +397,7 @@ export function parseJsonFeed(text, baseUrl) {
       description: `${jsonImages(item, baseUrl, text)}${text}`,
       // `date_published` is the format's own publication date; `date_modified` stands in when the
       // feed states only that.
-      pubDate: jsonText(item.date_published) || jsonText(item.date_modified),
+      pubDate: jsonDate(item),
       link,
       // What the feed calls this news: kept beside the link so a headline is still recognised when
       // the address it points at has moved (see `storage.makeItem`).

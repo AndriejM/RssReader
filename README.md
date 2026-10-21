@@ -635,7 +635,7 @@ background.
 | `DEFAULT_DELAY_TIMEOUT` | 30 min | `util.js` |
 | `DEFAULT_CLEAN_TIMEOUT` | 1440 min (1 day) | `util.js` |
 | `MAX_ITEMS_PER_FEED` | 250 | `util.js` — how many freshest headlines of one feed are stored |
-| `MAX_ENTRIES` | 250 | `rss.js` — how many entries are taken from one feed response |
+| `MAX_ENTRIES` | 250 | `rss.js` — how many entries are taken from one feed response: the freshest by their date, whatever order the feed listed them in |
 | `READ_TTL_DAYS` | 7 days | `util.js` — the **default value** for the “read” mark lifetime; configurable via the `read_ttl_days` field |
 | `MIN_READ_TTL_DAYS` / `MAX_READ_TTL_DAYS` | 1 / 3650 | `util.js` — bounds of this field (`util.toDays`) |
 | `MAX_READ_RECORDS` | 1000 | `util.js` — how many such marks are stored; the oldest are evicted first |
@@ -679,7 +679,9 @@ background.
   panel shows a message and the link to the original remains.
 - **RSS 2.0, Atom and RDF are supported**: `<item>` and `<entry>` are parsed, the `link` in Atom
   (`rel="alternate"`), `guid` with `isPermaLink="true"` as a link; relative links are resolved
-  against the feed URL; up to 250 entries per response. The RSS `guid` (an `isPermaLink="false"`
+  against the feed URL; up to 250 entries per response — the newest by `pubDate`, not the first 250
+  the feed happened to print, so a feed that lists its news oldest first (a WordPress archive, a
+  forum) still offers its fresh headlines. The RSS `guid` (an `isPermaLink="false"`
   one, above all) and the Atom `<id>` are kept as `sourceId` — the name the feed gives its news,
   which is what the dedup matches on.
 - **JSON Feed is supported too** (`application/feed+json`, and the `application/json` many sites

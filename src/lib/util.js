@@ -216,15 +216,24 @@ export function badgeText(count) {
 }
 
 /**
+ * Epoch timestamp of a feed's publication date, as one field of text: 0 when it states no date or a
+ * date no clock can read. This is the one reading of `pubDate` the reader orders and expires
+ * headlines by — the parser's cap, `storage.sortItems` and `readTime` all agree on it.
+ */
+export function pubDateTime(pubDate) {
+  const published = String(pubDate ?? '').trim();
+  if (!published) return 0;
+  const parsed = Date.parse(published);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+/**
  * Epoch timestamp of an item: the publication date (`pubDate`) when the feed record
  * carries one, the load time otherwise. 0 means "no usable date at all".
  */
 export function itemTime(item) {
-  const published = String(item?.pubDate ?? '').trim();
-  if (published) {
-    const parsed = Date.parse(published);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
+  const published = pubDateTime(item?.pubDate);
+  if (published) return published;
   const stored = Number(item?.time ?? 0);
   return Number.isFinite(stored) && stored > 0 ? stored : 0;
 }
