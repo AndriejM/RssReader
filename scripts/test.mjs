@@ -3227,7 +3227,7 @@ test('the validators make the whole trip: storage — worker — offscreen docum
     'a feed whose headlines are gone is asked for plainly, not with keys that answer 304',
   );
 
-  const unchanged = ingest[0].match(/if \(fetched\.notModified\) \{[\s\S]*?\n    \} else \{/);
+  const unchanged = ingest[0].match(/if \(fetched\.notModified\) \{[\s\S]*?\n\s+\} else \{/);
   assert.ok(unchanged, 'a 304 has its own branch apart from a feed that came through');
   assert.ok(!/addItems|makeItem/.test(unchanged[0]), 'a 304 writes no headlines');
 
@@ -3236,6 +3236,60 @@ test('the validators make the whole trip: storage — worker — offscreen docum
     feedsScreen,
     /response\.notModified/,
     'the feed screen says «unchanged» rather than «0 headlines read»',
+  );
+
+  const shelf = ingest[0].match(
+    /try \{\r?\n      await store\.rememberFeedValidators\([\s\S]*?\n    \} catch \(shelfError\) \{([\s\S]*?)\r?\n    \}/,
+  );
+  assert.ok(shelf, 'the headlines the feed just sent are written in a scope of their own');
+  assert.match(
+    shelf[1],
+    /reportFeedHealth\(feed\.id, \{ ok: true[^}]*nextAlarmAt[^}]*\}\)/,
+    'a shelf that failed is recorded as the feed having answered',
+  );
+  assert.match(shelf[1], /throw storageFailure\(feed, shelfError\)/, "the fault is named as the reader's own");
+  assert.ok(
+    !/reportFeedHealth\(feed\.id, \{ ok: false/.test(shelf[1]),
+    'a healthy feed is not diagnosed because the reader could not write',
+  );
+});
+
+/**
+ * Two failures can end a read, and only one of them belongs to the feed: a dead address, a 500, a
+ * body that is not a feed diagnoses the feed and pauses it; a helper page the reader could not open
+ * diagnoses nothing, because the feed never had the chance to refuse. The worker cannot be imported
+ * here, so the guard reads the shape of the catch, which is where the two are told apart.
+ */
+test('a read that the reader itself could not finish leaves the feed healthy', () => {
+  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+
+  const read = worker.match(/async function readFeedOnce\([\s\S]*?\n  return result;\r?\n\}/);
+  assert.ok(read, 'the worker reads one feed at a time');
+
+  const diagnosis = read[0].match(/\r?\n  \} catch \(error\) \{([\s\S]*?)\r?\n  \}/);
+  assert.ok(diagnosis, 'one catch closes the read of a feed');
+
+  assert.match(
+    diagnosis[1],
+    /if \(!\(error instanceof FeedError\)\) \{[\s\S]*?reportFeedHealth\(feed\.id, \{ ok: true[^}]*nextAlarmAt[^}]*\}\);[\s\S]*?throw error;/,
+    'a failure of the reader is not written as a refusal of the feed',
+  );
+  const ownFault = diagnosis[1].match(/if \(!\(error instanceof FeedError\)\) \{([\s\S]*?)\r?\n    \}/);
+  assert.ok(ownFault, 'the catch tells a failure of the reader from a refusal of the feed');
+  assert.ok(
+    !/forgetValidators/.test(ownFault[1]),
+    'the keys the feed gave are not thrown away over a failure of the reader',
+  );
+  assert.match(
+    diagnosis[1],
+    /forgetValidators\(feed, error\);[\s\S]*?reportFeedHealth\(feed\.id, \{ ok: false, error, time: startedAt, nextAlarmAt \}\)/,
+    'a feed that refused keeps its diagnosis, its streak and its pause',
+  );
+
+  assert.match(
+    worker,
+    /code: 'storageUnavailable'/,
+    'the fault of the shelf carries a key every language can translate',
   );
 });
 

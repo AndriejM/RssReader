@@ -137,8 +137,32 @@ async function forgetValidators(feed, error) {
 }
 
 /**
+ * Отказ, который принадлежит не ленте, а самой читалке: её хранилище не отдало заголовки или не
+ * принял их. Лента на такой отказ не отвечала — у неё уже лежит ответ, — поэтому отказ назван своим
+ * кодом: строка ленты подписывает его как сбой читалки, а не как ответ ленты, и лента от него не
+ * уходит в паузу.
+ */
+function storageFailure(feed, error) {
+  const cause = error?.message ?? String(error);
+  console.error(`feed "${feed.name}": the reader's own storage failed:`, cause);
+  return Object.assign(new Error(`the storage of the extension did not answer: ${cause}`), {
+    code: 'storageUnavailable',
+    params: { cause },
+    cause: error,
+  });
+}
+
+/**
  * Fetch one feed and write the new headlines to storage. Nothing here knows about the reads of the
  * same feed running elsewhere — that is the job of `ingestFeed`, which lets one feed be read once.
+ *
+ * The two ways a read can fail are kept apart on purpose. A feed that refused — a dead address, a
+ * 500, a body that is not a feed — is diagnosed on its row: the streak of failures grows, the pause
+ * before the next attempt grows with it (see `storage.markFeedChecked`). A failure of the reader's
+ * own shelf — the storage that would not take the headlines it just fetched — belongs to this
+ * extension, not to the feed: counted as a feed failure it would push a healthy feed into an
+ * exponential pause, show it broken on the settings screen and keep the reader from asking it again
+ * at all. Such a read is recorded as what it was, an answer that came through.
  * @param {{ nextAlarmAt?: number }} options - момент следующего будильника этой загрузки, чтобы
  *   диагноз ленты назвал его, а не вывел из `delay_timeout` (см. `storage.markFeedChecked`).
  */
@@ -150,46 +174,66 @@ async function readFeedOnce(feed, { nextAlarmAt = 0 } = {}) {
     /* Ключи описывают те заголовки, которые у нас лежат. Если их уже нет — ленту вычистил
      * `clean_timeout`, их удалили, хранилище очистили, — спрашивать по ним значит получить пустой
      * ответ вместо ленты и оставить читалку пустой до первой правки на сервере. Без ключей ленту
-     * просят целиком, как раньше. */
-    const held = await store.getItems();
+     * просят целиком, как раньше; с тем же смыслом их не посылают, когда своей полки не видно:
+     * лента не отвечает за то, что хранилище не ответило. */
+    let held = [];
+    try {
+      held = await store.getItems();
+    } catch (shelfError) {
+      console.warn(`could not read the stored headlines of feed "${feed.name}":`, shelfError?.message ?? shelfError);
+    }
+
     const validators = held.some((item) => item.feedId === feed.id)
       ? { etag: feed.etag, lastModified: feed.lastModified }
       : {};
 
     const fetched = await readFeed(feed, validators);
 
-    /* Ответ сервера — это и ключи следующей загрузки: их записываем до того, как разберёмся с
-     * заголовками, чтобы отказ ленты не обнулил то, что она только что подтвердила. 304 обновляет
-     * ключ, но не возраст заголовков, которые этот ключ описывает. */
-    await store.rememberFeedValidators(feed.id, {
-      etag: fetched.etag,
-      lastModified: fetched.lastModified,
-      fetchedAt: fetched.notModified ? 0 : Date.now(),
-    });
+    /* Всё, что дальше, — полка читалки, а не ответ ленты. Ключи пишутся до заголовков, чтобы отказ
+     * ленты не обнулил то, что она только что подтвердила; 304 обновляет ключ, но не возраст
+     * заголовков, которые этот ключ описывает. Сбой полки ключам не мешает: их на этот ответ
+     * просто не записали, прежние остались у ленты. */
+    try {
+      await store.rememberFeedValidators(feed.id, {
+        etag: fetched.etag,
+        lastModified: fetched.lastModified,
+        fetchedAt: fetched.notModified ? 0 : Date.now(),
+      });
 
-    if (fetched.notModified) {
-      /* «Не изменилось»: заголовки те же, что уже лежат в хранилище. Нечего ни парсить, ни
-       * добавлять — а значит, и считать «новыми». */
-      result = { added: 0, skipped: 0, seen: 0, notModified: true };
-    } else {
-      const now = Date.now();
-      const candidates = fetched.entries.map((entry) =>
-        store.makeItem({
-          feed,
-          title: entry.title,
-          description: entry.description,
-          pubDate: entry.pubDate,
-          link: entry.link,
-          sourceId: entry.sourceId,
-          sourceIdType: entry.sourceIdType,
-          time: now,
-        }),
-      );
+      if (fetched.notModified) {
+        /* «Не изменилось»: заголовки те же, что уже лежат в хранилище. Нечего ни парсить, ни
+         * добавлять — а значит, и считать «новыми». */
+        result = { added: 0, skipped: 0, seen: 0, notModified: true };
+      } else {
+        const now = Date.now();
+        const candidates = fetched.entries.map((entry) =>
+          store.makeItem({
+            feed,
+            title: entry.title,
+            description: entry.description,
+            pubDate: entry.pubDate,
+            link: entry.link,
+            sourceId: entry.sourceId,
+            sourceIdType: entry.sourceIdType,
+            time: now,
+          }),
+        );
 
-      const { added, skipped } = await store.addItems(candidates);
-      result = { added, skipped, seen: fetched.entries.length, notModified: false };
+        const { added, skipped } = await store.addItems(candidates);
+        result = { added, skipped, seen: fetched.entries.length, notModified: false };
+      }
+    } catch (shelfError) {
+      await reportFeedHealth(feed.id, { ok: true, time: Date.now(), nextAlarmAt });
+      throw storageFailure(feed, shelfError);
     }
   } catch (error) {
+    if (!(error instanceof FeedError)) {
+      /* Отказ, у которого нет метки ленты, — сбой самой читалки: без служебной страницы спросить
+       * ленту вообще нечем. Диагноз такой ленте не пишут. */
+      await reportFeedHealth(feed.id, { ok: true, time: Date.now(), nextAlarmAt });
+      throw error;
+    }
+
     await forgetValidators(feed, error);
     /* Диагноз пишется именно здесь: иначе отказ ленты не отличить от сбоя бейджа или сигнала, а
      * экран настроек показал бы здоровую ленту сломанной. */

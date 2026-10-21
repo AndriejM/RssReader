@@ -861,7 +861,11 @@ background.
   an extra alarm during a pause is only not answered, so a feed that recovers returns to its own
   schedule — and a read by hand (“Load now”, `r`) is an explicit order and is never refused, so a
   user can always force a paused feed to answer. A read that works deletes `nextRetryAt` and
-  restarts the ladder from the beginning.
+  restarts the ladder from the beginning. Only a refusal *of the feed* starts the pause: a read that
+  fails because the reader's own shelf would not take the headlines it just fetched
+  (`storageFailure()` / `errors.storageUnavailable` in `src/background.js`), or because its helper
+  page could not be opened, is recorded as the answer it really was — `markFeedChecked({ ok: true })`
+  — so a feed that answered keeps its schedule, its keys and a healthy line on the settings screen.
 - **One feed is read once**: a feed whose read is running is held, so the alarm of a feed and a
   “Refresh” of the same feed cannot fetch one address twice. The fast guard lives in the worker
   (`readingFeedIds` in `src/background.js`, checked synchronously — before any read from storage,
@@ -899,7 +903,7 @@ background.
 
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js and rss.js) and the guards over the screen markup: 117 tests
+                             # storage.js and rss.js) and the guards over the screen markup: 118 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
