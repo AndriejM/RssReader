@@ -23,6 +23,13 @@ const JSON_TYPES = new Set(['application/feed+json', 'application/json', 'applic
  */
 const HTTP_DATE = /^[A-Za-z]{3}, \d{1,2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT$/;
 
+/**
+ * The roots a feed document is written under: `<rss>`, `<feed>` and `<rdf:RDF>` (whose local name is
+ * `RDF`). Only the root tells a feed whose headlines have run out from a document that never was one:
+ * an error page in XHTML, a sitemap or some API's answer parses just as clean.
+ */
+const FEED_ROOTS = new Set(['rss', 'feed', 'rdf']);
+
 /** A `Last-Modified` we may answer with: only a real HTTP-date, written the one way it is written. */
 export function httpDate(value) {
   if (typeof value !== 'string') return '';
@@ -218,6 +225,15 @@ function anyTag(doc, localName) {
   return [...doc.getElementsByTagNameNS('*', localName)];
 }
 
+/**
+ * Is the document a feed? For the formats the root answers this alone: a feed that carries no
+ * headlines right now is still that feed. A document under another root that does carry
+ * `<item>`/`<entry>` is read as the feed it behaves like.
+ */
+export function isFeedDocument(rootLocalName, entryCount) {
+  return FEED_ROOTS.has(String(rootLocalName ?? '').toLowerCase()) || Number(entryCount) > 0;
+}
+
 /** Atom links carry rel/href instead of text. */
 function entryLink(entry) {
   const links = childNodes(entry, 'link');
@@ -283,11 +299,21 @@ function parseXmlFeed(xml, baseUrl) {
   // XML processor to decode the same bytes a second time, in an encoding they are no longer in.
   const doc = new DOMParser().parseFromString(retargetXmlDeclaration(xml, 'utf-8'), 'application/xml');
 
-  if (doc.querySelector('parsererror')) {
+  const root = doc.documentElement;
+
+  /* The element an XML processor leaves when the document is not well-formed. Its local name is the
+   * one thing the engines agree on: Blink puts it in a namespace of its own, where a CSS type selector
+   * does not reach it, so it is looked up the way every other tag of this parser is — ignoring
+   * namespaces. Missed, an error page would parse as «a valid feed with no headlines», the feed would
+   * be recorded healthy, and its backoff would never start.
+   *
+   * The root is read first: a processor that reports the failure on the document itself names its root
+   * `parsererror`, and a lookup over the tree would then have to match it in the namespace the engine
+   * invented for it. */
+  if (root?.localName === 'parsererror' || anyTag(doc, 'parsererror').length > 0) {
     throw new FeedError('not valid feed XML', { code: 'feedNotXml' });
   }
 
-  const root = doc.documentElement;
   if (!root) throw new FeedError('empty feed XML', { code: 'feedEmptyXml' });
 
   const channel = childNodes(root, 'channel')[0];
@@ -298,6 +324,10 @@ function parseXmlFeed(xml, baseUrl) {
   // RSS 2.0 / RDF use <item>, Atom uses <entry>.
   const nodes = anyTag(doc, 'item');
   if (nodes.length === 0) nodes.push(...anyTag(doc, 'entry'));
+
+  if (!isFeedDocument(root.localName, nodes.length)) {
+    throw new FeedError(`no feed in the response (root <${root.localName}>)`, { code: 'feedNotFeed' });
+  }
 
   const entries = [];
   const seen = new Set();

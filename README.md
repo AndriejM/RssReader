@@ -684,6 +684,16 @@ background.
   forum) still offers its fresh headlines. The RSS `guid` (an `isPermaLink="false"`
   one, above all) and the Atom `<id>` are kept as `sourceId` — the name the feed gives its news,
   which is what the dedup matches on.
+- **An answer that is XML but not a feed is refused rather than read as an empty feed**: the root
+  decides what the document is — `<rss>`, `<feed>` and `<rdf:RDF>` (whose local name is uppercase)
+  are feeds even when they ship no headlines right now, while a well-formed error page in XHTML, a
+  sitemap or an API's answer is not, and fails as `errors.feedNotFeed` so the feed is recorded broken
+  and its backoff starts. A document under another root that does carry `<item>`/`<entry>` is read as
+  the feed it behaves like. The element an XML processor leaves on a document it could not read is
+  found by its local name over the whole tree (`anyTag`, i.e. `getElementsByTagNameNS('*', …)`), not by
+  a CSS selector: Blink writes `parsererror` into a namespace of its own, where
+  `querySelector('parsererror')` does not reach it — missed, an error page was stored as a healthy feed
+  with no headlines, and the failing feed was never backed off.
 - **JSON Feed is supported too** (`application/feed+json`, and the `application/json` many sites
   serve it under): the answer is read as the object it is — its `title` and its `items[]` — with no
   DOM involved, so its rules are held by `scripts/test.mjs`. An item's `url` (or its `id`, when it is

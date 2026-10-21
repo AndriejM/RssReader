@@ -1304,6 +1304,38 @@ test('an answer that is JSON but no feed fails with a code of its own', async ()
   assert.equal(error.code, 'feedNotJson', 'a JSON object with no `items` is not read as an empty feed');
 });
 
+/* ---------------------- an XML answer that is not a feed ---------------------- */
+
+/**
+ * An XML document that is not a feed ends like every other failure: with a code of its own, so the
+ * settings screen calls the feed broken and `storage.markFeedChecked` starts its pause. Read as «a
+ * valid feed with no headlines», the same answer would record the feed healthy and never back off.
+ */
+test('a document whose root is not a feed is refused; a feed with no headlines is not', () => {
+  assert.ok(rss.isFeedDocument('rss', 0), 'a feed that ships nothing right now is a feed, not a failure');
+  assert.ok(rss.isFeedDocument('feed', 0), 'the same in Atom');
+  assert.ok(rss.isFeedDocument('RDF', 0), 'RDF writes its root `<rdf:RDF>`: the local name is uppercase');
+  assert.ok(
+    rss.isFeedDocument('html', 3),
+    'a document of another root that does carry headlines is read as the feed it behaves like',
+  );
+
+  assert.ok(!rss.isFeedDocument('html', 0), 'an error page in XHTML is not an empty feed');
+  assert.ok(!rss.isFeedDocument('urlset', 0), 'nor is a sitemap that parsed clean');
+  assert.ok(!rss.isFeedDocument('errors', 0), 'nor an API answer that happens to be well-formed XML');
+  assert.ok(!rss.isFeedDocument('', 0), 'and a document that names nothing is not a feed either');
+});
+
+test('a failed XML parse is recognised whatever namespace the engine reports it in', () => {
+  /* Blink answers a document it could not read with a `parsererror` element in a namespace of its own,
+   * where a CSS type selector does not reach it. The guard is the lookup the parser itself uses. */
+  const source = fs.readFileSync(new URL('../src/lib/rss.js', import.meta.url), 'utf8');
+
+  assert.ok(!/querySelector\(\s*['"]parsererror/.test(source), 'no namespace-bound selector looks for the failure');
+  assert.ok(/localName === 'parsererror'/.test(source), 'the root the processor left behind is read directly');
+  assert.ok(/anyTag\(doc, 'parsererror'\)/.test(source), 'and the tree is searched ignoring namespaces');
+});
+
 /* ---------------------------- language ---------------------------- */
 
 test('every language dictionary translates every key of the base one', () => {
