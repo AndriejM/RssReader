@@ -114,7 +114,7 @@ const DICTIONARIES = {
     'reader.keys.undo': 'вернуть только что удалённый заголовок',
     'reader.keys.escape': 'очистить поле поиска, оставив открытый заголовок; вне поля — вернуть удалённый',
     'reader.keys.help': 'открыть или закрыть эту подсказку (Esc закрывает её тоже)',
-    'reader.keys.hint': 'Клавиши не работают, пока идёт набор в поле (в поиске те же буквы), и никогда не отнимаются у Ctrl/Meta/Alt. Стрелки работают и из поля поиска: набранные слова остаются, а курсор идёт по тем заголовкам, которые поиск оставляет.',
+    'reader.keys.hint': 'Клавиши не работают, пока идёт набор в поле (в поиске те же буквы), и никогда не отнимаются у Ctrl/Meta/Alt. Стрелки работают и из поля поиска: набранные слова остаются, а курсор идёт по тем заголовкам, которые поиск оставляет. Буквы узнаются по своему месту на клавиатуре, а не по тому, что печатает раскладка: на кириллической раскладке эти клавиши печатают «о», «л», «к», «ь», «в», «г», а поле поиска открывается клавишей под / (той, что печатает там «.»).',
 
     'reader.content.panelAria': 'Содержание новости',
     'reader.content.delete.tooltip': 'Удалить заголовок из списка и из хранилища',
@@ -384,7 +384,7 @@ const DICTIONARIES = {
     'reader.keys.undo': 'take back the headline just deleted',
     'reader.keys.escape': 'empty the search field, keeping the open headline; outside the field, take back the deleted headline',
     'reader.keys.help': 'open or close this key list (Esc closes it too)',
-    'reader.keys.hint': 'The keys are held back while a field is being typed in (the search field holds the same letters) and are never taken from Ctrl/Meta/Alt. The arrows work from inside the search field too: the words stay, and the cursor moves through the headlines the search leaves.',
+    'reader.keys.hint': 'The keys are held back while a field is being typed in (the search field holds the same letters) and are never taken from Ctrl/Meta/Alt. The arrows work from inside the search field too: the words stay, and the cursor moves through the headlines the search leaves. Letters are recognised by their place on the keyboard, not by the character the current layout prints: on a Cyrillic layout these keys print «о», «л», «к», «ь», «в», «г», and the search field takes the key standing under / (the one printing «.» there).',
 
     'reader.content.panelAria': 'News content',
     'reader.content.delete.tooltip': 'Delete the headline from the list and from storage',
@@ -653,7 +653,7 @@ const DICTIONARIES = {
     'reader.keys.undo': 'повернути щойно видалений заголовок',
     'reader.keys.escape': 'очистити поле пошуку, залишивши відкритий заголовок; поза полем — повернути видалений',
     'reader.keys.help': 'відкрити або закрити цю підказку (Esc закриває її також)',
-    'reader.keys.hint': 'Клавіші не діють, поки триває набір у полі (у пошуку ті самі літери), і ніколи не відбираються в Ctrl/Meta/Alt. Стрілки працюють і з поля пошуку: набрані слова залишаються, а курсор іде тими заголовками, які пошук залишає.',
+    'reader.keys.hint': 'Клавіші не діють, поки триває набір у полі (у пошуку ті самі літери), і ніколи не відбираються в Ctrl/Meta/Alt. Стрілки працюють і з поля пошуку: набрані слова залишаються, а курсор іде тими заголовками, які пошук залишає. Літери впізнаються за своїм місцем на клавіатурі, а не за тим, що друкує поточна розкладка: на кириличній розкладці ці клавіші друкують «о», «л», «к», «ь», «в», «г», а поле пошуку відкриває клавіша під / (та, що друкує там «.»).',
 
     'reader.content.panelAria': 'Зміст новини',
     'reader.content.delete.tooltip': 'Видалити заголовок зі списку та зі сховища',
@@ -918,7 +918,7 @@ const DICTIONARIES = {
     'reader.keys.undo': 'cofnij nagłówek właśnie usunięty',
     'reader.keys.escape': 'wyczyść pole wyszukiwania, zachowując otwarty nagłówek; poza polem — cofnij usunięty nagłówek',
     'reader.keys.help': 'otwórz lub zamknij tę listę klawiszy (Esc też ją zamyka)',
-    'reader.keys.hint': 'Klawisze są wstrzymywane, gdy trwa pisanie w polu (pole wyszukiwania zawiera te same litery) i nigdy nie są odbierane Ctrl/Meta/Alt. Strzałki działają także z pola wyszukiwania: wpisane słowa zostają, a kursor wędruje po nagłówkach, których wyszukiwanie zostawia.',
+    'reader.keys.hint': 'Klawisze są wstrzymywane, gdy trwa pisanie w polu (pole wyszukiwania zawiera te same litery) i nigdy nie są odbierane Ctrl/Meta/Alt. Strzałki działają także z pola wyszukiwania: wpisane słowa zostają, a kursor wędruje po nagłówkach, których wyszukiwanie zostawia. Litery są rozpoznawane według ich miejsca na klawiaturze, nie według znaku, który wypisuje bieżący układ: na cyrylickim układzie te klawisze wypisują «о», «л», «к», «ь», «в», «г», a pole wyszukiwania otwiera klawisz stojący pod / (ten, który wypisuje tam «.»).',
 
     'reader.content.panelAria': 'Treść wiadomości',
     'reader.content.delete.tooltip': 'Usuń nagłówek z listy i z pamięci',
@@ -1184,7 +1184,7 @@ const DICTIONARIES = {
     'reader.keys.undo': 'die gerade gelöschte Schlagzeile zurückholen',
     'reader.keys.escape': 'Suchfeld leeren, die geöffnete Schlagzeile bleibt; außerhalb des Feldes die gelöschte Schlagzeile zurückholen',
     'reader.keys.help': 'diese Tastaturübersicht öffnen oder schließen (Esc schließt sie auch)',
-    'reader.keys.hint': 'Die Tasten sind zurückgehalten, während in ein Feld geschrieben wird (das Suchfeld belegt dieselben Buchstaben), und werden Ctrl/Meta/Alt nie entnommen. Die Pfeile funktionieren auch im Suchfeld: die Wörter bleiben, der Cursor wandert durch die Schlagzeilen, die die Suche übrig lässt.',
+    'reader.keys.hint': 'Die Tasten sind zurückgehalten, während in ein Feld geschrieben wird (das Suchfeld belegt dieselben Buchstaben), und werden Ctrl/Meta/Alt nie entnommen. Die Pfeile funktionieren auch im Suchfeld: die Wörter bleiben, der Cursor wandert durch die Schlagzeilen, die die Suche übrig lässt. Die Buchstaben werden nach ihrer Stelle auf der Tastatur erkannt, nicht nach dem Zeichen, das die aktuelle Belegung druckt: auf einer kyrillischen Belegung drucken diese Tasten «о», «л», «к», «ь», «в», «г», und das Suchfeld gehört der Taste unter / (der mit «.»).',
 
     'reader.content.panelAria': 'Inhalt der Nachricht',
     'reader.content.delete.tooltip': 'Schlagzeile aus der Liste und aus dem Speicher löschen',
@@ -1450,7 +1450,7 @@ const DICTIONARIES = {
     'reader.keys.undo': 'récupérer le titre qui vient d’être supprimé',
     'reader.keys.escape': 'vider le champ de recherche, le titre ouvert reste ; hors du champ, récupérer le titre supprimé',
     'reader.keys.help': 'ouvrir ou fermer cette liste de touches (Esc la ferme aussi)',
-    'reader.keys.hint': 'Les touches sont tenues en réserve pendant la saisie d’un champ (le champ de recherche porte les mêmes lettres) et ne sont jamais prises à Ctrl/Meta/Alt. Les flèches fonctionnent aussi depuis le champ de recherche : les mots restent, le curseur parcourt les titres que la recherche laisse.',
+    'reader.keys.hint': 'Les touches sont tenues en réserve pendant la saisie d’un champ (le champ de recherche porte les mêmes lettres) et ne sont jamais prises à Ctrl/Meta/Alt. Les flèches fonctionnent aussi depuis le champ de recherche : les mots restent, le curseur parcourt les titres que la recherche laisse. Les lettres sont reconnues d’après leur place sur le clavier, non d’après le caractère que la disposition actuelle imprime : sur une disposition cyrillique, ces touches impriment «о», «л», «к», «ь», «в», «г», et le champ de recherche appartient à la touche placée sous / (celle qui imprime «.» là).',
 
     'reader.content.panelAria': 'Contenu de l’actualité',
     'reader.content.delete.tooltip': 'Supprimer le titre de la liste et du stockage',
@@ -1716,7 +1716,7 @@ const DICTIONARIES = {
     'reader.keys.undo': 'recuperar el titular recién eliminado',
     'reader.keys.escape': 'vaciar el campo de búsqueda y conservar el titular abierto; fuera del campo, recuperar el titular eliminado',
     'reader.keys.help': 'abrir o cerrar esta lista de teclas (Esc también la cierra)',
-    'reader.keys.hint': 'Las teclas no actúan mientras se escribe en un campo (el campo de búsqueda usa las mismas letras) y nunca se le quitan a Ctrl/Meta/Alt. Las flechas funcionan también desde el campo de búsqueda: las palabras se quedan y el cursor recorre los titulares que la búsqueda deja.',
+    'reader.keys.hint': 'Las teclas no actúan mientras se escribe en un campo (el campo de búsqueda usa las mismas letras) y nunca se le quitan a Ctrl/Meta/Alt. Las flechas funcionan también desde el campo de búsqueda: las palabras se quedan y el cursor recorre los titulares que la búsqueda deja. Las letras se reconocen por su lugar en el teclado, no por el carácter que imprime la distribución actual: en una distribución cirílica esas teclas imprimen «о», «л», «к», «ь», «в», «г», y el campo de búsqueda corresponde a la tecla situada bajo / (la que imprime «.» allí).',
 
     'reader.content.panelAria': 'Contenido de la noticia',
     'reader.content.delete.tooltip': 'Eliminar el titular de la lista y del almacenamiento',

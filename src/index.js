@@ -10,6 +10,7 @@ import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
 import { SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
 import { wireThemeButton } from './lib/theme.js';
+import { readerKeys } from './lib/keys.js';
 import { feedNextCheckAt, formatSince, formatUntil, humanDuration, itemTime } from './lib/util.js';
 
 /* Synchronous first pass: the cached language (or the browser language) is known before
@@ -1101,6 +1102,7 @@ function isTypingTarget(target) {
   );
 }
 
+
 /**
  * Move the cursor of the middle column by one headline — of the same selection and in the same order
  * the column shows them, so a feed, «Все ленты» and an active search all step through what is on
@@ -1152,7 +1154,9 @@ function closeKeysHelp() {
 
 /*
  * The keys of the reader. They are held back while a field is being typed in — the search field holds
- * the same letters — and never taken from Ctrl/Meta/Alt, which are the browser's own.
+ * the same letters — and never taken from Ctrl/Meta/Alt, which are the browser's own. A letter answers
+ * to its place on the keyboard as well as to what the current layout prints (see `readerKeys`), so the
+ * list of the keys is the same over any layout.
  *   /        focus the search field
  *   ↓ / j    next headline          ↑ / k  previous headline
  *   Enter    open the original of the open headline
@@ -1201,54 +1205,58 @@ document.addEventListener('keydown', (event) => {
 
   if (isTypingTarget(event.target)) return;
 
-  switch (event.key) {
-    case '/':
-      event.preventDefault();
-      // Пока лент нет, поля поиска в средней колонке нет: `/` не должен вести фокус в скрытое поле.
-      if (els.headlineSearch.hidden) break;
-      els.headlineSearch.focus();
-      els.headlineSearch.select();
-      break;
-    case 'ArrowDown':
-    case 'j':
-      event.preventDefault();
-      moveHeadline(1);
-      break;
-    case 'ArrowUp':
-    case 'k':
-      event.preventDefault();
-      moveHeadline(-1);
-      break;
-    case 'Enter':
-      if (!state.uid) break;
-      event.preventDefault();
-      openOriginal();
-      break;
-    case 'm':
-      if (!state.uid) break;
-      event.preventDefault();
-      void toggleHeadlineRead();
-      break;
-    case 'd':
-      if (!state.uid) break;
-      event.preventDefault();
-      void deleteItem();
-      break;
-    case 'u':
-      if (!state.undo) break;
-      event.preventDefault();
-      void undoDelete();
-      break;
-    case 'r':
-      event.preventDefault();
-      void refreshSelectedFeed();
-      break;
-    case '?':
-      event.preventDefault();
-      openKeysHelp();
-      break;
-    default:
-      break;
+  /* Из имён нажатой клавиши действует то, которое читалка знает: отпечаток раскладки раньше, чтобы
+   * клавиша отвечала и там, где раскладка печатает другую букву. */
+  for (const key of readerKeys(event)) {
+    switch (key) {
+      case '/':
+        event.preventDefault();
+        // Пока лент нет, поля поиска в средней колонке нет: `/` не должен вести фокус в скрытое поле.
+        if (els.headlineSearch.hidden) break;
+        els.headlineSearch.focus();
+        els.headlineSearch.select();
+        return;
+      case 'ArrowDown':
+      case 'j':
+        event.preventDefault();
+        moveHeadline(1);
+        return;
+      case 'ArrowUp':
+      case 'k':
+        event.preventDefault();
+        moveHeadline(-1);
+        return;
+      case 'Enter':
+        if (!state.uid) break;
+        event.preventDefault();
+        openOriginal();
+        return;
+      case 'm':
+        if (!state.uid) break;
+        event.preventDefault();
+        void toggleHeadlineRead();
+        return;
+      case 'd':
+        if (!state.uid) break;
+        event.preventDefault();
+        void deleteItem();
+        return;
+      case 'u':
+        if (!state.undo) break;
+        event.preventDefault();
+        void undoDelete();
+        return;
+      case 'r':
+        event.preventDefault();
+        void refreshSelectedFeed();
+        return;
+      case '?':
+        event.preventDefault();
+        openKeysHelp();
+        return;
+      default:
+        break;
+    }
   }
 });
 

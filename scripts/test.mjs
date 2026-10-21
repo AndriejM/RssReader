@@ -14,6 +14,7 @@ import * as alarmsLib from '../src/lib/alarms.js';
 import * as encoding from '../src/lib/encoding.js';
 import * as favicon from '../src/lib/favicon.js';
 import * as i18n from '../src/lib/i18n.js';
+import { readerKeys } from '../src/lib/keys.js';
 import { SCREENS } from '../src/lib/nav.js';
 import * as rss from '../src/lib/rss.js';
 import * as store from '../src/lib/storage.js';
@@ -2801,6 +2802,11 @@ test('the middle column filters its headlines, and the reader answers to the key
   }
   assert.ok(page.includes('isTypingTarget'), 'the keys are taken from the field being typed in');
 
+  /* The reader answers to the key that was pressed, not only to the character the current layout
+   * printed: the names of the pressed key are taken from `readerKeys`, and the reader tries them in
+   * the order it is given. */
+  assert.ok(page.includes('for (const key of readerKeys(event))'), 'a reader key is named only by what a layout printed');
+
   const captions = [
     'reader.search.placeholder',
     'reader.search.aria',
@@ -2859,7 +2865,7 @@ test('the reader explains its keys inside the reader', () => {
 
   /* Every key the page really answers to stands in the table, and the table adds none it does not answer to. */
   const handled = new Set([
-    ...page.matchAll(/^ {4}case '([^']+)':$/gm),
+    ...page.matchAll(/^ {6}case '([^']+)':$/gm),
     ...page.matchAll(/event\.key === '([^']+)'/g),
   ].map(([, key]) => key));
   const glyphs = new Map([
@@ -2916,6 +2922,50 @@ test('the reader explains its keys inside the reader', () => {
   assert.ok(css.includes('.keys-help::backdrop'), 'the rest of the screen stays unshaded behind the list');
   assert.ok(css.includes('.keys-keys kbd'), 'the keys of the list are typed as plain running text');
   assert.ok(css.includes('.keys-table'), 'the list of keys is laid out as no table');
+});
+
+/* --------------- the reader keys over a keyboard of another layout --------------- */
+
+/**
+ * The key list names its keys with the Latin letters and the `/` of an English keyboard, while a
+ * keyboard answers with the character its current layout prints. On the Russian layout those same
+ * physical keys print Cyrillic, and no key of it prints `/` at all, so a reader that answered only to
+ * `event.key` went silent for exactly the readers whose screen is Russian. The name of the physical key
+ * is added after the printed one, so a layout that moves its letters (Dvorak, AZERTY) keeps answering
+ * through the glyph its own keys carry.
+ */
+test('a reader key answers to the key that was pressed, not to the layout that printed it', () => {
+  const pressed = (key, code, shiftKey = false) => readerKeys({ key, code, shiftKey });
+
+  /* The keys of the list, pressed at their place on the Russian layout. */
+  const cyrillic = [
+    ['о', 'KeyJ', 'j'],
+    ['л', 'KeyK', 'k'],
+    ['к', 'KeyR', 'r'],
+    ['ь', 'KeyM', 'm'],
+    ['в', 'KeyD', 'd'],
+    ['г', 'KeyU', 'u'],
+    ['.', 'Slash', '/'],
+  ];
+  for (const [printed, code, wanted] of cyrillic) {
+    assert.ok(pressed(printed, code).includes(wanted), `${printed} (${code}) is not the ${wanted} of the key list`);
+  }
+
+  /* The printed name keeps the front place: a layout that puts its letters elsewhere answers to its
+   * own glyph, and the reader tries that glyph before the place of an English keyboard. */
+  assert.equal(pressed('о', 'KeyJ')[0], 'о', 'the letter of the layout is pushed behind the letter of the list');
+  assert.ok(pressed('j', 'KeyH').includes('j'), 'a layout that moves its letters loses the j its key prints');
+  assert.equal(pressed('j', 'KeyH')[0], 'j', 'the printed letter is not the first the reader tries');
+
+  /* `?` is given no second name: where a layout keeps it off the key of `/`, it prints it from another
+   * key, and the printed name leads there. So the `?` of one layout never becomes the search field of
+   * another, and the second name of `/` belongs to its own key only. */
+  assert.ok(!pressed('?', 'Slash', true).includes('/'), 'the `?` of a keyboard puts the cursor in the search field');
+  assert.ok(pressed('?', 'Slash', true).includes('?'), 'the `?` standing on its own key is not answered to');
+  assert.ok(!pressed('.', 'Period').includes('/'), 'the second name of `/` is given to another key');
+
+  /* A key that states no physical name is still answered to by what it printed. */
+  assert.deepEqual(pressed('j', undefined), ['j'], 'a key without `event.code` loses the letter it printed');
 });
 
 /**

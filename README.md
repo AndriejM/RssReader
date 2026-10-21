@@ -291,6 +291,12 @@ search field holds the same letters) or while Ctrl/Meta/Alt are down:
 | `Esc` (outside it) | take back the headline just deleted, while the undo line stands |
 | `?` | open (or close) the list of these keys, inside the reader |
 
+A letter answers to its place on the keyboard, not to the character the current layout prints: on a
+Cyrillic layout the very keys of this table print `о`, `л`, `к`, `ь`, `в`, `г`, and no key there prints
+`/` at all, so the search field opens from the key standing under `/` (the one printing `.` there).
+What was printed is answered to first, so a layout that moves its letters (Dvorak, AZERTY) keeps its own
+glyph working.
+
 The arrows work from inside the search field too: they leave the words typed and move the cursor
 through the headlines the field filters. Every move brings the row it landed on back into view, and the
 row the keyboard opens also takes the focus, so its name is read out and the next arrow continues from
@@ -427,6 +433,9 @@ src/lib/columns.js            the draggable border between reader columns: it si
                               its left, keeps it inside its limits and writes the width to the
                               settings when the button is released
 src/columns-boot.js           paint the remembered widths before the page is drawn by its module
+src/lib/keys.js               the names a pressed key answers to: what the current layout printed, plus
+                              the letter of the physical key, so the keys of the reader work on any
+                              keyboard layout
 src/lib/nav.js                the row of screen-switcher icons: the same one on all three screens,
                               its tooltips taken from the dictionary (`nav.*`)
 src/lib/tabs.js               one extension screen — one tab: find the open tab and activate it
@@ -1082,7 +1091,8 @@ rules are covered by the tests.
     next visible one; `r` re-reads the selected feed. None of these keys fires while the cursor stands
     in the search field, except the arrows. Every row the keyboard opens takes the focus, and a screen
     reader reads its name; the outcome of `r` is said out loud from the hidden status line («5 new
-    headlines», «3 feeds could not be refreshed»).
+    headlines», «3 feeds could not be refreshed»). Switch the keyboard to a Cyrillic layout and press
+    the same places: `j`, `k`, `r`, `m`, `d`, `u` answer there too, as does the key standing under `/`.
 26. Press `?` (or click the «?» icon in the reader header) → a window over the three columns lists every
     key above with what it does. While it stands, `j`, `d`, `r` and `/` do nothing to the headlines;
     `?` or `Esc` or the close icon or a click beside the card closes it, and the cursor returns to the
