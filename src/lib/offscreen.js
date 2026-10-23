@@ -11,6 +11,21 @@ const JUSTIFICATION =
 
 let creationPromise = null;
 
+/* Документ нужен только на время запроса: разобрать ответ ленты или сыграть сигнал. Chrome держит
+ * offscreen-документ открытым, пока его явно не закроют, то есть без этого шага он живёт до конца
+ * сессии браузера — живой документ с DOM и выходом в сеть, никем не востребованный. Поэтому после
+ * последнего запроса он закрывается сам.
+ *
+ * Срок выбран так, чтобы успеть сработать: сам фон Chrome снимает за 30 с спокойствия, и таймер
+ * дольше этого мог бы просто не дожить до своего запуска. Он длиннее любого сигнала из `src/media`
+ * (файлы в несколько секунд) — чтобы документ не пропал под играющим звуком, — и достаточно
+ * короткий, чтобы пакетная перечитка лент не создавала окно заново на каждой ленте. */
+export const IDLE_CLOSE_MS = 20_000;
+
+let activeRequests = 0;
+let closeTimer = null;
+let closingPromise = null;
+
 /**
  * Ошибка с i18n-кодом: `code` указывает на ключ `errors.<code>`, `params` заполняет его
  * placeholders, а `message` остаётся техническим — его показывает только консоль.
@@ -74,6 +89,40 @@ export async function ensureOffscreenDocument() {
   return hasOffscreenDocument();
 }
 
+function cancelIdleClose() {
+  if (closeTimer !== null) {
+    clearTimeout(closeTimer);
+    closeTimer = null;
+  }
+}
+
+/** Отложить закрытие на конец простоя: запросы, идущие один за другим, держат документ живым. */
+function armIdleClose() {
+  cancelIdleClose();
+  closeTimer = setTimeout(() => {
+    closeTimer = null;
+    void closeWhenIdle();
+  }, IDLE_CLOSE_MS);
+}
+
+async function closeWhenIdle() {
+  /* Запрос мог начаться, пока таймер шёл: тогда документ снова нужен. */
+  if (activeRequests > 0) {
+    armIdleClose();
+    return;
+  }
+
+  closingPromise = closeOffscreenDocument()
+    .catch((error) => {
+      console.warn('could not close the offscreen document:', error?.message ?? error);
+    })
+    .finally(() => {
+      closingPromise = null;
+    });
+
+  await closingPromise;
+}
+
 /**
  * Отправить сообщение offscreen-документу и дождаться его ответа.
  * Свежесозданный документ мог ещё не успеть зарегистрировать слушателя, поэтому одна повторная
@@ -82,39 +131,57 @@ export async function ensureOffscreenDocument() {
  * @throws {Error} если документа нет или он не ответил
  */
 export async function requestOffscreen(message, { attempts = 2, retryDelay = 150 } = {}) {
+  /* Закрытие по простою уже началось — значит, создавать документ поверх закрываемого нельзя:
+   * сначала дождаться, пока оно закончится. */
+  if (closingPromise) await closingPromise;
+
   if (!(await ensureOffscreenDocument())) {
     // `code` points at an `errors.<code>` key so the page that shows the failure renders it in the
     // reader's language, exactly like `rss.FeedError` does.
     throw codedError('offscreenUnavailable', 'offscreen document is unavailable');
   }
 
-  let lastError = null;
+  activeRequests += 1;
+  cancelIdleClose();
 
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const sent = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(message, (reply) => {
-        if (chrome.runtime.lastError) {
-          resolve({ error: chrome.runtime.lastError.message });
-          return;
-        }
-        resolve({ reply });
+  try {
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const sent = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(message, (reply) => {
+          if (chrome.runtime.lastError) {
+            resolve({ error: chrome.runtime.lastError.message });
+            return;
+          }
+          resolve({ reply });
+        });
       });
-    });
 
-    // Ключ есть даже когда ответ — undefined: документ ответил, просто без полезных данных.
-    if (sent && 'reply' in sent) return sent.reply;
+      // Ключ есть даже когда ответ — undefined: документ ответил, просто без полезных данных.
+      if (sent && 'reply' in sent) return sent.reply;
 
-    lastError = sent?.error ?? null;
-    if (attempt < attempts) await sleep(retryDelay);
+      lastError = sent?.error ?? null;
+      if (attempt < attempts) await sleep(retryDelay);
+    }
+
+    throw codedError(
+      'offscreenNoReply',
+      `offscreen page did not answer${lastError ? `: ${lastError}` : ''}`,
+      { cause: lastError ? `: ${lastError}` : '' },
+    );
+  } finally {
+    /* Запрос закончен — ответом или отказом. Отсчёт простоя начинается заново: документ, который
+     * не ответил, закрывается вместе с остальными и в следующее чтение создаётся заново. */
+    activeRequests -= 1;
+    armIdleClose();
   }
-
-  throw codedError(
-    'offscreenNoReply',
-    `offscreen page did not answer${lastError ? `: ${lastError}` : ''}`,
-    { cause: lastError ? `: ${lastError}` : '' },
-  );
 }
 
+/**
+ * Закрыть документ, если он открыт. Это же зовёт таймер простоя: документ живёт ровно столько,
+ * сколько им пользуются.
+ */
 export async function closeOffscreenDocument() {
   if (!(await hasOffscreenDocument())) return;
   await chrome.offscreen.closeDocument();

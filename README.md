@@ -720,6 +720,7 @@ background.
 | `FEED_FETCH_TIMEOUT_MS` / `ARTICLE_FETCH_TIMEOUT_MS` | 15 s / 12 s | `util.js` — how long a feed read — and a page read for an icon or an article — is waited for before the request is aborted |
 | `MAX_FEED_BACKOFF_MINUTES` | 1440 min (1 day) | `util.js` — the longest pause `feedBackoffMinutes` gives a feed that keeps failing |
 | `FETCH_LOCK_TTL_MS` | 45 s | `storage.js` — how long a feed stays held by the read that started: one bounded fetch (`FEED_FETCH_TIMEOUT_MS`) plus room for the offscreen document being asked twice and for parsing and saving the headlines |
+| `IDLE_CLOSE_MS` | 20 s | `lib/offscreen.js` — how long the offscreen document is kept after the last request answered to it, after which the worker closes it and a later request opens a fresh one: shorter than the 30 s of quiet after which Chrome stands the worker down, longer than any signal the reader plays |
 | `FEED_EXPORT_VERSION` | 1 | `storage.js` — the version of the feeds file the feed screen writes and reads; a file of another version is refused |
 
 ## Implementation notes
@@ -892,7 +893,11 @@ background.
   has no DOM, so `DOMParser` is absent there (`rss.js` is called from `src/offscreen.js`; the
   document has the `DOM_PARSER` permission). The background asks the document to read the feed
   (`MSG_FETCH_FEED`) and receives finished headlines rather than XML. The same document serves
-  sound (`AUDIO_PLAYBACK`): there is one window, created as needed and reused.
+  sound (`AUDIO_PLAYBACK`): there is one window, created as needed and reused — and closed once the
+  reader stops borrowing it, because Chrome keeps an offscreen document open until somebody closes
+  it. `requestOffscreen` arms `IDLE_CLOSE_MS` after the last answer comes back, requests that
+  follow one another cancel that wait, and a read that is still going re-arms it instead of closing
+  the document under itself.
 - **A news item the user marked read does not come back**: the `read` storage key holds the
   headlines the user marked read personally — by the check icon of the article panel or by deleting
   them. `store.addItems` does not add a headline whose news is already in
@@ -1040,15 +1045,15 @@ background.
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
                              # storage.js and rss.js), the guards over the screen markup and over what
                              one module borrows from another, and the popup an automatic load shows:
-                             149 tests
+                             152 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
 
-The tests do not cover `chrome.*` code (alarms, action, offscreen, messages) or XML parsing — the one
-exception is the answer to a popup click, tested against a stood-in popup center and tab strip — the
-rest is checked in the browser after loading the extension. JSON Feed parsing needs no DOM, so its
-rules are covered by the tests.
+The tests do not cover `chrome.*` code (alarms, action, messages) or XML parsing — the exceptions are
+the answer to a popup click, tested against a stood-in popup center and tab strip, and the life of the
+offscreen document, tested against a stood-in `chrome.offscreen`; the rest is checked in the browser
+after loading the extension. JSON Feed parsing needs no DOM, so its rules are covered by the tests.
 
 ### What to check in the browser
 
@@ -1260,8 +1265,9 @@ rules are covered by the tests.
   worker restart, and on every wake-up `bootstrap()` re-reconciles the alarms, cleans expired
   headlines and updates the badge.
 - **The offscreen document is created only when a DOM is needed** — parsing a feed or playing
-  sound — not permanently; afterwards it is reused. The first feed read after a background
-  wake-up is slightly slower than the rest because the window still has to be created.
+  sound — not permanently: it is reused while requests keep coming and closed `IDLE_CLOSE_MS`
+  after the last of them, so it does not outlive the work it was made for. The first feed read
+  after such a gap is slightly slower than the rest because the window has to be created again.
 - **Seven interface languages** (`ru`, `en`, `uk`, `pl`, `de`, `fr`, `es`): the list is fixed by
   `LANGUAGES` in `src/lib/i18n.js`, and a browser language outside this list falls back to
   `English`. Chrome takes the extension's own name and description from `_locales` by the browser

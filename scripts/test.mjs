@@ -18,6 +18,9 @@ import * as i18n from '../src/lib/i18n.js';
 import { readerKeys } from '../src/lib/keys.js';
 import { SCREENS } from '../src/lib/nav.js';
 import * as notify from '../src/lib/notify.js';
+import { IDLE_CLOSE_MS } from '../src/lib/offscreen.js';
+import { MSG_FETCH_FEED, MSG_PLAY_SOUND } from '../src/lib/messages.js';
+import * as offscreenLib from '../src/lib/offscreen.js';
 import * as rss from '../src/lib/rss.js';
 import * as store from '../src/lib/storage.js';
 import { READER_PAGE } from '../src/lib/tabs.js';
@@ -4775,6 +4778,223 @@ test('the worker wires the popup click at startup', () => {
   assert.match(worker, /import \{[^}]*notifyIngest[^}]*wireNotificationClicks[^}]*\} from '\.\/lib\/notify\.js';/);
   assert.match(page, /onClicked\.addListener/);
   assert.match(page, /onClosed\.addListener/);
+});
+
+/* --------------------- the document the worker closes behind it --------------------- */
+
+/**
+ * Chrome keeps an offscreen document open until somebody closes it, so a reader that only borrows a
+ * DOM — parse the answer of a feed, play the signal — would otherwise hold a live document with
+ * network access for the rest of the browser session, long after the feed it parsed lies on the
+ * shelf. Raising that close is ours; this shows it answers: requests that follow one another share
+ * one document, the quiet after them closes it, and a later request opens a fresh one.
+ */
+test('the offscreen document is closed once the reader stops borrowing it', async () => {
+  const created = [];
+  const closed = [];
+  const waits = [];
+  let open = false;
+
+  globalThis.chrome = {
+    offscreen: {
+      async createDocument(options) {
+        created.push(options);
+        open = true;
+      },
+      async closeDocument() {
+        // Chrome throws here when no document is open.
+        if (!open) throw new Error('no offscreen document to close');
+        open = false;
+        closed.push('closed');
+      },
+    },
+    runtime: {
+      async getContexts({ contextTypes }) {
+        return contextTypes.includes('OFFSCREEN_DOCUMENT') && open ? [{ id: 'offscreen' }] : [];
+      },
+      sendMessage(_message, callback) {
+        callback({ ok: true, result: { entries: [] } });
+      },
+    },
+  };
+
+  /* The idle wait is a real wait; the test drives the wait it stands in for. */
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = (fn, ms) => {
+    const wait = { fn, ms, cancelled: false };
+    waits.push(wait);
+    return wait;
+  };
+  globalThis.clearTimeout = (wait) => {
+    if (wait) wait.cancelled = true;
+  };
+  const settle = () => new Promise((resolve) => realSetTimeout(resolve, 0));
+
+  try {
+    await offscreenLib.requestOffscreen({ type: MSG_FETCH_FEED, url: 'https://example.test/rss' });
+    assert.equal(created.length, 1, 'a read that needs a DOM gets its document');
+    assert.deepEqual(
+      created[0].reasons,
+      ['AUDIO_PLAYBACK', 'DOM_PARSER'],
+      'the one document is raised for the parsing and for the signal together',
+    );
+
+    await offscreenLib.requestOffscreen({ type: MSG_PLAY_SOUND, src: 'src/media/ceres.mp3' });
+    assert.equal(
+      created.length,
+      1,
+      'the request that follows uses the document that is already open',
+    );
+
+    const live = waits.filter((wait) => !wait.cancelled);
+    assert.equal(live.length, 1, 'one wait for the close stands, not one per request');
+    assert.equal(live[0].ms, IDLE_CLOSE_MS, 'the close waits out the quiet after the last request');
+    assert.equal(
+      closed.length,
+      0,
+      'a document the reader still works with is not closed under it: the signal has to finish first',
+    );
+
+    live[0].fn();
+    await settle();
+    assert.equal(closed.length, 1, 'the quiet after the last request closes the document');
+    assert.equal(
+      await offscreenLib.hasOffscreenDocument(),
+      false,
+      'the reader does not count a document it closed',
+    );
+
+    await offscreenLib.requestOffscreen({ type: MSG_FETCH_FEED, url: 'https://example.test/rss' });
+    assert.equal(created.length, 2, 'a request that comes later opens a fresh document');
+
+    /* Close raised by the worker itself does not wait for the quiet: no request is left — close. */
+    for (const wait of waits) globalThis.clearTimeout(wait);
+    await offscreenLib.closeOffscreenDocument();
+    assert.equal(
+      closed.length,
+      2,
+      'the document a request opened is closed again by the same worker',
+    );
+
+    await offscreenLib.closeOffscreenDocument();
+    assert.equal(
+      closed.length,
+      2,
+      'a close asked for with no document open does not ask Chrome a second time',
+    );
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    delete globalThis.chrome;
+  }
+});
+
+/**
+ * Простой не должен закрыть документ под запросом, который ещё идёт: одно чтение уже ответило и
+ * поставило таймер закрытия, а другое всё ещё держит связь с offscreen-документом. Тот же таймер
+ * в этом случае ставит новую попытку вместо закрытия.
+ */
+test('a close on standby waits for the read that is still going', async () => {
+  const closed = [];
+  const waits = [];
+  let open = false;
+  let answer = null;
+  let sends = 0;
+
+  globalThis.chrome = {
+    offscreen: {
+      async createDocument() {
+        open = true;
+      },
+      async closeDocument() {
+        if (!open) throw new Error('no offscreen document to close');
+        open = false;
+        closed.push('closed');
+      },
+    },
+    runtime: {
+      async getContexts({ contextTypes }) {
+        return contextTypes.includes('OFFSCREEN_DOCUMENT') && open ? [{ id: 'offscreen' }] : [];
+      },
+      sendMessage(_message, callback) {
+        sends += 1;
+        /* Первое чтение отвечает не сразу: оно держит документ, пока тест сам не ответит. */
+        if (sends === 1) {
+          answer = () => callback({ ok: true, result: { entries: [] } });
+          return;
+        }
+        callback({ ok: true, result: { entries: [] } });
+      },
+    },
+  };
+
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = (fn, ms) => {
+    const wait = { fn, ms, cancelled: false };
+    waits.push(wait);
+    return wait;
+  };
+  globalThis.clearTimeout = (wait) => {
+    if (wait) wait.cancelled = true;
+  };
+  const settle = () => new Promise((resolve) => realSetTimeout(resolve, 0));
+
+  try {
+    const inflight = offscreenLib.requestOffscreen({
+      type: MSG_FETCH_FEED,
+      url: 'https://example.test/rss',
+      attempts: 1,
+    });
+    await settle();
+
+    /* Чтение, которое ответило: оно и ставит тот таймер, что собирается закрыть документ. */
+    await offscreenLib.requestOffscreen({ type: MSG_PLAY_SOUND, src: 'src/media/ceres.mp3' });
+
+    const armed = waits.filter((wait) => !wait.cancelled);
+    assert.equal(
+      armed.length,
+      1,
+      'a read that finished arms the close while another read is still going',
+    );
+
+    armed[0].cancelled = true;
+    armed[0].fn();
+    assert.equal(
+      closed.length,
+      0,
+      'the close on standby does not take the document away from a read that still works with it',
+    );
+
+    answer();
+    await inflight;
+
+    const live = waits.filter((wait) => !wait.cancelled);
+    assert.equal(live.length, 1, 'the read that finished arms one fresh wait');
+    live[0].fn();
+    await settle();
+    assert.equal(closed.length, 1, 'and the document goes when nothing is left to answer');
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    delete globalThis.chrome;
+  }
+});
+
+/**
+ * Срок закрытия — не украшение: он должен и дожить до своего запуска, и переждать сигнал, который
+ * играет в этом же документе.
+ */
+test('the wait before the close is short enough to happen and long enough to be safe', () => {
+  assert.ok(
+    IDLE_CLOSE_MS < 30_000,
+    'Chrome stands the worker down after 30 s of quiet: a close armed later than that may never run',
+  );
+  assert.ok(
+    IDLE_CLOSE_MS > 10_000,
+    'and the wait has to outlast the signal the document is still playing — the bundled files are a few seconds long',
+  );
 });
 
 /* ------------------------- the age written on a row ------------------------- */
