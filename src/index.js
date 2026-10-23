@@ -20,7 +20,6 @@ applyI18n();
 const els = {
   totalCount: document.getElementById('total-count'),
   theme: document.getElementById('btn-theme'),
-  refresh: document.getElementById('btn-refresh'),
   load: document.getElementById('btn-load'),
   clear: document.getElementById('btn-clear'),
 
@@ -983,7 +982,7 @@ async function clearSelectionHeadlines() {
  */
 async function refreshSelection() {
   if (isAllFeeds()) {
-    await refreshAllFeeds(els.load);
+    await refreshAllFeeds();
     return;
   }
 
@@ -1013,62 +1012,22 @@ async function refreshSelection() {
   }
 }
 
-async function refreshSelectedFeed() {
-  // «Все ленты» is a selection too: reading it means reading every feed, as the middle button does.
-  // This button is held disabled while that read runs, so it cannot start a second one.
-  if (isAllFeeds()) {
-    els.refresh.disabled = true;
-    els.refresh.classList.add('busy');
-    try {
-      await refreshAllFeeds();
-    } finally {
-      els.refresh.disabled = false;
-      els.refresh.classList.remove('busy');
-    }
-    return;
-  }
-
-  const feed = selectedFeed();
-  if (!feed) {
-    showPlaceholder(t('reader.refresh.noFeed'), { alert: true });
-    return;
-  }
-
-  const tip = els.refresh.title;
-  els.refresh.disabled = true;
-  els.refresh.classList.add('busy');
-  els.refresh.title = t('common.loading');
-  try {
-    state.refreshError = null;
-    const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_FEED, feedId: feed.id });
-    if (!response?.ok) reportRefreshFailure('reader.refresh.failed', response?.error);
-    await renderAll();
-    if (response?.ok) openTopHeadline();
-    announce(refreshOutcome(response));
-  } finally {
-    els.refresh.disabled = false;
-    els.refresh.classList.remove('busy');
-    els.refresh.title = tip;
-  }
-}
-
 /**
- * Read every feed at once. `target` is the button that asked for it — the load icon in the middle
- * panel head or the refresh icon in the feeds panel — so the button that was pressed is the one that
- * spins and stays disabled while the worker fetches the feeds one after another. A feed that failed
- * keeps its stored headlines, so a partial failure is a notice rather than an empty screen.
+ * Read every feed at once. The load icon of the middle panel is the one that asked for it: it is the
+ * button that spins and stays disabled while the worker fetches the feeds one after another. A feed
+ * that failed keeps its stored headlines, so a partial failure is a notice rather than an empty screen.
  */
-async function refreshAllFeeds(target = els.refresh) {
+async function refreshAllFeeds() {
   if (state.feeds.length === 0) {
     // Просьба обновить то, чего ещё нет, — то же первое знакомство, что и пустая средняя колонка.
     showPlaceholder(t('reader.start.contentHint'));
     return;
   }
 
-  const tip = target.title;
-  target.disabled = true;
-  target.classList.add('busy');
-  target.title = t('common.loading');
+  const tip = els.load.title;
+  els.load.disabled = true;
+  els.load.classList.add('busy');
+  els.load.title = t('common.loading');
   try {
     state.refreshError = null;
     const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_ALL_FEEDS });
@@ -1082,9 +1041,9 @@ async function refreshAllFeeds(target = els.refresh) {
     if (response?.ok) openTopHeadline();
     announce(refreshOutcome(response));
   } finally {
-    target.disabled = false;
-    target.classList.remove('busy');
-    target.title = tip;
+    els.load.disabled = false;
+    els.load.classList.remove('busy');
+    els.load.title = tip;
   }
 }
 
@@ -1181,7 +1140,6 @@ wireFontScaleChanges();
 // a drag leaves behind is remembered for the next time the reader opens.
 mountColumnResizers();
 wireColumnWidthChanges();
-els.refresh.addEventListener('click', () => void refreshSelectedFeed());
 els.load.addEventListener('click', () => void refreshSelection());
 els.clear.addEventListener('click', () => void clearSelectionHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
@@ -1401,7 +1359,7 @@ document.addEventListener('keydown', (event) => {
         return;
       case 'r':
         event.preventDefault();
-        void refreshSelectedFeed();
+        void refreshSelection();
         return;
       case '?':
         event.preventDefault();

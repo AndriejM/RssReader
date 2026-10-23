@@ -174,9 +174,9 @@ Three vertical panels:
 1. **Feeds** — a list of feeds with their headline counts and update periods. Above the list
    stands a separate “All feeds” row: it is not a feed, so it is set in the accent colour, is
    larger than a feed row, is closed off from the list by a rule, and its label counts the
-   headlines of every feed instead of naming one feed's refresh period. The refresh icon at the
-   top of the panel re-reads the selected feed once — “All feeds” makes it read every feed at once
-   (no sound at that moment) — and spins while loading. Clicking a feed puts the middle panel on
+   headlines of every feed instead of naming one feed's refresh period. The panel head loads
+   nothing of its own: the read of a selection belongs to the middle column's load icon and the `r`
+   key. Clicking a feed puts the middle panel on
    its first (freshest) headline, and its text opens in the right panel right away; clicking “All
    feeds” puts it on the freshest headline there is, whichever feed it came from. A feed whose last
    read failed is set apart: a warning glyph stands beside its name, the number of its failures runs
@@ -478,7 +478,7 @@ examples/                     example_rss.xml — a sample feed; neither the rea
 | 4 | Automatic headline deletion once `clean_timeout` expires | `store.cleanup` + `CLEANUP_ALARM_NAME` in `src/lib/alarms.js` (checked once a minute), plus `store.cleanup()` when the reader opens |
 | 5 | Light/dark theme toggle | `src/lib/theme.js`, `src/styles/theme.css`; the value is in `chrome.storage.local`, so it is synchronous across all pages |
 | 6 | Badge on the icon: `1…99` as a number, `*` when over 99, empty at 0 | `util.badgeText` + `chrome.action.setBadgeText` + `chrome.action.setBadgeBackgroundColor` in `src/background.js`; the badge background is yellow and theme-dependent, so the number is readable in both Chrome toolbar themes |
-| 7 | Sound when an automatic load brings more than 0 headlines | `store.addItems` returns the number of new items → `sound.playSound` checks the «Sound» checkbox from the settings screen and reads the file selected there → the offscreen document plays it (`playSound` does nothing when the flag is off); manual “Refresh”/“Load now” produce no sound |
+| 7 | Sound when an automatic load brings more than 0 headlines | `store.addItems` returns the number of new items → `sound.playSound` checks the «Sound» checkbox from the settings screen and reads the file selected there → the offscreen document plays it (`playSound` does nothing when the flag is off); a manual read (`r` or “Load now”) produces no sound |
 | 8 | A separate global settings screen (the same icon in the top-right corner of all three screens, the last of the three, before the theme toggle): `read_ttl_days` — how many days to forget read items, and a signal-file combobox with its on/off checkbox (all saved via the “Write” button), plus a button that fully clears the read list | `src/settings.html`, `src/settings.js`, `store.getReadTtlDays` / `store.setReadTtlDays` / `store.setSoundChoice` / `store.setSoundEnabled` / `store.clearRead` |
 | 9 | Labels, messages and tooltips are factored into one configuration, from which the English one is derived; on the global settings screen a language combobox that is saved to storage; on load the reader takes the saved language, otherwise the browser language, otherwise English | `src/lib/i18n.js` (`ru` / `en` / `uk` / `pl` / `de` / `fr` / `es` dictionaries), `store.getLanguage` / `store.setLanguage`, `src/lib/i18n-boot.js`, `src/lib/errors.js`, `language-file` combobox in `src/settings.html` |
 | 10 | When a feed URL is added its site page is read, the favicon it declares is found (or the site's `favicon.ico` is used), and a link to it is stored on the feed; the icon is shown in the left column next to the feed name, and in the middle column — in «All feeds» — next to every headline of that feed | `src/lib/favicon.js`, `attachFeedIcon` in `src/feeds.js`, `feedIconImg` in `src/index.js`, `.item-icon` in `src/styles/reader.css` |
@@ -665,8 +665,8 @@ communicate like this:
 
 | Message | From where | What the background does |
 |---|---|---|
-| `MSG_REFRESH_FEED` (`feedId`) | reader "Refresh" and the middle-column load icon (with one feed selected), settings screen "Load now" | reads the feed and saves the headlines; replies `{ok, added, skipped, seen, busy}`, where `skipped` is how many headlines were rejected as already read and `busy` says the feed is held by a read this request did not start, so it has no numbers of its own (the feed is not asked twice); no sound |
-| `MSG_REFRESH_ALL_FEEDS` | reader "Refresh all": the middle-column load icon or the feeds-panel refresh icon, each with «Все ленты» selected | reads every feed of the list one after another, in the order of that list; replies `{ok, results, failed}`, where `results` is one `{feedId, ok, …}` per feed and `failed` counts the feeds that refused; a feed another context is already reading comes back with `busy` and is not counted as refused; no sound |
+| `MSG_REFRESH_FEED` (`feedId`) | the middle-column load icon or the `r` key (with one feed selected), settings screen "Load now" | reads the feed and saves the headlines; replies `{ok, added, skipped, seen, busy}`, where `skipped` is how many headlines were rejected as already read and `busy` says the feed is held by a read this request did not start, so it has no numbers of its own (the feed is not asked twice); no sound |
+| `MSG_REFRESH_ALL_FEEDS` | the middle-column load icon or the `r` key, each with «Все ленты» selected | reads every feed of the list one after another, in the order of that list; replies `{ok, results, failed}`, where `results` is one `{feedId, ok, …}` per feed and `failed` counts the feeds that refused; a feed another context is already reading comes back with `busy` and is not counted as refused; no sound |
 | `MSG_FEEDS_CHANGED` | reader (on opening), settings screen (after save/delete) | rebuilds alarms from the feed list, clears expired items, updates the badge |
 | `MSG_COUNT` | not used by pages yet (reserved) | replies `{ok, count}` — the number of headlines in storage |
 | `MSG_PLAY_SOUND` (`src`) | only `sound.playSound` from the background | the offscreen document plays the audio file selected on the settings screen from `src/media` |
@@ -853,7 +853,7 @@ background.
   `notifications`) naming how many headlines came in. Its language is the interface language:
   `store.getLanguage()` puts the stored language into `i18n.t()`'s cache on its way out, and a
   worker with no localStorage access falls back to the browser language. The popup names itself
-  with a unique id and clears itself after a few seconds; a manual “Refresh”/“Load now” shows no
+  with a unique id and clears itself after a few seconds; a manual read (`r` or “Load now”) shows no
   popup, exactly as it plays no sound.
 - **XML parsing happens in the offscreen document, not in the background**: an MV3 service worker
   has no DOM, so `DOMParser` is absent there (`rss.js` is called from `src/offscreen.js`; the
@@ -969,10 +969,10 @@ background.
   page could not be opened, is recorded as the answer it really was — `markFeedChecked({ ok: true })`
   — so a feed that answered keeps its schedule, its keys and a healthy line on the settings screen.
 - **One feed is read once**: a feed whose read is running is held, so the alarm of a feed and a
-  “Refresh” of the same feed cannot fetch one address twice. The fast guard lives in the worker
+  manual `r` of the same feed cannot fetch one address twice. The fast guard lives in the worker
   (`readingFeedIds` in `src/background.js`, checked synchronously — before any read from storage,
   so two requests cannot race over it): the second request does not fetch again, it waits for the
-  read in progress and answers with its headlines, which is why “Refresh” pressed over a feed that
+  read in progress and answers with its headlines, which is why `r` pressed over a feed that
   is loading still reports something true instead of “0 headlines”. A read that fails gives its
   feed back in the same `finally` that raised the failure. The hold is written to
   `chrome.storage.local` as well (`store.tryLockFeed` / `store.releaseFeedLock`, the
@@ -1094,9 +1094,8 @@ rules are covered by the tests.
     headline and its text is already open in the right panel; no second click is needed.
 23. Click the “All feeds” row → the middle panel holds the headlines of every feed, freshest on
     top, each labelled with the name of its own feed; the cursor moves to the freshest of them. With
-    “All feeds” selected, the load icon in the middle head (or the refresh icon at the top of the
-    feeds panel) reads every feed at once; with a single feed selected those same icons read only
-    that feed.
+    “All feeds” selected, the load icon in the middle head (or the `r` key) reads every feed at
+    once; with a single feed selected that same read covers only that feed.
 24. Type a word in the search field of the middle panel → only the headlines whose title or feed name
     contains it stay, in the same order, and the counter beside the panel name counts those; type a
     word nothing matches → both panels say that the search found nothing. Press `Esc` → the field is
@@ -1128,13 +1127,13 @@ rules are covered by the tests.
     are gone with the address they described.
 28. Add a feed whose server answers with validators (`ETag` or `Last-Modified` — many news sites do)
     and open the service worker's console → the first read brings those answers, and `feeds` in
-    `chrome.storage.local` grows `etag`, `lastModified` and `lastFetchedAt`. Press “Refresh” a minute
+    `chrome.storage.local` grows `etag`, `lastModified` and `lastFetchedAt`. Press `r` a minute
     later → the console says `nothing new (304)`, the headlines and the badge stay exactly as they
     were, and in the Network panel the request goes out with `If-None-Match` / `If-Modified-Since`
     and comes back with an empty body.
 29. Add a feed whose address opens the connection but never answers it → after 15 seconds the read
     fails with “the feed did not answer within 15 seconds” instead of holding the poll open, and
-    “Refresh all feeds” still gets through the rest of the feeds one by one.
+    a read of «All feeds» still gets through the rest of the feeds one by one.
 30. Give a feed `delay_timeout: 1` and press the load button of its row on the feed screen the
     moment its alarm fires → the service worker console says `already being read, this request takes
     its answer`, the Network panel shows **one** request to that address, not two, the row reports
@@ -1145,7 +1144,7 @@ rules are covered by the tests.
     `sourceId` has no `utm_…`, no `www`, no trailing slash, while `link` is the address the feed
     wrote. On a feed that reissues the same news under another address (a `guid` with
     `isPermaLink="false"`, or a link that only grew tracking parameters) the list keeps **one**
-    headline, `added 0` in the read's numbers; delete it and press “Refresh” → it does not come back
+    headline, `added 0` in the read's numbers; delete it and press `r` → it does not come back
     while its read marker lives, and in `read` the marker carries the same `sourceId`. On a feed
     whose `guid` is longer than 200 characters, `sourceId` is its first 200 characters plus `#…` and
     a 16-digit fingerprint of the whole id: two such headlines keep different tails and are not
@@ -1166,7 +1165,7 @@ rules are covered by the tests.
 33. Open the reader on a feed that has been read → one line under the head of the middle column names
     when its headlines came in and when they are next asked for; on «All feeds» the age is the
     freshest of those feeds and the next check is the earliest of their alarms. Leave the tab open →
-    «4 min ago» becomes «5 min ago» on its own. Press “Refresh” → the line answers without a reload,
+    «4 min ago» becomes «5 min ago» on its own. Press `r` → the line answers without a reload,
     because a read rewrites the feed row and the reader repaints from it, and the moment it names is
     the number that stands in `feeds[].nextAlarmAt` in `chrome.storage.local`.
 34. On the feed screen press Tab through the row of icons, a row of the table and the “?” → every one

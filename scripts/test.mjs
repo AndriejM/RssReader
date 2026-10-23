@@ -2540,6 +2540,17 @@ test('the header reads every feed and a picked feed opens on its first headline'
     'a click on it sends the worker no message',
   );
 
+  /* One selection has one button that reads it: the head of the feeds panel keeps no second copy of
+   * the same read, and the `r` key goes through the very function that button calls. */
+  assert.ok(!html.includes('id="btn-refresh"'), 'the feeds panel head keeps a second button for the same read');
+  assert.equal(page.split('async function refreshSelection()').length - 1, 1,
+    'the page keeps a second copy of the read the load icon runs');
+  assert.match(
+    page,
+    /case 'r':\s*\r?\n\s*event\.preventDefault\(\);\s*\r?\n\s*void refreshSelection\(\);/,
+    'the r key does not read the same selection the button reads',
+  );
+
   /* A read the user asked for by hand stays silent, whatever its scope: only an alarm-driven read
    * plays the sound, so the handler must not repeat what the alarm branch does. */
   const handlerStart = worker.indexOf('message?.type === MSG_REFRESH_ALL_FEEDS');
@@ -3272,7 +3283,7 @@ test('a failed load keeps the open headline and names itself in the status line'
   for (const key of ['reader.refresh.failed', 'reader.refreshAll.failed']) {
     assert.equal(page.split(`showPlaceholder(t('${key}'`).length - 1, 0,
       `the failure ${key} is shown in place of the headline the reader was showing`);
-    assert.equal(page.split(`reportRefreshFailure('${key}'`).length - 1, key === 'reader.refresh.failed' ? 3 : 1,
+    assert.equal(page.split(`reportRefreshFailure('${key}'`).length - 1, key === 'reader.refresh.failed' ? 2 : 1,
       `the failure ${key} is named by no path that loads the feeds`);
   }
   assert.ok(page.includes('if (openHeadline()) renderFeedStatus();'), 'a failure with an open article repaints the article');
@@ -3280,12 +3291,12 @@ test('a failed load keeps the open headline and names itself in the status line'
   /* The failure waits in the reader's state — the raw words of the worker, translated again on a language
    * change — and reaches the screen through the line under the head of the middle column. */
   assert.ok(page.includes('refreshError: null'), 'the reader keeps no failed load of its own');
-  assert.equal(page.split('state.refreshError = null;').length - 1, 4, 'a new load or another selection does not forget the failure of the last one');
+  assert.equal(page.split('state.refreshError = null;').length - 1, 3, 'a new load or another selection does not forget the failure of the last one');
   assert.ok(page.includes('state.refreshError ? [refreshFailureText(state.refreshError)] : []'), 'the status line does not carry the failure of the load');
   assert.ok(page.includes("els.feedStatus.classList.toggle('error'"), 'the status line does not say that what it carries is a failure');
 
   /* Only a load that answered moves the reader to the top of the list. */
-  assert.equal(page.split('if (response?.ok) openTopHeadline();').length - 1, 3, 'a load that failed moves the reader away from its open headline');
+  assert.equal(page.split('if (response?.ok) openTopHeadline();').length - 1, 2, 'a load that failed moves the reader away from its open headline');
 
   /* With no article to keep, the same words are spoken by the live region of the right panel. */
   assert.ok(page.includes("p.setAttribute('role', alert ? 'alert' : 'status')"), 'a failure of a load is not announced to a screen reader');
@@ -3467,7 +3478,7 @@ test('the reader announces its outcomes and keeps a keyboard cursor visible', ()
   assert.ok(page.includes('function refreshOutcome('), 'noone gathers what a load ended with');
   assert.equal(
     page.split('announce(refreshOutcome(response));').length - 1,
-    3,
+    2,
     'a load is announced by only some of the buttons that can start one',
   );
   assert.ok(
