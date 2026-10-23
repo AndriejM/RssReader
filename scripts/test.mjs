@@ -3453,10 +3453,10 @@ test('the mark of a first feed is absent until it is written', async () => {
 
 /**
  * The reader is used by an ear and by a keyboard, not only by an eye: the outcome of a load is said
- * from a line no eye sees, the two lists name themselves and the row among them that is chosen, the row
- * a keyboard opens takes the focus and is drawn with a cursor, and the spinning glyph is a decoration a
- * reader who asks for no motion never gets. Markup, script, stylesheet and the seven dictionaries are
- * kept in step here.
+ * from a line no eye sees, the two lists name themselves and the row among them that is chosen, the
+ * middle column keeps its keyboard cursor on one node instead of on every row it shows, and the
+ * spinning glyph is a decoration a reader who asks for no motion never gets. Markup, script,
+ * stylesheet and the seven dictionaries are kept in step here.
  */
 test('the reader announces its outcomes and keeps a keyboard cursor visible', () => {
   const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -3502,14 +3502,38 @@ test('the reader announces its outcomes and keeps a keyboard cursor visible', ()
 
   /* The two lists name themselves and say which of their rows the selection has. */
   assert.ok(html.includes('id="feed-list" role="list"'), 'the left column declares no list');
+
+  const listbox = (html.match(/<ul[^>]*id="headline-list"[^>]*>/) ?? [''])[0];
   assert.ok(
-    html.includes('id="headline-list" role="listbox"'),
+    listbox.includes('role="listbox"'),
     'the middle column declares a list of rows instead of a list of choices',
   );
+  assert.ok(
+    listbox.includes('tabindex="0"'),
+    'the middle column is no stop of Tab, so a keyboard never reaches its list at all',
+  );
+  assert.equal(
+    (html.match(/tabindex=/g) ?? []).length,
+    1,
+    'the reader spreads its Tab over the rows of a column instead of one cursor',
+  );
+
   assert.ok(page.includes("li.setAttribute('role', 'option')"), 'a headline row is no option of that listbox');
   assert.ok(
     page.includes("li.setAttribute('aria-selected'"),
     'the open headline is not named among the options it belongs to',
+  );
+  const headlines = page.slice(
+    page.indexOf('function renderHeadlines'),
+    page.indexOf('function setActiveDescendant'),
+  );
+  assert.ok(
+    !headlines.includes("createElement('button')"),
+    'a button inside an option makes the same list a pile of tab stops',
+  );
+  assert.ok(
+    page.includes("els.headlineList.setAttribute('aria-activedescendant'"),
+    'the middle column never names the row its keyboard cursor stands on',
   );
   assert.equal(
     page.split("setAttribute('aria-current', 'true')").length - 1,
@@ -3527,12 +3551,16 @@ test('the reader announces its outcomes and keeps a keyboard cursor visible', ()
     'the arrows leave the focus where it already stood',
   );
   assert.ok(
-    page.includes("els.headlineList.querySelector('.list-item.selected > button')?.focus()"),
-    'the row the keyboard opens never takes the focus',
+    page.includes('els.headlineList.focus()'),
+    'the column whose cursor the keyboard moves never takes the focus that cursor stands in',
   );
   assert.ok(
     css.includes('.list-item > button:focus-visible'),
     'a row reached with the keyboard is drawn exactly like a row reached with the mouse',
+  );
+  assert.ok(
+    css.includes('#headline-list:focus-visible .list-item.selected'),
+    'the row the middle column points at keeps no cursor an eye can find',
   );
   assert.ok(
     css.includes('.list-item.selected > button:focus-visible'),

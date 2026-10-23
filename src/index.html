@@ -184,10 +184,18 @@
       <p class="panel-status muted" id="feed-status" hidden></p>
       <div class="panel-scroll">
         <!--
-          Средняя колонка — `listbox`: её строки — `option` (их ставит `index.js`), а открытая новость
-          — `aria-selected`. Так экран называет список списком выбираемых строк, а не россыпью кнопок.
+          Средняя колонка — `listbox`: её строки — `option` (их ставит `index.js`), открытая новость —
+          `aria-selected`, а клавиатурный курсор — `aria-activedescendant` той же строки. Курсор стоит
+          на самом списке: одна строка `tabindex` на всю колонку, поэтому пять тысяч заголовков не
+          разбивают Tab на пять тысяч кнопок, а строка `option` не держит внутри себя действия.
         -->
-        <ul class="list" id="headline-list" role="listbox" data-i18n-aria="reader.headlines.list.aria"></ul>
+        <ul
+          class="list"
+          id="headline-list"
+          role="listbox"
+          tabindex="0"
+          data-i18n-aria="reader.headlines.list.aria"
+        ></ul>
         <p class="empty" id="headlines-empty" hidden data-i18n="reader.headlines.emptyNoFeed"></p>
         <!--
           Первое открытие читалки: средней колонке нечего показывать, пока в хранилище нет ни одной

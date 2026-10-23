@@ -303,8 +303,8 @@ glyph working.
 
 The arrows work from inside the search field too: they leave the words typed and move the cursor
 through the headlines the field filters. Every move brings the row it landed on back into view, and the
-row the keyboard opens also takes the focus, so its name is read out and the next arrow continues from
-it.
+column itself takes the focus for the whole list, so the row the cursor stands on is read out and the
+next arrow continues from it.
 
 The mark `m` puts on is the very mark a delete leaves, only without the delete: the headline stays on
 the shelf, its row takes the check glyph and goes quiet, and a note above its text says that no feed
@@ -337,9 +337,13 @@ without tearing the article out of the DOM, and the failure of a load that found
 stands in red in the line under the head of the middle column — added to what the hidden line
 announces — instead of replacing what the reader was showing. The middle column is a `listbox` whose
 rows are `option`s, the open headline among them is `aria-selected`; the chosen row of the left
-column carries `aria-current`. A keyboard cursor is drawn around the whole row (`:focus-visible`, in a
-colour that reads against a filled row), and `prefers-reduced-motion: reduce` drops the spinning
-refresh glyph and the fade of a border handle.
+column carries `aria-current`. That listbox holds its own keyboard cursor (`tabindex="0"` and
+`aria-activedescendant` naming the open row), and its rows hold no control inside them: Tab crosses a
+column of five thousand headlines once, and an option stays one choice instead of a button inside a
+choice. A keyboard cursor is drawn around the whole row (the outline of the open row while the column
+holds the focus, `:focus-visible` on the button of a feed row, in a colour that reads against a filled
+row), and `prefers-reduced-motion: reduce` drops the spinning refresh glyph and the fade of a border
+handle.
 
 ## Global settings screen (`src/settings.html`)
 
@@ -1106,8 +1110,10 @@ rules are covered by the tests.
     view; `Enter` opens the original of the open headline in a new tab; `f` pulls the full text of
     that headline from its page, over the stored description; `d` deletes it and opens the
     next visible one; `r` re-reads the selected feed. None of these keys fires while the cursor stands
-    in the search field, except the arrows. Every row the keyboard opens takes the focus, and a screen
-    reader reads its name; the outcome of `r` is said out loud from the hidden status line («5 new
+    in the search field, except the arrows. The middle column holds the keyboard cursor for its whole
+    list (`tabindex="0"` with `aria-activedescendant` on the open row), so Tab crosses it once rather
+    than stopping on every headline, and a screen reader reads the name of the row the cursor stands
+    on; the outcome of `r` is said out loud from the hidden status line («5 new
     headlines», «3 feeds could not be refreshed»). Switch the keyboard to a Cyrillic layout and press
     the same places: `j`, `k`, `r`, `m`, `d`, `u` answer there too, as does the key standing under `/`,
     and the key printing `а` there answers to `f`.

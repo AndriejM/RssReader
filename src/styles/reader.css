@@ -245,10 +245,15 @@
   margin-bottom: 4px;
 }
 
-.list-item > button {
+/* Строка левой колонки — кнопка, строка средней — `option` без действия внутри (см. `index.js`):
+   обе выглядят одинаково, поэтому их рисуют одни и те же правила. Курсор `pointer` средней колонке
+   нужен явно: блок сам по себе не говорит, что по нему кликают. */
+.list-item > button,
+.list-item > .item-row {
   align-items: center;
   background: transparent;
   border: none;
+  cursor: pointer;
   display: flex;
   gap: 8px;
   padding: 8px 10px;
@@ -271,9 +276,9 @@
 
 /*
   Клавиатурный курсор строки списка: рамка стоит вокруг всей строки, а не вокруг её текстовой части,
-  и она рисуется внутри строки — широкая кнопка на всю колонку не толкает соседние строки. Мышиный
-  клик рамки не получает: отвечает только `:focus-visible`, то есть ход по списку с клавиатуры.
-  Выбранная строка залита акцентом, поэтому там рамка берёт цвет своего текста, а не тот же акцент.
+  и она рисуется внутри строки — широкая строка на всю колонку не толкает соседние. Мышиный клик
+  рамки не получает: отвечает только `:focus-visible`, то есть ход по списку с клавиатуры.
+  Левой колонке рамка нужна на самой строке: фокус держит её кнопка.
 */
 .list-item > button:focus-visible {
   outline: 2px solid var(--accent);
@@ -282,6 +287,27 @@
 
 .list-item.selected > button:focus-visible {
   outline-color: var(--text-on-selected);
+}
+
+/*
+  Курсор клавиатуры средней колонки держит сам список (см. `tabindex` и `aria-activedescendant` в
+  `index.html`): обвести колонку из нескольких тысяч заголовков — значит не сказать, где курсор.
+  Поэтому рамка берётся от строки, на которую список указывает, а сама колонка рамки не получает.
+  Строка открытой новости залита акцентом, поэтому рамка берёт цвет её текста, а не тот же акцент.
+*/
+#headline-list:focus-visible {
+  outline: none;
+}
+
+#headline-list:focus-visible .list-item.selected {
+  outline: 2px solid var(--text-on-selected);
+  outline-offset: -2px;
+}
+
+/* Список, у которого нет открытой строки, не должен оставаться без ответа на то, что фокус в нём. */
+#headline-list:not(:has(.list-item.selected)):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /*
@@ -395,7 +421,8 @@
   width: 14px;
 }
 
-.list-item.read:not(.selected) > button .item-title {
+.list-item.read:not(.selected) > button .item-title,
+.list-item.read:not(.selected) > .item-row .item-title {
   color: var(--text-muted);
 }
 

@@ -465,24 +465,34 @@ function renderHeadlines() {
   // The line under this head speaks about the same selection as these two buttons.
   renderFeedStatus();
 
+  let rowNumber = 0;
   for (const item of items) {
     const li = document.createElement('li');
     // `data-uid` даёт строке имя, по которому `openItem()` находит её и переносит выделение, не
     // перестраивая весь список (см. `selectHeadline`).
     li.dataset.uid = item.uid;
-    // Средняя колонка — `listbox` (см. `index.html`), поэтому её строка — `option`, а открытая
-    // новость — та, что `aria-selected`; без этого экран назвал бы список списком кнопок.
+    /* Средняя колонка — `listbox` (см. `index.html`), поэтому её строка — `option`, а открытая
+     * новость — та, что `aria-selected`; без этого экран назвал бы список списком кнопок. Строке
+     * нужен и `id`: по нему список называет строку, на которой стоит клавиатурный курсор (см.
+     * `setActiveDescendant`). Имя берёт место строки в списке: оно заведомо не повторяется, тогда
+     * как `uid` построен на идентификаторе ленты и мог бы дать имя с символами, которых `id` не
+     * выносит (см. `lib/util.js` -> `normalizeUid`). */
+    li.id = `hl-${(rowNumber += 1)}`;
     li.setAttribute('role', 'option');
     const selected = item.uid === state.uid;
     const read = state.read.has(item.uid);
     li.setAttribute('aria-selected', selected ? 'true' : 'false');
     li.className = `list-item${selected ? ' selected' : ''}${read ? ' read' : ''}`;
 
-    const button = document.createElement('button');
-    button.type = 'button';
+    /* Строка `option` не держит внутри себя действия: кнопка в ней была бы вторым фокусом внутри
+     * одного выбора и ломала бы сам список для экрана. Поэтому строка — обычный блок, а клик
+     * берёт строку целиком; курсор клавиатуры при этом стоит на самом списке (см. `index.html`). */
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    li.addEventListener('click', () => openItem(item));
     // Only «Все ленты» needs a feed to stand beside the headline, so only there does the headline
     // carry its feed's icon; a single feed's list names that feed in the panel title instead.
-    if (all) button.append(feedIconImg(item.feedId));
+    if (all) row.append(feedIconImg(item.feedId));
 
     const body = document.createElement('span');
     body.className = 'item-body';
@@ -506,13 +516,31 @@ function renderHeadlines() {
       .filter(Boolean)
       .join(' · ');
     body.append(title, meta);
-    button.append(body);
-    button.title = item.link;
+    row.append(body);
+    row.title = item.link;
 
-    button.addEventListener('click', () => openItem(item));
-    li.append(button);
+    li.append(row);
     els.headlineList.append(li);
   }
+
+  setActiveDescendant();
+  /* Списку, которому нечего показать курсору, нечего быть и узлом Tab: остановка Tab, которая ничего
+   * не называет, только держит читателя на месте там, где колонка пуста. */
+  if (items.length > 0) els.headlineList.tabIndex = 0;
+  else els.headlineList.removeAttribute('tabindex');
+}
+
+/**
+ * Курсор клавиатуры средней колонки: он стоит на самом списке — одном узле Tab на всю колонку, —
+ * а `aria-activedescendant` называет строку, на которой этот курсор стоит. Без неё экран знал бы,
+ * какая строка выбрана, но не знал бы, куда ведут следующую стрелку и что читать вслух.
+ */
+function setActiveDescendant() {
+  const active = state.uid
+    ? els.headlineList.querySelector(`.list-item[data-uid="${CSS.escape(state.uid)}"]`)
+    : null;
+  if (active) els.headlineList.setAttribute('aria-activedescendant', active.id);
+  else els.headlineList.removeAttribute('aria-activedescendant');
 }
 
 /**
@@ -556,6 +584,7 @@ function showPlaceholder(message, { alert = false } = {}) {
   p.setAttribute('role', alert ? 'alert' : 'status');
   p.classList.toggle('error', alert);
   p.textContent = message;
+  setActiveDescendant();
 }
 
 /**
@@ -644,8 +673,9 @@ function titleHeading(text, link) {
 
 /**
  * Requirement: clicking a title shows the stored `<description>` in the right panel.
- * `followFocus` is set only where the keyboard moves the cursor: the row of the middle column takes
- * the focus, so its name is read out and the next arrow continues from the row that is now open.
+ * `followFocus` is set only where the keyboard moves the cursor: the middle column takes the focus,
+ * and `aria-activedescendant` names the row the cursor now stands on, so its name is read out and
+ * the next arrow continues from the row that is now open.
  */
 function openItem(item, { followFocus = false } = {}) {
   state.uid = item.uid;
@@ -653,9 +683,13 @@ function openItem(item, { followFocus = false } = {}) {
   /* Перемещение курсора (`j`/`k`) не меняет, какие заголовки показывает колонка, поэтому новую
    * строку выделяем на месте, а не перестраиваем всю среднюю колонку: полный `renderHeadlines()` —
    * это несколько тысяч `<li>` и столько же замыканий на каждое нажатие клавиши. Если же строки на
-   * экране нет (набор видимых изменился), колонку приходится перестроить целиком. */
-  if (!selectHeadline(item.uid)) renderHeadlines();
-  if (followFocus) els.headlineList.querySelector('.list-item.selected > button')?.focus();
+   * экране нет (набор видимых изменился), колонку приходится перестроить целиком — она и сама
+   * называет строку активного курсора.
+   * `focus()` средней колонке, а не её строке: курсор держит список, строка — только то, на что он
+   * направлен (см. `setActiveDescendant`). */
+  if (selectHeadline(item.uid)) setActiveDescendant();
+  else renderHeadlines();
+  if (followFocus) els.headlineList.focus();
 
   renderArticle(item);
 }
@@ -1174,6 +1208,13 @@ const onSearchInput = debounce(() => {
   applyQuerySelection();
 }, 180);
 els.headlineSearch.addEventListener('input', onSearchInput);
+
+/* Курсор клавиатуры средней колонки держит сама колонка, а не её строки: когда фокус переходит на
+ * неё, строка, на которой этот курсор стоит, возвращается в поле зрения. Иначе её рамка осталась бы
+ * за краем панели, а вместе с ней и ответ на вопрос, где читатель сейчас стоит. */
+els.headlineList.addEventListener('focus', () => {
+  els.headlineList.querySelector('.list-item[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+});
 
 /*
  * «4 мин назад» должно оставаться правдой, пока читалка стоит открытой, — иначе строка говорит о
