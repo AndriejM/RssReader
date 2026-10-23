@@ -17,8 +17,10 @@ import * as favicon from '../src/lib/favicon.js';
 import * as i18n from '../src/lib/i18n.js';
 import { readerKeys } from '../src/lib/keys.js';
 import { SCREENS } from '../src/lib/nav.js';
+import * as notify from '../src/lib/notify.js';
 import * as rss from '../src/lib/rss.js';
 import * as store from '../src/lib/storage.js';
+import { READER_PAGE } from '../src/lib/tabs.js';
 import * as util from '../src/lib/util.js';
 
 const {
@@ -38,6 +40,7 @@ const {
   MAX_SOUND_VOLUME,
   MIN_READ_TTL_DAYS,
   MIN_SOUND_VOLUME,
+  NOTIFY_MAX_ACTIVE,
   PREVIEW_IMAGE_HEIGHT,
   PREVIEW_IMAGE_WIDTH,
   READ_TTL_DAYS,
@@ -4590,6 +4593,188 @@ test('the load signal sounds only on an automatic read that brought headlines', 
     /const \{ added, skipped \} = await store\.addItems\(candidates\)/,
     'the numbers are those of the headlines the shelf took, not of the ones its own feed shipped',
   );
+});
+
+/* ------------------------- the popup that brings the reader ------------------------- */
+
+/**
+ * A system popup is worth its noise only when clicking it lands somewhere and when a batch of feeds
+ * cannot bury the user in popups. The popup center, the tabs and the click Chrome hands back are all
+ * stood in for here; the ids, the ceiling and the answer to a click are ours to get right.
+ */
+test('a popup a user clicks opens the reader, and a batch keeps only its newest popups', async () => {
+  const opened = [];
+  const created = [];
+  const popups = new Map();
+  const clicks = [];
+  const closures = [];
+
+  globalThis.chrome = {
+    runtime: { getURL: (path) => `chrome-extension://test/${path}` },
+    storage: { local: { async get() { return { settings: { show_message: true, language: 'en' } }; } } },
+    notifications: {
+      async create(id, options) {
+        created.push(id);
+        popups.set(id, options);
+        return id;
+      },
+      async clear(id) {
+        popups.delete(id);
+        return true;
+      },
+      async getAll() {
+        return Object.fromEntries(popups);
+      },
+      onClicked: { addListener: (fn) => clicks.push(fn) },
+      onClosed: { addListener: (fn) => closures.push(fn) },
+    },
+    tabs: {
+      async query() {
+        return [];
+      },
+      async create(options) {
+        opened.push(options.url);
+        return { id: 7 };
+      },
+      async update(id, patch) {
+        return { id, ...patch };
+      },
+    },
+    windows: { async update(id) { return { id }; } },
+  };
+
+  /* The popup TTL is a real wait; a test of the ceiling has no reason to sit through it. */
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = () => 0;
+  const settle = () => new Promise((resolve) => realSetTimeout(resolve, 0));
+
+  try {
+    notify.wireNotificationClicks();
+    assert.equal(clicks.length, 1, 'the click on a popup is listened to exactly once');
+    assert.equal(closures.length, 1, 'a popup that disappeared on its own is forgotten');
+
+    const ids = [];
+    for (let headlines = 1; headlines <= 6; headlines += 1) {
+      assert.equal(await notify.notifyIngest(headlines), true, 'a load that brought headlines shows its popup');
+    }
+    ids.push(...created);
+
+    assert.equal(
+      ids.length,
+      6,
+      'six loads each show their own popup',
+    );
+
+    assert.equal(
+      new Set(ids).size,
+      6,
+      'six feeds bring six distinct popups, not one popup rewritten six times by an id made of the same millisecond',
+    );
+    assert.equal(
+      popups.size,
+      NOTIFY_MAX_ACTIVE,
+      `six loads leave ${NOTIFY_MAX_ACTIVE} popups on the screen, not six`,
+    );
+    assert.ok(
+      !popups.has(ids[0]) && !popups.has(ids[1]) && !popups.has(ids[2]),
+      'the oldest popups are the ones that went away',
+    );
+
+    const newest = ids[5];
+    assert.ok(popups.has(newest), 'the newest popup is the one that stayed');
+    assert.match(newest, /^rss-reader:ingest:\d+:\d+$/, 'a popup id names what it is and when it was made');
+
+    /* The answer to a click: its own popup goes, the reader comes. */
+    await notify.answerNotificationClick(newest);
+    assert.deepEqual(
+      opened,
+      [`chrome-extension://test/${READER_PAGE}`],
+      'the click opens the reader the extension itself ships',
+    );
+    assert.ok(!popups.has(newest), 'the popup you clicked is taken off the screen');
+
+    /* The listener the worker raised hands the click to that same answer, and Chrome does not wait
+     * for it — so its work is followed from the outside, not by awaiting the listener. */
+    await clicks[0](ids[4]);
+    await settle();
+    assert.equal(opened.length, 2, 'the raised listener answers its click the same way');
+    assert.ok(!popups.has(ids[4]), 'the popup the listener was clicked on is taken off the screen');
+
+    notify.wireNotificationClicks();
+    assert.equal(clicks.length, 1, 'the same worker does not answer one click twice');
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    delete globalThis.chrome;
+  }
+});
+
+/**
+ * The ceiling is kept by us, but the popups of a worker that died and came back are Chrome's. Pruning
+ * them on startup is what keeps a closed popup from leaving its three predecessors on the screen.
+ */
+test('popups left over from an earlier worker drop the oldest until only the newest ceiling remains', async () => {
+  const cleared = [];
+  globalThis.chrome = {
+    notifications: {
+      async clear(id) {
+        cleared.push(id);
+        return true;
+      },
+    },
+  };
+
+  try {
+    const base = 1_700_000_000_000;
+    const stale = [];
+    for (let n = 0; n < NOTIFY_MAX_ACTIVE + 2; n += 1) {
+      stale.push(notify.notificationId(base + n * 1000, n));
+    }
+
+    /* Chrome reports the live popups in an order of its own; the time sits in the id we made. */
+    const overCapacity = NOTIFY_MAX_ACTIVE + 2 - NOTIFY_MAX_ACTIVE;
+    assert.deepEqual(
+      await notify.pruneLiveNotifications([...stale].reverse()),
+      stale.slice(0, overCapacity),
+      'the oldest popups are cleared, whatever order Chrome listed them in',
+    );
+    assert.deepEqual(cleared, stale.slice(0, overCapacity), 'the clears are those of the cleared popups');
+
+    const kept = stale.slice(overCapacity);
+    assert.deepEqual(await notify.pruneLiveNotifications(kept), [], 'a queue already at the ceiling keeps what it holds');
+    assert.deepEqual(await notify.pruneLiveNotifications(kept), [], 'pruning the same queue again clears nothing more');
+
+    assert.deepEqual(
+      await notify.pruneLiveNotifications(['another-extension:ping']),
+      [],
+      'the popups of another extension are not ours to close',
+    );
+    assert.equal(cleared.length, overCapacity, 'nothing but our own oldest popups was ever cleared');
+
+    assert.deepEqual(
+      await notify.pruneLiveNotifications([]),
+      [],
+      'a reader that saw no popups forgets popups it never had',
+    );
+  } finally {
+    delete globalThis.chrome;
+  }
+});
+
+/**
+ * Both halves of the popup answer need the worker to actually wire them at startup: a listener defined
+ * in the library but never raised there is a popup that still leads nowhere.
+ */
+test('the worker wires the popup click at startup', () => {
+  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+  const page = fs.readFileSync(new URL('../src/lib/notify.js', import.meta.url), 'utf8');
+
+  assert.ok(
+    /(^|\r?\n)wireNotificationClicks\(\);/.test(worker),
+    'the worker never raises the listener that answers a click',
+  );
+  assert.match(worker, /import \{[^}]*notifyIngest[^}]*wireNotificationClicks[^}]*\} from '\.\/lib\/notify\.js';/);
+  assert.match(page, /onClicked\.addListener/);
+  assert.match(page, /onClosed\.addListener/);
 });
 
 /* ---------------------------- carrying feeds between profiles ---------------------------- */

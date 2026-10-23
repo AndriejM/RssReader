@@ -379,6 +379,14 @@ flag — to decide whether the alert plays at all after that same load; `sound_f
 `sound_volume` — which file plays then, at which volume; `show_message` — to decide whether
 that same load also shows a popup with the number of new headlines.
 
+A popup of a load answers to a click: `wireNotificationClicks` in `src/lib/notify.js`, raised by the
+worker where it raises its other listeners, closes that popup and brings the reader screen — the same
+tab the toolbar icon raises (`tabs.focusOrCreateTab`), so a reader that is already open is brought
+forward instead of opened a second time. Chrome keeps as many such popups as it is allowed to, so what
+stays on the screen is the newest `NOTIFY_MAX_ACTIVE`: an older one is cleared as a newer load reports
+itself, and the popups that outlived the worker's memory are counted by `chrome.notifications.getAll()`
+at its next startup, because the time of each is written in its own id.
+
 The interface language is taken by the pages: `settings.language`, and if there is no stored
 value (first launch) — the browser language (`navigator.language` and `navigator.languages`),
 and only if it is not supported by the extension — `English`. A saved language takes effect
@@ -700,6 +708,7 @@ background.
 | `MAX_READ_RECORDS` | 1000 | `util.js` — how many such marks are stored: the ones whose term has run out are evicted first, and only when the live ones no longer fit do the oldest live marks go |
 | `MAX_PREVIEW_CHARS` | 8000 | `util.js` — how much of a feed `<description>` a stored headline keeps |
 | `PREVIEW_IMAGE_WIDTH` / `PREVIEW_IMAGE_HEIGHT` | 180 / 240 | `util.js` — the box given to every `<img>` a feed ships inside `<description>`, and the largest one `.preview img` lets it ask for |
+| `NOTIFY_TTL_SECONDS` / `NOTIFY_MAX_ACTIVE` | 8 s / 3 | `util.js` — how long a load popup holds itself open before clearing, and how many such popups the reader keeps on the screen at once |
 | `MAX_PARAGRAPHS` / `MAX_CHARACTERS` | 60 / 16000 | `extract.js` — the limit of article text in the right panel |
 | `MIN_PARAGRAPH_LENGTH` | 40 | `extract.js` — short lines (menus, captions) are not counted as article text |
 | `ALARM_PREFIX` / `CLEANUP_ALARM_NAME` | `feed:<id>` / `rss-reader:cleanup` | `util.js` |
@@ -870,8 +879,10 @@ background.
   `notifications`) naming how many headlines came in. Its language is the interface language:
   `store.getLanguage()` puts the stored language into `i18n.t()`'s cache on its way out, and a
   worker with no localStorage access falls back to the browser language. The popup names itself
-  with a unique id and clears itself after a few seconds; a manual read (`r` or “Load now”) shows no
-  popup, exactly as it plays no sound.
+  with a unique id carrying the time it appeared, and clears itself after a few seconds; only the
+  newest `NOTIFY_MAX_ACTIVE` such popups stay on the screen at once, and a click on one closes it and
+  brings the reader screen. A manual read (`r` or “Load now”) shows no popup, exactly as it plays no
+  sound.
 - **XML parsing happens in the offscreen document, not in the background**: an MV3 service worker
   has no DOM, so `DOMParser` is absent there (`rss.js` is called from `src/offscreen.js`; the
   document has the `DOM_PARSER` permission). The background asks the document to read the feed
@@ -1023,13 +1034,15 @@ background.
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
                              # storage.js and rss.js), the guards over the screen markup and over what
-                             one module borrows from another: 145 tests
+                             one module borrows from another, and the popup an automatic load shows:
+                             148 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
 
-The tests do not cover `chrome.*` code (alarms, action, offscreen, messages) or XML parsing —
-that is checked in the browser after loading the extension. JSON Feed parsing needs no DOM, so its
+The tests do not cover `chrome.*` code (alarms, action, offscreen, messages) or XML parsing — the one
+exception is the answer to a popup click, tested against a stood-in popup center and tab strip — the
+rest is checked in the browser after loading the extension. JSON Feed parsing needs no DOM, so its
 rules are covered by the tests.
 
 ### What to check in the browser

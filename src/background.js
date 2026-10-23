@@ -3,7 +3,7 @@
 
 import { alarmDueAt, feedIdFromAlarm, syncAlarms } from './lib/alarms.js';
 import { MSG_COUNT, MSG_FETCH_FEED, MSG_FEEDS_CHANGED, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from './lib/messages.js';
-import { notifyIngest } from './lib/notify.js';
+import { notifyIngest, wireNotificationClicks } from './lib/notify.js';
 import { requestOffscreen } from './lib/offscreen.js';
 import { FeedError } from './lib/rss.js';
 import { playSound } from './lib/sound.js';
@@ -28,6 +28,11 @@ void bootstrap('wake');
 chrome.action.onClicked.addListener((clickedTab) => {
   void focusOrCreateTab(READER_PAGE, clickedTab?.windowId);
 });
+
+/* Клик по сообщению о загрузке ведёт туда же, куда и иконка в тулбаре: popup называет,
+ * сколько заголовков пришло, а сами они живут только в читалке. Слушатели ставятся здесь же,
+ * где и остальные: worker'у нужно, чтобы они стояли до того, как Chrome позовёт его по событию. */
+wireNotificationClicks();
 
 // Pages write feeds/items directly, so the worker watches the storage to keep the alarms and
 // the badge count in step with whatever the reader or the settings screen just changed.

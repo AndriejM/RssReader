@@ -123,6 +123,13 @@ export const MAX_SOUND_VOLUME = 100;
 export const NOTIFY_TTL_SECONDS = 8;
 
 /**
+ * How many load messages the extension keeps on screen at once. One automatic read reports on its
+ * own, so a reader of forty feeds whose alarms land in the same minute gets a message per feed, and
+ * Chrome puts no limit of its own on that stack: the oldest of them are cleared first.
+ */
+export const NOTIFY_MAX_ACTIVE = 3;
+
+/**
  * Normalize a boolean setting: only a real `true`/`false` is kept, anything else takes the
  * fallback, so an absent key never turns a flag on by accident.
  */
