@@ -699,7 +699,7 @@ background.
 | `MIN_READ_TTL_DAYS` / `MAX_READ_TTL_DAYS` | 1 / 3650 | `util.js` — bounds of this field (`util.toDays`) |
 | `MAX_READ_RECORDS` | 1000 | `util.js` — how many such marks are stored: the ones whose term has run out are evicted first, and only when the live ones no longer fit do the oldest live marks go |
 | `MAX_PREVIEW_CHARS` | 8000 | `util.js` — how much of a feed `<description>` a stored headline keeps |
-| `PREVIEW_IMAGE_WIDTH` / `PREVIEW_IMAGE_HEIGHT` | 180 / 240 | `util.js` — the box given to every `<img>` a feed ships inside `<description>` |
+| `PREVIEW_IMAGE_WIDTH` / `PREVIEW_IMAGE_HEIGHT` | 180 / 240 | `util.js` — the box given to every `<img>` a feed ships inside `<description>`, and the largest one `.preview img` lets it ask for |
 | `MAX_PARAGRAPHS` / `MAX_CHARACTERS` | 60 / 16000 | `extract.js` — the limit of article text in the right panel |
 | `MIN_PARAGRAPH_LENGTH` | 40 | `extract.js` — short lines (menus, captions) are not counted as article text |
 | `ALARM_PREFIX` / `CLEANUP_ALARM_NAME` | `feed:<id>` / `rss-reader:cleanup` | `util.js` |
@@ -789,6 +789,19 @@ background.
   markup the cut landed in: a tag cut in the middle leaves its attributes loose in the text as
   characters no renderer was meant to read, and a character reference cut in the middle prints as the
   letters it was written to escape.
+- **A preview picture is asked for from the reader's own page** (`src/index.html`,
+  `src/styles/reader.css`): the pictures of a stored `<description>` and the favicon of a feed are the
+  only requests this extension makes from a page instead of from the worker, so the reader page
+  declares `no-referrer` — the site of the picture is not told which extension shows it, and a site
+  that guards its images against other people's pages answers a request that names the extension with
+  a blocked picture rather than with the picture. The box `util.normalizePreviewImages` writes on a
+  stored `<img>` is a limit, not a size: `extract.previewImageSize` refuses a bigger one (a headline
+  an older build stored kept the sizes its feed declared), and `.preview img` takes the width and the
+  height of the attributes as maxima, so a wide photo keeps its proportions instead of being squashed
+  into a tall frame and no picture runs past the panel it stands in. The tags a preview is rebuilt
+  from get rules of their own under `.preview`: a list its indent, a quotation its line, the text of a
+  preview the same width the paragraphs of the reader itself hold to. A picture below the panel is not
+  asked for before the reader scrolls near it (`loading="lazy"` on the rebuilt `<img>`).
 - **An answer that is XML but not a feed is refused rather than read as an empty feed**: the root
   decides what the document is — `<rss>`, `<feed>` and `<rdf:RDF>` (whose local name is uppercase)
   are feeds even when they ship no headlines right now, while a well-formed error page in XHTML, a
@@ -1010,7 +1023,7 @@ background.
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
                              # storage.js and rss.js), the guards over the screen markup and over what
-                             one module borrows from another: 143 tests
+                             one module borrows from another: 145 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```

@@ -2,6 +2,14 @@
 <html lang="ru" data-theme="dark">
 <head>
   <meta charset="utf-8" />
+  <!--
+    The reader page is the one page of this extension that asks a stranger's server for a picture: a
+    headline's preview image from the feed (`extract.sanitizePreview` keeps its `src`) and a feed's
+    favicon. Without this line the request carries the address of the extension page as its `Referer`,
+    so the site learns which extension shows its picture — and a site that guards its images against
+    other people's pages answers such a request with a blocked picture instead of the picture.
+  -->
+  <meta name="referrer" content="no-referrer" />
   <title data-i18n="app.name"></title>
   <script src="theme-boot.js"></script>
   <script type="module" src="lib/i18n-boot.js"></script>

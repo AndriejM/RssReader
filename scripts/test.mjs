@@ -12,6 +12,7 @@ import fs from 'node:fs';
 
 import * as alarmsLib from '../src/lib/alarms.js';
 import * as encoding from '../src/lib/encoding.js';
+import { PREVIEW_ALLOWED_TAGS, previewImageSize } from '../src/lib/extract.js';
 import * as favicon from '../src/lib/favicon.js';
 import * as i18n from '../src/lib/i18n.js';
 import { readerKeys } from '../src/lib/keys.js';
@@ -37,6 +38,8 @@ const {
   MAX_SOUND_VOLUME,
   MIN_READ_TTL_DAYS,
   MIN_SOUND_VOLUME,
+  PREVIEW_IMAGE_HEIGHT,
+  PREVIEW_IMAGE_WIDTH,
   READ_TTL_DAYS,
   SOURCE_ID_CUT,
   alarmPeriodMinutes,
@@ -633,6 +636,68 @@ test('makeItem keeps the text of a headline whose description carries a data: pi
   assert.ok(item.description.startsWith('<p>Новости</p>'));
   assert.ok(item.description.endsWith(' […]'));
   assert.ok(item.description.length <= MAX_PREVIEW_CHARS + 6);
+});
+
+test('previewImageSize never lets a stored picture ask for more than the box of the reader', () => {
+  // A headline an older build stored with the sizes its feed declared.
+  assert.equal(previewImageSize('640', PREVIEW_IMAGE_WIDTH), PREVIEW_IMAGE_WIDTH);
+  assert.equal(previewImageSize(480, PREVIEW_IMAGE_HEIGHT), PREVIEW_IMAGE_HEIGHT);
+  // A picture the storage box already fits is kept as it is; a part of a pixel is a whole pixel.
+  assert.equal(previewImageSize(120, PREVIEW_IMAGE_WIDTH), 120);
+  assert.equal(previewImageSize('119.6', PREVIEW_IMAGE_WIDTH), 120);
+  // Not a size at all: no attribute rather than a box of zero or a negative one.
+  assert.equal(previewImageSize('0', PREVIEW_IMAGE_WIDTH), null);
+  assert.equal(previewImageSize(-40, PREVIEW_IMAGE_HEIGHT), null);
+  assert.equal(previewImageSize('abc', PREVIEW_IMAGE_WIDTH), null);
+  assert.equal(previewImageSize('', PREVIEW_IMAGE_HEIGHT), null);
+  assert.equal(previewImageSize(undefined, PREVIEW_IMAGE_WIDTH), null);
+});
+
+/**
+ * A preview picture is a request to the site that owns it, made by the reader page itself, and what
+ * that request looks like is decided in three files at once: the box `util.js` writes into storage,
+ * the rules `reader.css` gives the rebuilt preview, and what `src/index.html` declares to the site it
+ * asks. Nothing repeats the other, so the limits are held here: a stylesheet that drifts from the box
+ * draws a picture bigger than storage meant, and a page that names no referrer policy sends the
+ * address of the extension to every site whose picture the reader shows.
+ */
+test('a preview picture is drawn in the box of the reader and names no reader to the site that owns it', () => {
+  const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../src/styles/reader.css', import.meta.url), 'utf8');
+
+  assert.match(
+    html,
+    /<meta name="referrer" content="no-referrer"\s*\/>/,
+    "src/index.html loads a third party's picture but tells no referrer policy to the page that asks for it",
+  );
+
+  /* The subset `extract.sanitizePreview` rebuilds is a small document of its own: a tag of it that no
+   * rule of `reader.css` takes is drawn the way the feed's own stylesheet would have drawn it — a list
+   * without its indent, a quotation without its line, a picture without its box. */
+  for (const tag of ['p', 'ul', 'ol', 'li', 'a', 'blockquote', 'code', 'hr', 'img']) {
+    assert.ok(PREVIEW_ALLOWED_TAGS.has(tag), `reader.css gives a preview <${tag}> a shape the sanitizer never rebuilds`);
+    assert.ok(
+      new RegExp('\\.preview ' + tag + '[\\s,{]').test(css),
+      `a stored preview can carry <${tag}>, which reader.css gives no rule of its own`,
+    );
+  }
+
+  const box = css.match(/\.preview img \{[^}]*\}/)?.[0];
+  assert.ok(box, 'reader.css gives no rule to a preview picture');
+  assert.equal(
+    Number(box.match(/max-width:\s*min\((\d+)px/)?.[1]),
+    PREVIEW_IMAGE_WIDTH,
+    'the width a preview picture may ask for is the width of the box storage writes on it',
+  );
+  assert.equal(
+    Number(box.match(/max-height:\s*(\d+)px/)?.[1]),
+    PREVIEW_IMAGE_HEIGHT,
+    'the height a preview picture may ask for is the height of that box',
+  );
+  assert.ok(
+    /\.preview img \{[^}]*\bheight:\s*auto/.test(css) && /\.preview img \{[^}]*\bwidth:\s*auto/.test(css),
+    'a preview picture keeps its own proportions instead of being squashed into the attributes',
+  );
 });
 
 test('sortItems is newest first, title breaks ties, input is untouched', () => {

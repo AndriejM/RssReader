@@ -764,6 +764,80 @@
   max-width: 74ch;
 }
 
+/*
+  A stored `<description>` is shown as the safe subset `extract.sanitizePreview` rebuilds, and that
+  subset is a small document of its own: its paragraphs, lists and quotations are the feed's markup,
+  not markup this reader was written around. Without a block of its own they inherit nothing, so the
+  text of a preview runs to the edge of a wide panel and its pictures sit wherever the feed put them.
+  The width limit is the one the reader's own paragraphs hold to (`content-body p`).
+*/
+.preview {
+  max-width: 74ch;
+}
+
+.preview p {
+  margin: 0 0 12px;
+}
+
+/*
+  A list of a feed is a list of this reader: without the indent its markers fall on top of the panel's
+  own edge, which a screen reader calls an item at the level of the text around it.
+*/
+.preview ul,
+.preview ol {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+
+.preview li {
+  margin: 0 0 4px;
+}
+
+.preview a {
+  color: var(--accent);
+}
+
+/*
+  A quotation of a feed stands out by its line rather than by the background the reader uses for its
+  own notes: a preview is the news, not a word of the reader about it.
+*/
+.preview blockquote {
+  border-left: 2px solid var(--border);
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  padding-left: 12px;
+}
+
+.preview code {
+  background: var(--bg-panel-alt);
+  border-radius: var(--radius-sm);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.92em;
+  padding: 1px 5px;
+}
+
+.preview hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+
+/*
+  The picture of a headline: `util.normalizePreviewImages` writes one box on every `<img>` a feed
+  ships, and these are the rules that make that box a limit instead of a size. `width: auto` lets the
+  picture keep the proportions it really has — the attributes alone would squash a wide photo into a
+  tall frame — while the two maxima keep it no wider than the box and no taller than it, and the
+  attributes still hold that box open while the picture is on its way. The maxima are the numbers of
+  `util.PREVIEW_IMAGE_WIDTH` / `PREVIEW_IMAGE_HEIGHT`; a test reads this file and keeps them equal.
+*/
+.preview img {
+  border-radius: var(--radius-sm);
+  height: auto;
+  max-height: 240px;
+  max-width: min(180px, 100%);
+  width: auto;
+}
+
 .note {
   border-left: 3px solid var(--accent);
   padding: 8px 12px;

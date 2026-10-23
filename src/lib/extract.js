@@ -2,7 +2,7 @@
 // Only text nodes are lifted out of the page and re-rendered by the reader page, so no
 // third-party markup, script or style ever reaches the extension's DOM.
 
-import { ARTICLE_FETCH_TIMEOUT_MS, cleanTitle } from './util.js';
+import { ARTICLE_FETCH_TIMEOUT_MS, PREVIEW_IMAGE_HEIGHT, PREVIEW_IMAGE_WIDTH, cleanTitle } from './util.js';
 
 const MAX_PARAGRAPHS = 60;
 const MAX_CHARACTERS = 16000;
@@ -18,7 +18,7 @@ const BOILERPLATE_SELECTOR = [
 const AD_PATTERN = /ad|advert|cookie|newsletter|promo|related|sidebar|share|social|comment|banner|subscribe|popup|recirc|outbrain|taboola/i;
 
 /** Safe subset for rendering stored RSS `<description>` previews. */
-const PREVIEW_ALLOWED_TAGS = new Set([
+export const PREVIEW_ALLOWED_TAGS = new Set([
   'a', 'abbr', 'b', 'blockquote', 'br', 'code', 'em', 'hr', 'i', 'img', 'li', 'ol', 'p', 'small', 'strong', 'sub', 'sup', 'u', 'ul',
 ]);
 const PREVIEW_VOID_TAGS = new Set(['br', 'hr', 'img']);
@@ -28,6 +28,18 @@ const PREVIEW_ALLOWED_ATTRS = new Map([
   // preview image, and dropping it here would throw that work away at render time.
   ['img', new Set(['src', 'alt', 'title', 'width', 'height'])],
 ]);
+
+/**
+ * The box a preview picture is allowed to ask for. `storage.makeItem` rewrites the sizes of every
+ * `<img>` on the way in, so a value in storage is normally already the reader's own box; this is the
+ * guard for what did not come through that door — a headline an older build stored with the sizes its
+ * feed declared, which could as well be the 1200 pixels of the site's header as a thumbnail.
+ */
+export function previewImageSize(value, max) {
+  const size = Math.round(Number(value));
+  if (!Number.isFinite(size) || size < 1) return null;
+  return Math.min(size, max);
+}
 
 function safeExternalUrl(value) {
   const url = String(value ?? '').trim();
@@ -280,6 +292,9 @@ export function sanitizePreview(source) {
         if (name === 'href' || name === 'src') {
           const safeUrl = safeExternalUrl(value);
           if (safeUrl) copy.setAttribute(name, safeUrl);
+        } else if (tag === 'img' && (name === 'width' || name === 'height')) {
+          const size = previewImageSize(value, name === 'width' ? PREVIEW_IMAGE_WIDTH : PREVIEW_IMAGE_HEIGHT);
+          if (size !== null) copy.setAttribute(name, String(size));
         } else {
           copy.setAttribute(name, String(value ?? ''));
         }
@@ -293,6 +308,10 @@ export function sanitizePreview(source) {
     }
 
     if (!PREVIEW_VOID_TAGS.has(tag) && copy.childNodes.length === 0) return;
+
+    // A description of a feed can carry a gallery the reader has to scroll to reach: a picture below
+    // the panel is not asked for before the reader is near it.
+    if (tag === 'img') copy.loading = 'lazy';
 
     parent.appendChild(copy);
     if (tag === 'img') visible += 1;
