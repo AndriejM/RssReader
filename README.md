@@ -882,6 +882,12 @@ background.
   global settings screen names that horizon and says that the reader keeps at most
   `MAX_READ_RECORDS` marks, so a horizon of 3650 days over a list that cannot hold it is a number
   the user sees, not a promise the storage quietly breaks.
+- **A headline older than its own `clean_timeout` never reaches the shelf**: `store.addItems` refuses a
+  candidate whose age already passed the `clean_timeout` of its feed — the same question `util.isExpired`
+  asks the cleanup sweep, asked against the same setting. Feed servers keep their old items in the feed
+  long after that moment: stored anyway, the headline was taken back by the next sweep and counted as news
+  the reader had never had on every `delay_timeout` after it, so the load signal sounded and the badge grew
+  over a list in which nothing ever appeared.
 - **The shelf is capped twice**: `MAX_ITEMS_PER_FEED` bounds the headlines of one feed, and
   `MAX_ITEMS_TOTAL` bounds the headlines of all of them together — nothing bounds the number of
   feeds a user adds, and every headline carries a preview of up to `MAX_PREVIEW_CHARS` characters.
@@ -1000,7 +1006,7 @@ background.
 ```bash
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
                              # storage.js and rss.js), the guards over the screen markup and over what
-                             # one module borrows from another: 138 tests
+                             one module borrows from another: 143 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -1014,8 +1020,8 @@ rules are covered by the tests.
 1. Add a feed → headlines appear in the reader with no waiting.
 2. Set `delay_timeout: 1` on a feed → after a minute new headlines appear, the badge grows, a
    signal plays.
-3. Set `clean_timeout: 1` → after a minute the headlines disappear from the reader and the badge
-   resets to zero.
+3. Set `clean_timeout: 1` → a headline published more than a minute ago no longer comes in at all,
+   and the headlines already stored disappear after a minute, resetting the badge to zero.
 4. More than 99 headlines → the icon shows `*`.
 5. The delete icon in the corner of the right panel → the headline vanishes from both the list
    and storage, and the reader immediately opens the next headline of the same feed. Press the

@@ -1419,7 +1419,8 @@ test('the stored headlines of all feeds together do not grow without bound', asy
 
   try {
     /* Nine feeds of 250 headlines each, every headline of the last one older than every headline
-     * of every feed before it. */
+     * of every feed before it — all of them young enough for `addItems` to keep them at all, so what
+     * throws them back out is the cap and nothing else. */
     const candidates = [];
     for (let f = 0; f < feeds; f += 1) {
       const feed = { id: `f${f}`, name: `Feed ${f}`, rss_link: `https://a.b/${f}/rss` };
@@ -1428,7 +1429,7 @@ test('the stored headlines of all feeds together do not grow without bound', asy
           feed,
           title: `news ${f}-${i}`,
           link: `https://a.b/${f}/news/${i}`,
-          pubDate: new Date(Date.now() - (f * MAX_ITEMS_PER_FEED + i) * DAY).toUTCString(),
+          pubDate: new Date(Date.now() - (f * MAX_ITEMS_PER_FEED + i) * (MINUTE / 2)).toUTCString(),
         }));
       }
     }
@@ -1446,6 +1447,43 @@ test('the stored headlines of all feeds together do not grow without bound', asy
       'the freshest headlines of the eight feeds stayed, the oldest feed of the shelf is the one with no room left',
     );
     assert.equal(await store.countItems(), MAX_ITEMS_TOTAL, 'the badge counts the shelf the reader really holds');
+  } finally {
+    forget();
+  }
+});
+
+test('a headline whose clean_timeout had already run out is not news the reader has never had', async () => {
+  const feed = { id: 'f1', name: 'Old news', rss_link: 'https://a.b/rss', delay_timeout: 30, clean_timeout: 60 };
+  const forget = storageMemory();
+  const age = (minutes) => new Date(Date.now() - minutes * MINUTE).toUTCString();
+
+  try {
+    await store.saveFeeds([feed]);
+
+    const fresh = store.makeItem({ feed, title: 'fresh', link: 'https://a.b/news/1', pubDate: age(30) });
+    const stale = store.makeItem({ feed, title: 'stale', link: 'https://a.b/news/2', pubDate: age(90) });
+
+    assert.deepEqual(
+      await store.addItems([fresh, stale]),
+      { added: 1, skipped: 0, seen: 2 },
+      'the headline the sweep would take back at once is not counted among the headlines it brought',
+    );
+    assert.deepEqual(
+      (await store.getItems()).map((item) => item.link),
+      ['https://a.b/news/1'],
+      'and it does not sit on the shelf waiting for the sweep',
+    );
+    assert.equal((await store.getRead()).length, 0, 'a headline the reader never had is not remembered as read');
+
+    /* The server keeps shipping its old item: every next poll has to say the same, or the same
+     * headline is «new» again on every `delay_timeout` and the load signal sounds over a list that
+     * never changed. */
+    assert.deepEqual(
+      await store.addItems([fresh, store.makeItem({ feed, title: 'stale', link: 'https://a.b/news/2', pubDate: age(91) })]),
+      { added: 0, skipped: 0, seen: 2 },
+      'neither of them is news the second time round',
+    );
+    assert.equal(await store.countItems(), 1, 'the badge counts one headline, not one headline and its backlog');
   } finally {
     forget();
   }
@@ -4424,6 +4462,30 @@ test('one feed is read once, whoever asked for the read', () => {
     assert.ok(handler, `the worker answers ${name}`);
     assert.match(handler[0], /ingestFeed\(feed/, `${name} reads the feed through the same guard`);
   }
+});
+
+/**
+ * The signal of a load belongs to an automatic read that really brought headlines, and its numbers
+ * are the ones the shelf reported: a read that kept nothing cannot sound.
+ */
+test('the load signal sounds only on an automatic read that brought headlines', () => {
+  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+
+  const ingest = worker.match(/async function ingestFeed\([\s\S]*?\r?\n  return result;\r?\n\}/);
+  assert.ok(ingest, 'the worker writes the headlines of its read');
+  assert.match(
+    ingest[0],
+    /if \(result\.added > 0 && notify\) \{[\s\S]*?await playSound\(\);/,
+    'the signal is gated by both the headlines the storage kept and the automatic read that asked for it',
+  );
+
+  const read = worker.match(/async function readFeedOnce\([\s\S]*?\n  return result;\r?\n\}/);
+  assert.ok(read, 'the worker reads a feed once');
+  assert.match(
+    read[0],
+    /const \{ added, skipped \} = await store\.addItems\(candidates\)/,
+    'the numbers are those of the headlines the shelf took, not of the ones its own feed shipped',
+  );
 });
 
 /* ---------------------------- carrying feeds between profiles ---------------------------- */

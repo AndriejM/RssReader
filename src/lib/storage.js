@@ -634,6 +634,12 @@ export function capItems(items) {
  * states no id) inside one feed; a read marker is matched across feeds. A headline whose feed changed
  * the *kind* of its identity — a `<guid>` appeared where the shelf only ever saw an address — is
  * recognised by its address and re-typed in place, not stored a second time.
+ *
+ * A headline whose `clean_timeout` had already run out when the feed shipped it never comes onto the
+ * shelf: `cleanup` would take it back on the very next sweep. Servers keep their old items in the
+ * feed for long after that, so without this the same ones were stored again on every poll — each time
+ * counted as news the reader had never had, which made the load signal sound and the badge grow
+ * without a single new headline ever reaching the list.
  * @returns {{ added: number, skipped: number, seen: number }} `added` counts the headlines that
  * stayed in storage after both caps ran.
  */
@@ -641,7 +647,10 @@ export async function addItems(candidates) {
   const fresh = candidates.filter((item) => item?.uid && item?.link);
   if (fresh.length === 0) return { added: 0, skipped: 0, seen: candidates.length };
 
-  const [items, read] = await Promise.all([getItems(), getRead()]);
+  /* The same age the sweep counts, by the same `clean_timeout` of the feed the headline belongs to. */
+  const now = Date.now();
+  const [items, read, feeds] = await Promise.all([getItems(), getRead(), getFeeds()]);
+  const feedById = new Map(feeds.map((feed) => [feed.id, feed]));
   const shelf = identityIndex(items, SHELF_KEYS);
   const markers = identityIndex(read, MARKER_KEYS);
   const accepted = new Set();
@@ -649,6 +658,8 @@ export async function addItems(candidates) {
   let retyped = 0;
 
   for (const candidate of fresh) {
+    if (isExpired(candidate, feedById.get(candidate.feedId), now, DEFAULT_CLEAN_TIMEOUT)) continue;
+
     const match = indexOf(candidate, shelf, SHELF_KEYS);
 
     /* The poll changed the *kind* of the identity, not the news. A feed that started stating a
