@@ -4777,6 +4777,72 @@ test('the worker wires the popup click at startup', () => {
   assert.match(page, /onClosed\.addListener/);
 });
 
+/* ------------------------- the age written on a row ------------------------- */
+
+/**
+ * «5 мин назад» строки списка, подсказка строки ленты, строка источника открытой статьи и строка
+ * диагностики под рядом таблицы лент — всё это нарисовано один раз, когда колонка или таблица
+ * собрана. Через минуту каждая из них говорит неправду, если её не перечеркнуть на том же месте:
+ * перестроить среднюю колонку ради одной такой строки — значит выбросить место читателя в списке.
+ */
+test('every age the screens write is redrawn while they sit open', () => {
+  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+  const page = read('src/index.js');
+  const feedsScreen = read('src/feeds.js');
+
+  /* One tick of the reader repaints every aged label it can see, not the line under the head alone. */
+  const tick = page.match(/function refreshAgedLabels\(\)[\s\S]*?\n\}/);
+  assert.ok(tick, 'nothing redraws the ages the columns drew when they were built');
+  for (const [call, what] of [
+    ['paintItemMeta(', 'the age of a headline row'],
+    ['feedHealthTitle(', 'the tooltip of a feed row'],
+    ['paintSource(', 'the source line of the open article'],
+    ['renderFeedStatus(', 'the line under the head of the middle column'],
+  ]) {
+    assert.ok(tick[0].includes(call), `the tick leaves ${what} standing at the age it was drawn with`);
+  }
+
+  assert.match(
+    page,
+    /setInterval\(\(\) => \{\s*if \(!document\.hidden\) refreshAgedLabels\(\);/,
+    'the minute tick still repaints the status line alone',
+  );
+  assert.ok(
+    page.includes('paintItemMeta(meta, item, all);'),
+    'the middle column draws its meta line one way and the tick another way',
+  );
+
+  /* The tick reaches a row through the name the row already carries, so nothing is rebuilt to learn
+   * what a row stands for. */
+  assert.ok(page.includes("els.headlineList.querySelectorAll('.list-item[data-uid]')"), 'a row of the middle column carries no name the tick could find its headline by');
+  assert.ok(page.includes('button.dataset.feedId = feed.id;'), 'a row of the left column carries no name the tick could find its feed by');
+  assert.ok(tick[0].includes('button.dataset.feedId'), 'the tick does not use the name the left column wrote');
+
+  /* The feed table writes the same age under every row, and had no tick at all. */
+  assert.match(
+    feedsScreen,
+    /function feedHealthLine\(feed, now = Date\.now\(\), labels = unitLabels\(\)\)/,
+    'the diagnosis line of a row cannot be drawn for a clock other than the one its row was built with',
+  );
+  assert.match(
+    feedsScreen,
+    /setInterval\(\(\) => \{\s*if \(!document\.hidden\) refreshHealthLines\(\);/,
+    'the feed screen leaves its diagnosis lines standing while the table sits open',
+  );
+  assert.ok(feedsScreen.includes("'visibilitychange'"), 'a feed screen that was hidden shows the age it sat out');
+
+  const redraw = feedsScreen.match(/function refreshHealthLines\(\)[\s\S]*?\n\}/);
+  assert.ok(redraw, 'nothing redraws the diagnosis lines of the feed table');
+  assert.ok(
+    redraw[0].includes('feedHealthLine(record.feed, now, labels)'),
+    'the redraw of a diagnosis line takes its numbers from somewhere other than the row it stands under',
+  );
+  assert.ok(
+    feedsScreen.includes('rowRecord.feed = fresh;'),
+    'a row keeps the diagnosis of the load it just did, so its next redraw would undo it',
+  );
+});
+
 /* ---------------------------- carrying feeds between profiles ---------------------------- */
 
 /**

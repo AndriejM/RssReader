@@ -333,6 +333,9 @@ function renderFeeds() {
 
     const button = document.createElement('button');
     button.type = 'button';
+    /* Строка хранит, какой ленте она принадлежит: по этому `refreshAgedLabels` перечёркивает её
+     * подсказку о последней проверке, не перестраивая колонку. */
+    button.dataset.feedId = feed.id;
     // Строка левой колонки выбирает ленту: `aria-current` говорит экрану, какая из них выбрана, —
     // то же самое, что цвет выделения говорит глаз.
     if (selected) button.setAttribute('aria-current', 'true');
@@ -428,6 +431,21 @@ function renderStartCard() {
   return noFeeds;
 }
 
+/**
+ * Подписать строку заголовка тем, что знает о нём колонка: лентой, откуда он взялся (нужно только
+ * «Всем лентам»), и возрастом самой новости. Одно и то же делает и тик, который перечёркивает возраст
+ * на месте (см. `refreshAgedLabels`).
+ */
+function paintItemMeta(meta, item, all) {
+  const when = itemTime(item);
+  meta.textContent = [
+    all ? item.feedName || item.rss_link : '',
+    when ? t('reader.published', { since: formatSince(when, Date.now(), unitLabels()) }) : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 function renderHeadlines() {
   els.headlineList.replaceChildren();
 
@@ -506,15 +524,7 @@ function renderHeadlines() {
 
     const meta = document.createElement('span');
     meta.className = 'item-meta muted';
-    // In «Все ленты» the meta line names the feed the headline came from; a single feed's list
-    // needs no such tag.
-    const when = itemTime(item);
-    meta.textContent = [
-      all ? item.feedName || item.rss_link : '',
-      when ? t('reader.published', { since: formatSince(when, Date.now(), unitLabels()) }) : '',
-    ]
-      .filter(Boolean)
-      .join(' · ');
+    paintItemMeta(meta, item, all);
     body.append(title, meta);
     row.append(body);
     row.title = item.link;
@@ -756,12 +766,20 @@ function articleHead(item) {
   const title = titleHeading(item.title || t('common.untitled'), item.link);
   const source = document.createElement('div');
   source.className = 'source';
+  paintSource(source, item);
+  return [title, source];
+}
+
+/**
+ * Строка источника открытой статьи: та же метка возраста, что держит строка списка, и та же
+ * перерисовка на месте.
+ */
+function paintSource(source, item) {
   const name = item.feedName || item.rss_link;
   const when = itemTime(item);
   source.textContent = when
     ? t('reader.source', { name, since: formatSince(when, Date.now(), unitLabels()) })
     : name;
-  return [title, source];
 }
 
 /**
@@ -1217,24 +1235,57 @@ els.headlineList.addEventListener('focus', () => {
 });
 
 /*
+ * Возраст, названный один раз, через минуту уже неправда: «5 мин назад» строки списка и подсказка
+ * строки ленты рисуются один раз, при перестроении колонки. Перестраивать колонку ради этого —
+ * значит выбросить место читателя в списке и его курсор (см. `openItem`), поэтому тик перечёркивает
+ * сами метки: строка списка находит свой заголовок по `data-uid`, строка ленты — свою ленту по
+ * `data-feed-id`, панель статьи — заголовок, открытый сейчас.
+ */
+function refreshAgedLabels() {
+  const all = isAllFeeds();
+
+  for (const li of els.headlineList.querySelectorAll('.list-item[data-uid]')) {
+    const meta = li.querySelector('.item-meta');
+    if (!meta) continue;
+    const item = state.items.find((candidate) => candidate.uid === li.dataset.uid);
+    if (!item) continue;
+    paintItemMeta(meta, item, all);
+  }
+
+  for (const button of els.feedList.querySelectorAll('.list-item button[data-feed-id]')) {
+    const feed = state.feeds.find((candidate) => candidate.id === button.dataset.feedId);
+    if (!feed) continue;
+    const health = feedHealthTitle(feed);
+    if (health) button.title = health;
+    else button.removeAttribute('title');
+  }
+
+  const open = openHeadline();
+  const source = open ? els.articleBody.querySelector('.source') : null;
+  if (source) paintSource(source, open);
+
+  renderFeedStatus();
+}
+
+/*
  * «4 мин назад» должно оставаться правдой, пока читалка стоит открытой, — иначе строка говорит о
- * загрузке, какой она была в момент, когда страницу последний раз перерисовывали. Раз в минуту её
- * перечёркивают заново; вкладку, которой никто не видит, для этого не будят — она догонит сама,
- * когда снова станет видимой.
+ * загрузке, какой она была в момент, когда страницу последний раз перерисовывали. Раз в минуту
+ * перечёркивают все метки возраста разом; вкладку, которой никто не видит, для этого не будят — она
+ * догонит сама, когда снова станет видимой.
  */
 setInterval(() => {
-  if (!document.hidden) renderFeedStatus();
+  if (!document.hidden) refreshAgedLabels();
 }, 60000);
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   /* Вкладку прятали во время записи фона — перечитаем панели сейчас, одним `renderAll()`; он
-   * освежит и строку статуса, поэтому отдельный вызов не нужен. */
+   * освежит и возраст меток, поэтому отдельный вызов не нужен. */
   if (pendingStorageRender) {
     pendingStorageRender = false;
     void renderAll();
   } else {
-    renderFeedStatus();
+    refreshAgedLabels();
   }
 });
 

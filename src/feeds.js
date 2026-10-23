@@ -31,6 +31,12 @@ const state = {
   drafts: new Set(),
 };
 
+/**
+ * Records of the rows the table holds right now — rebuilt by `render()`. The age of a feed's
+ * diagnosis is redrawn from them without rebuilding the table (see `refreshHealthLines`).
+ */
+let liveRows = [];
+
 /** `<td>` of a text column: the input and the error line under it. */
 function textCell(value, { label }) {
   const input = document.createElement('input');
@@ -99,18 +105,17 @@ function actionButton(icon, caption, { danger = false, disabled = false } = {}) 
  * Отказ подписывается тем же `describeError`, что и ошибка загрузки, поэтому код отказа не
  * остаётся сырым ключом словаря.
  */
-function feedHealthLine(feed) {
-  const labels = unitLabels();
+function feedHealthLine(feed, now = Date.now(), labels = unitLabels()) {
   const parts = [];
 
   const checkedAt = Number(feed.lastCheckedAt);
   if (Number.isFinite(checkedAt) && checkedAt > 0) {
-    parts.push(t('feeds.health.checked', { since: formatSince(checkedAt, Date.now(), labels) }));
+    parts.push(t('feeds.health.checked', { since: formatSince(checkedAt, now, labels) }));
   }
 
   const nextAt = Number(feed.nextAlarmAt);
   if (Number.isFinite(nextAt) && nextAt > 0) {
-    parts.push(t('feeds.health.next', { until: formatUntil(nextAt, Date.now(), labels) }));
+    parts.push(t('feeds.health.next', { until: formatUntil(nextAt, now, labels) }));
   }
 
   const failures = Number(feed.fetchFailureCount) || 0;
@@ -127,8 +132,8 @@ function feedHealthLine(feed) {
   /* Отказ назначает паузу, растущую с каждым сбоем: будильник ленты остаётся своим, но попытка
    * во время паузы пропускается (`background.js`), поэтому строка называет именно её срок. */
   const retryAt = Number(feed.nextRetryAt);
-  if (retryAt > Date.now()) {
-    parts.push(t('feeds.health.pause', { until: formatUntil(retryAt, Date.now(), labels) }));
+  if (retryAt > now) {
+    parts.push(t('feeds.health.pause', { until: formatUntil(retryAt, now, labels) }));
   }
 
   return parts.join(' · ');
@@ -390,6 +395,9 @@ async function refreshRow(rowRecord) {
      * под рядом показала ту попытку, что только что случилась, а не ту, что была при открытии. */
     const fresh = await store.getFeed(rowRecord.feed.id);
     if (rowRecord.health && fresh) {
+      /* Тот же диагноз записывает и сам ряд: без этого следующий тик (`refreshHealthLines`)
+       * перечеркнул бы строку по ленте, какой та была до этой загрузки. */
+      rowRecord.feed = fresh;
       const line = feedHealthLine(fresh);
       rowRecord.health.textContent = line;
       if (line) rowRecord.noteRow.hidden = false;
@@ -418,6 +426,10 @@ async function render() {
     ...state.feeds.map((feed) => buildRow(feed, { draft: false })),
     ...[...state.drafts].map((draft) => buildRow(draft, { draft: true })),
   ];
+
+  /* Ряды, которые экран держит открытыми: по ним `refreshHealthLines` перечёркивает возраст
+   * диагностики, не перестраивая таблицу. */
+  liveRows = rows.map(({ record }) => record);
 
   for (const { record, note } of rows) {
     els.rows.append(record.row, note);
@@ -543,3 +555,30 @@ adoptLanguage(await store.getLanguage());
 applyI18n();
 
 await render();
+
+/*
+ * Строка диагностики ряда говорит о времени: когда ленту читали и когда спросят снова. Её рисуют
+ * вместе с рядом, а таблица стоит открытой ровно столько, сколько её правят, — поэтому раз в минуту
+ * строки перечёркивают на месте. Вкладку, которой никто не видит, для этого не будят: она догонит
+ * сама, когда снова станет видимой.
+ */
+function refreshHealthLines() {
+  const now = Date.now();
+  const labels = unitLabels();
+
+  for (const record of liveRows) {
+    if (record.draft) continue;
+    const line = feedHealthLine(record.feed, now, labels);
+    if (line === record.health.textContent) continue;
+    record.health.textContent = line;
+    if (line) record.noteRow.hidden = false;
+  }
+}
+
+setInterval(() => {
+  if (!document.hidden) refreshHealthLines();
+}, 60000);
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshHealthLines();
+});

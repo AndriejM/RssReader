@@ -155,7 +155,9 @@ feed was last read, when its next check is due, and — while it is currently fa
 the interface language, how many failures ran in a row and how long an automatic read leaves the
 feed alone before asking it again. It stays put while the load message above
 it comes and goes, and a healthy feed that was read cleanly shows only the check and the next one.
-A manual “Load now” refreshes this line with the attempt that just happened.
+A manual “Load now” refreshes this line with the attempt that just happened, and a table that only
+sits open gets its ages redrawn once a minute (`refreshHealthLines`): the line does not go on quoting
+the clock of the moment its row was built.
 
 What those lines say is said out loud too: a feed saved, a row whose fields were left unfilled,
 what “Load now” brought back (“New: 5”), how many feeds a file took and how many it gave back. The
@@ -273,9 +275,12 @@ from the schedule Chrome really runs — `syncAlarms` reads it off the alarms th
 answers «why has nothing arrived» without opening the service worker console: *headlines fetched 4
 min ago · next check in 26 min* says the reader asked recently and the site has nothing newer. A
 `304` is a check that brings no headlines, so it moves the next check but not the age of what lies
-here. The line redraws once a minute while the reader tab is visible (and at once when the tab
-becomes visible again), so «4 min ago» does not freeze, and a feed nobody has read yet leaves the
-line off entirely.
+here. The ages the reader writes — that line's «4 min ago», the age of a headline row, of a feed
+row's tooltip and of the source line of the open article — are redrawn together once a minute while
+the reader tab is visible (and at once when the tab becomes visible again): `refreshAgedLabels`
+repaints every one of them where it stands, because rebuilding the middle column for the sake of one
+row would drop the reader's place in the list and its keyboard cursor. A feed nobody has read yet
+leaves the line off entirely.
 
 The reader answers to the keyboard, and its keys are held back while a field is being typed in (the
 search field holds the same letters) or while Ctrl/Meta/Alt are down:
@@ -1035,7 +1040,7 @@ background.
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
                              # storage.js and rss.js), the guards over the screen markup and over what
                              one module borrows from another, and the popup an automatic load shows:
-                             148 tests
+                             149 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -1197,7 +1202,9 @@ rules are covered by the tests.
 33. Open the reader on a feed that has been read → one line under the head of the middle column names
     when its headlines came in and when they are next asked for; on «All feeds» the age is the
     freshest of those feeds and the next check is the earliest of their alarms. Leave the tab open →
-    «4 min ago» becomes «5 min ago» on its own. Press `r` → the line answers without a reload,
+    «4 min ago» becomes «5 min ago» on its own, and with it the age on the open headline's row, the
+    tooltip of the feed row and the source line of the open article: the four age together, so none of
+    them goes on quoting an old clock. Press `r` → the line answers without a reload,
     because a read rewrites the feed row and the reader repaints from it, and the moment it names is
     the number that stands in `feeds[].nextAlarmAt` in `chrome.storage.local`.
 34. On the feed screen press Tab through the row of icons, a row of the table and the “?” → every one
