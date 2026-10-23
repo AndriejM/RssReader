@@ -2301,6 +2301,60 @@ test('every language dictionary translates every key of the base one', () => {
 });
 
 /**
+ * A placeholder belongs to the contract of a key: a dictionary that renames `{count}` or drops
+ * `{duration}` leaves the reader with a hole where a number should stand. So every form of a key —
+ * plural ones included — fills the same set of placeholders as the base dictionary.
+ */
+test('every language fills the same placeholders in every form of a key', () => {
+  const names = (template) =>
+    new Set([...String(template).matchAll(/\{(\w+)\}/g)].map((match) => match[1]));
+
+  const formsOf = (key, lang) => {
+    const entry = i18n.dictionaryEntry(key, lang);
+    assert.notEqual(entry, undefined, `${lang} does not translate ${key}`);
+    return typeof entry === 'string' ? { other: entry } : entry;
+  };
+
+  for (const key of i18n.dictionaryKeys(i18n.LANGUAGES[0])) {
+    const contract = [...names(formsOf(key, i18n.LANGUAGES[0]).other)].sort();
+    for (const lang of i18n.LANGUAGES) {
+      for (const [category, template] of Object.entries(formsOf(key, lang))) {
+        assert.deepEqual(
+          [...names(template)].sort(),
+          contract,
+          `${key} in ${lang} (${category}) fills other placeholders than the base dictionary does`,
+        );
+      }
+    }
+  }
+});
+
+/**
+ * A count that stands next to its noun cannot be one string: one such string says "1 headlines".
+ * These keys carry an object of plural forms, and its categories are ones the language has — with
+ * `other` always there, because a category the dictionary omits takes it.
+ */
+test('a count that agrees with a noun carries plural forms for its language', () => {
+  assert.ok(i18n.PLURAL_KEYS.length > 0, 'the reader reports counts, so it has count-bearing keys');
+
+  for (const key of i18n.PLURAL_KEYS) {
+    for (const lang of i18n.LANGUAGES) {
+      const entry = i18n.dictionaryEntry(key, lang);
+      assert.equal(typeof entry, 'object', `${lang} keeps ${key} as one string for every number`);
+      const extra = Object.keys(entry).filter(
+        (category) => !i18n.PLURAL_CATEGORIES[lang].includes(category),
+      );
+      assert.deepEqual(extra, [], `${lang} has no plural category "${extra[0]}" for ${key}`);
+      assert.equal(
+        typeof entry.other,
+        'string',
+        `${lang} has no "other" form of ${key}, which every omitted category takes`,
+      );
+    }
+  }
+});
+
+/**
  * A failure that reaches a page carries an `errors.<code>` key, never its own text. This guard
  * keeps that rule: a code thrown in the worker or the parser must have a dictionary entry in
  * every language, otherwise the page would show text frozen in one language.
@@ -2717,6 +2771,95 @@ test('an unsupported language falls back to English', () => {
   assert.equal(i18n.adoptLanguage('it'), 'en', 'a browser language the reader has no dictionary for');
   assert.equal(i18n.adoptLanguage(undefined), 'en');
   assert.equal(i18n.adoptLanguage('ru'), 'ru');
+});
+
+/** The language a key falls back to is the one `FALLBACK_LANGUAGE` names, not the base dictionary. */
+test('a key a language lacks is taken from English', () => {
+  const source = fs.readFileSync(new URL('../src/lib/i18n.js', import.meta.url), 'utf8');
+  assert.ok(
+    !source.includes('DICTIONARIES[LANGUAGES[0]]'),
+    'the fallback lookups name FALLBACK_LANGUAGE, not the first dictionary of the list',
+  );
+
+  const entry = i18n.dictionaryEntry('settings.status.saved', 'en');
+  const forms = typeof entry === 'string' ? { other: entry } : entry;
+  assert.ok(
+    forms.other.includes('{parts}'),
+    'the English dictionary is the one a missing key is taken from: it carries {parts}',
+  );
+});
+
+/** Categories CLDR gives a whole number: the Slavic languages split 1, 2-4 and 5-20. */
+test('a number takes the plural category its language has for it', () => {
+  assert.deepEqual(
+    [1, 2, 4, 5, 11, 14, 21, 22, 25, 101, 111, 200].map((n) => i18n.pluralCategory('ru', n)),
+    ['one', 'few', 'few', 'many', 'many', 'many', 'one', 'few', 'many', 'one', 'many', 'many'],
+    'Russian splits 1, 2-4 and 5-20, keeps 21 as one and 11-14 as many',
+  );
+  assert.deepEqual(
+    [1, 2, 5, 21, 22].map((n) => i18n.pluralCategory('uk', n)),
+    ['one', 'few', 'many', 'one', 'few'],
+    'Ukrainian divides numbers the way Russian does',
+  );
+  assert.deepEqual(
+    [1, 2, 5, 21, 22].map((n) => i18n.pluralCategory('pl', n)),
+    ['one', 'few', 'many', 'one', 'few'],
+    'Polish divides numbers the same way, without a category of its own for two',
+  );
+  assert.deepEqual(
+    [0, 1, 2].map((n) => i18n.pluralCategory('en', n)),
+    ['other', 'one', 'other'],
+    'English knows only one and many',
+  );
+  assert.deepEqual(
+    [0, 1, 2].map((n) => i18n.pluralCategory('fr', n)),
+    ['one', 'one', 'other'],
+    'French counts zero as one: "0 titre"',
+  );
+  assert.deepEqual(
+    [1, 2].map((n) => i18n.pluralCategory('de', n)),
+    ['one', 'other'],
+    'German knows only one and many',
+  );
+  assert.equal(i18n.pluralCategory('ru', 1.5), 'other', 'a fraction agrees with no noun');
+});
+
+/**
+ * Grammar a reader hears: a count next to its noun has to agree with it, and "1 headlines" or
+ * "1 dni" is what one string for every number says.
+ */
+test('a count of one is not written like a count of many', () => {
+  const cases = [
+    ['en', 'reader.feeds.allMeta', 1, '1 headline'],
+    ['en', 'reader.announce.cleared', 1, '1 headline removed'],
+    ['en', 'feeds.health.streak', 1, '1 failure in a row'],
+    ['de', 'reader.confirmClear', 1, '1 Schlagzeile löschen? Sie wird als gelesen markiert und kommt nicht zurück, solange ihre Markierung lebt.'],
+    ['de', 'reader.announce.failed', 1, '1 Feed konnte nicht aktualisiert werden'],
+    ['fr', 'reader.feeds.allMeta', 1, '1 titre'],
+    ['fr', 'reader.feeds.allMeta', 0, '0 titre'],
+    ['fr', 'feeds.health.streak', 1, '1 échec d’affilée'],
+    ['es', 'reader.feeds.allMeta', 1, '1 titular'],
+    ['es', 'reader.announce.failed', 1, '1 fuente no se pudo actualizar'],
+    ['pl', 'reader.feeds.allMeta', 1, '1 nagłówek'],
+    ['pl', 'reader.feeds.allMeta', 3, '3 nagłówki'],
+    ['pl', 'reader.feeds.allMeta', 5, '5 nagłówków'],
+    ['pl', 'settings.ttlDays', 1, '1 dzień', 'days'],
+    ['pl', 'settings.ttlDays', 7, '7 dni', 'days'],
+    ['ru', 'reader.confirmClear', 1, 'Удалить 1 заголовок? Он будет помечен прочитанным и не вернётся, пока горит его метка.'],
+    ['ru', 'reader.confirmClear', 3, 'Удалить 3 заголовка? Они будут помечены прочитанными и не вернутся, пока горят их метки.'],
+    ['ru', 'reader.confirmClear', 11, 'Удалить 11 заголовков? Они будут помечены прочитанными и не вернутся, пока горят их метки.'],
+    ['uk', 'reader.confirmClear', 1, 'Видалити 1 заголовок? Він буде позначений прочитаним і не повернеться, поки горить його позначка.'],
+    ['uk', 'reader.confirmClear', 3, 'Видалити 3 заголовки? Вони будуть позначені прочитаними і не повернуться, поки горять їхні позначки.'],
+  ];
+
+  try {
+    for (const [lang, key, count, said, name = 'count'] of cases) {
+      i18n.adoptLanguage(lang);
+      assert.equal(i18n.t(key, { [name]: count }), said, `${lang} says ${key} of ${count} wrong`);
+    }
+  } finally {
+    i18n.adoptLanguage('ru');
+  }
 });
 
 test('units follow the language, but the pure helpers keep their own default', () => {

@@ -3,8 +3,9 @@
 // а динамические сообщения строятся через `t(key, params)`.
 //
 // Ключи с placeholders вида {name} подставляют значения из params; порядок ключей в словарях
-// одинаков, поэтому словари легко сверять между собой. Словарь по умолчанию русский, поэтому
-// чистые хелперы (`util.js`) остаются тестируемыми без доступа к chrome.storage.
+// одинаков, поэтому словари легко сверять между собой. Словарь по умолчанию — FALLBACK_LANGUAGE
+// (английский), поэтому чистые хелперы (`util.js`) остаются тестируемыми без доступа к
+// chrome.storage.
 
 /** Ключ localStorage, куда кэшируется выбранный язык для синхронного `t()` до чтения chrome.storage. */
 export const LANGUAGE_CACHE_KEY = 'rss-reader:language';
@@ -37,6 +38,45 @@ export const LOCALES = {
   es: 'es-ES',
 };
 
+/**
+ * Формы числа, которые различает каждый язык (правила CLDR): славянские разделяют 1, 2-4, 5-20 и
+ * остальные десятки, западные — только «одно» и «многое». Запись словаря — строка (одна форма на
+ * все числа) либо объект с такими категориями: тогда `t()` берёт ту, которая приходится числу из
+ * params (см. `COUNT_PARAMS`). Объект перечисляет только те категории, чья форма отличается от
+ * `other`: недостающие категории берут `other`. Так «загол.» или «мин», которые при любом числе
+ * одни и те же, пишутся одним `other`.
+ */
+export const PLURAL_CATEGORIES = {
+  ru: ['one', 'few', 'many', 'other'],
+  en: ['one', 'other'],
+  uk: ['one', 'few', 'many', 'other'],
+  pl: ['one', 'few', 'many', 'other'],
+  de: ['one', 'other'],
+  fr: ['one', 'other'],
+  es: ['one', 'other'],
+};
+
+/**
+ * Ключи, где число стоит рядом с существительным или глаголом и соглашается с ним: они держатся
+ * формой на каждую категорию языка. Счётчики после подписи («прочитанных меток: {count}») вне
+ * списка: такая форма грамотна при любом числе.
+ */
+export const PLURAL_KEYS = [
+  'reader.feeds.allMeta',
+  'reader.feed.itemMeta',
+  'reader.confirmClear',
+  'reader.announce.loaded',
+  'reader.announce.failed',
+  'reader.announce.cleared',
+  'feeds.health.streak',
+  'settings.ttlDays',
+  'settings.ttlYears',
+  'notify.news',
+];
+
+/** Параметры, чьё число задаёт форму: счётчики заголовков и лент, срок в днях. */
+const COUNT_PARAMS = ['count', 'n', 'days'];
+
 const DICTIONARIES = {
   ru: {
     'app.name': 'RSS Reader',
@@ -65,12 +105,12 @@ const DICTIONARIES = {
     'reader.feeds.title': 'Ленты',
     'reader.feeds.empty': 'Лент нет. Добавьте их на экране «Настройки лент».',
     'reader.feeds.all': 'Все ленты',
-    'reader.feeds.allMeta': '{count} загол.',
+    'reader.feeds.allMeta': { other: '{count} загол.' },
     'reader.refresh.tooltip': 'Загрузить заголовки выбранной ленты',
     'reader.refresh.aria': 'Обновить',
     'reader.refreshAll.tooltip': 'Загрузить заголовки всех лент сейчас',
     'reader.refreshAll.aria': 'Обновить все ленты',
-    'reader.feed.itemMeta': '{count} загол. · обновл. каждые {duration}',
+    'reader.feed.itemMeta': { other: '{count} загол. · обновл. каждые {duration}' },
     'reader.feed.failedCount': 'сбоев загрузки: {count}',
     'reader.feed.lastChecked': 'последняя проверка: {since}',
     'reader.feed.lastError': 'последняя ошибка: {error}',
@@ -142,7 +182,11 @@ const DICTIONARIES = {
     'reader.content.articleNone': 'На странице не нашлось текста статьи.',
     'reader.undo.prompt': 'Удалён «{title}»',
     'reader.undo.button': 'Вернуть',
-    'reader.confirmClear': 'Удалить {count} заголовков? Они будут помечены прочитанными и не вернутся, пока горят их метки.',
+    'reader.confirmClear': {
+      one: 'Удалить {count} заголовок? Он будет помечен прочитанным и не вернётся, пока горит его метка.',
+      few: 'Удалить {count} заголовка? Они будут помечены прочитанными и не вернутся, пока горят их метки.',
+      other: 'Удалить {count} заголовков? Они будут помечены прочитанными и не вернутся, пока горят их метки.',
+    },
     'reader.refresh.noFeed': 'Сначала выберите ленту.',
     'reader.refresh.failed': 'Не удалось обновить ленту: {error}',
     'reader.refreshAll.failed': 'Не удалось обновить часть лент: {error}',
@@ -157,11 +201,11 @@ const DICTIONARIES = {
 
     // Что читалка сообщает вслух, когда панель перерисовывается: об этом говорит скрытая строка
     // `role="status"` (см. `index.js`), а не текст, который читает глаз.
-    'reader.announce.loaded': 'получено новых заголовков: {count}',
+    'reader.announce.loaded': { other: 'получено новых заголовков: {count}' },
     'reader.announce.none': 'новых заголовков нет',
-    'reader.announce.failed': 'не удалось обновить лент: {count}',
+    'reader.announce.failed': { other: 'не удалось обновить лент: {count}' },
     'reader.announce.error': 'обновление не удалось: {error}',
-    'reader.announce.cleared': 'заголовков удалено: {count}',
+    'reader.announce.cleared': { other: 'заголовков удалено: {count}' },
     'reader.announce.deleted': 'заголовок удалён',
     'reader.announce.marked': 'заголовок помечен прочитанным',
     'reader.announce.unmarked': 'метка прочитанного снята',
@@ -222,7 +266,7 @@ const DICTIONARIES = {
     'feeds.health.checked': 'проверено {since}',
     'feeds.health.next': 'следующая проверка {until}',
     'feeds.health.error': 'ошибка: {error}',
-    'feeds.health.streak': 'сбоев подряд: {count}',
+    'feeds.health.streak': { other: 'сбоев подряд: {count}' },
     'feeds.health.pause': 'следующая попытка {until}',
 
     'settings.title': 'Глобальные настройки',
@@ -261,8 +305,8 @@ const DICTIONARIES = {
     'settings.status.cleared': 'Забыто прочитанных: {count}',
     'settings.status.emptyRead': 'Список прочитанных уже пуст',
     'settings.ttlError': 'Целое число от {min} до {max} дней',
-    'settings.ttlDays': '{days} дн',
-    'settings.ttlYears': '{days} дн ({years} г)',
+    'settings.ttlDays': { other: '{days} дн' },
+    'settings.ttlYears': { other: '{days} дн ({years} г)' },
     'settings.savedTtl': 'горят через {ttl}',
     'settings.savedSound': 'звук: {name}',
     'settings.savedSoundEnabled': 'звук {state}',
@@ -277,7 +321,7 @@ const DICTIONARIES = {
     'settings.language': 'Язык интерфейса',
 
     // Popup автоматической загрузки: сколько заголовков она принесла.
-    'notify.news': 'Получено новых заголовков: {count}',
+    'notify.news': { other: 'Получено новых заголовков: {count}' },
 
     'errors.feedNotFound': 'Лента не найдена',
     'errors.feedUrl': 'Ссылка ленты должна начинаться с http:// или https://',
@@ -341,12 +385,15 @@ const DICTIONARIES = {
     'reader.feeds.title': 'Feeds',
     'reader.feeds.empty': 'No feeds yet. Add them on the Feed settings screen.',
     'reader.feeds.all': 'All feeds',
-    'reader.feeds.allMeta': '{count} headlines',
+    'reader.feeds.allMeta': { one: '{count} headline', other: '{count} headlines' },
     'reader.refresh.tooltip': 'Load headlines for the selected feed',
     'reader.refresh.aria': 'Refresh',
     'reader.refreshAll.tooltip': 'Load headlines of every feed now',
     'reader.refreshAll.aria': 'Refresh all feeds',
-    'reader.feed.itemMeta': '{count} headlines · refresh every {duration}',
+    'reader.feed.itemMeta': {
+      one: '{count} headline · refresh every {duration}',
+      other: '{count} headlines · refresh every {duration}',
+    },
     'reader.feed.failedCount': 'load failures: {count}',
     'reader.feed.lastChecked': 'last checked: {since}',
     'reader.feed.lastError': 'last error: {error}',
@@ -418,7 +465,10 @@ const DICTIONARIES = {
     'reader.content.articleNone': 'No article text was found on the page.',
     'reader.undo.prompt': 'Deleted “{title}”',
     'reader.undo.button': 'Undo',
-    'reader.confirmClear': 'Delete {count} headlines? They will be marked read and will not come back while their marks live.',
+    'reader.confirmClear': {
+      one: 'Delete {count} headline? It will be marked read and will not come back while its mark lives.',
+      other: 'Delete {count} headlines? They will be marked read and will not come back while their marks live.',
+    },
     'reader.refresh.noFeed': 'Select a feed first.',
     'reader.refresh.failed': 'Failed to refresh the feed: {error}',
     'reader.refreshAll.failed': 'Some feeds could not be refreshed: {error}',
@@ -433,11 +483,11 @@ const DICTIONARIES = {
 
     // What the reader says out loud when a panel is repainted: a hidden `role="status"` line carries
     // these, not a text the eye reads.
-    'reader.announce.loaded': '{count} new headlines loaded',
+    'reader.announce.loaded': { one: '{count} new headline loaded', other: '{count} new headlines loaded' },
     'reader.announce.none': 'no new headlines',
-    'reader.announce.failed': '{count} feeds could not be refreshed',
+    'reader.announce.failed': { one: '{count} feed could not be refreshed', other: '{count} feeds could not be refreshed' },
     'reader.announce.error': 'refresh failed: {error}',
-    'reader.announce.cleared': '{count} headlines removed',
+    'reader.announce.cleared': { one: '{count} headline removed', other: '{count} headlines removed' },
     'reader.announce.deleted': 'headline deleted',
     'reader.announce.marked': 'headline marked read',
     'reader.announce.unmarked': 'the read mark was taken off',
@@ -498,7 +548,7 @@ const DICTIONARIES = {
     'feeds.health.checked': 'checked {since}',
     'feeds.health.next': 'next check {until}',
     'feeds.health.error': 'error: {error}',
-    'feeds.health.streak': '{count} failures in a row',
+    'feeds.health.streak': { one: '{count} failure in a row', other: '{count} failures in a row' },
     'feeds.health.pause': 'next attempt {until}',
 
     'settings.title': 'Global settings',
@@ -537,8 +587,8 @@ const DICTIONARIES = {
     'settings.status.cleared': 'Forgotten read markers: {count}',
     'settings.status.emptyRead': 'The read list is already empty',
     'settings.ttlError': 'A whole number from {min} to {max} days',
-    'settings.ttlDays': '{days} d',
-    'settings.ttlYears': '{days} d ({years} yr)',
+    'settings.ttlDays': { other: '{days} d' },
+    'settings.ttlYears': { other: '{days} d ({years} yr)' },
     'settings.savedTtl': 'burn out after {ttl}',
     'settings.savedSound': 'sound: {name}',
     'settings.savedSoundEnabled': 'sound {state}',
@@ -553,7 +603,7 @@ const DICTIONARIES = {
     'settings.language': 'Interface language',
 
     // The automatic-load popup: how many headlines that load brought.
-    'notify.news': '{count} new headlines loaded',
+    'notify.news': { one: '{count} new headline loaded', other: '{count} new headlines loaded' },
 
     'errors.feedNotFound': 'Feed not found',
     'errors.feedUrl': 'The feed link must start with http:// or https://',
@@ -616,12 +666,12 @@ const DICTIONARIES = {
     'reader.feeds.title': 'Стрічки',
     'reader.feeds.empty': 'Стрічок немає. Додайте їх на екрані «Налаштування стрічок».',
     'reader.feeds.all': 'Усі стрічки',
-    'reader.feeds.allMeta': '{count} загол.',
+    'reader.feeds.allMeta': { other: '{count} загол.' },
     'reader.refresh.tooltip': 'Завантажити заголовки обраної стрічки',
     'reader.refresh.aria': 'Оновити',
     'reader.refreshAll.tooltip': 'Завантажити заголовки всіх стрічок зараз',
     'reader.refreshAll.aria': 'Оновити всі стрічки',
-    'reader.feed.itemMeta': '{count} загол. · оновл. кожні {duration}',
+    'reader.feed.itemMeta': { other: '{count} загол. · оновл. кожні {duration}' },
     'reader.feed.failedCount': 'помилок завантаження: {count}',
     'reader.feed.lastChecked': 'остання перевірка: {since}',
     'reader.feed.lastError': 'остання помилка: {error}',
@@ -693,7 +743,11 @@ const DICTIONARIES = {
     'reader.content.articleNone': 'На сторінці не знайдено тексту статті.',
     'reader.undo.prompt': 'Видалено «{title}»',
     'reader.undo.button': 'Повернути',
-    'reader.confirmClear': 'Видалити {count} заголовків? Вони будуть позначені прочитаними і не повернуться, поки горять їхні позначки.',
+    'reader.confirmClear': {
+      one: 'Видалити {count} заголовок? Він буде позначений прочитаним і не повернеться, поки горить його позначка.',
+      few: 'Видалити {count} заголовки? Вони будуть позначені прочитаними і не повернуться, поки горять їхні позначки.',
+      other: 'Видалити {count} заголовків? Вони будуть позначені прочитаними і не повернуться, поки горять їхні позначки.',
+    },
     'reader.refresh.noFeed': 'Спочатку оберіть стрічку.',
     'reader.refresh.failed': 'Не вдалося оновити стрічку: {error}',
     'reader.refreshAll.failed': 'Не вдалося оновити частину стрічок: {error}',
@@ -704,11 +758,11 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Великий шрифт',
     'reader.fontScale.xlarge': 'Дуже великий шрифт',
 
-    'reader.announce.loaded': 'отримано нових заголовків: {count}',
+    'reader.announce.loaded': { other: 'отримано нових заголовків: {count}' },
     'reader.announce.none': 'нових заголовків немає',
-    'reader.announce.failed': 'не вдалося оновити стрічок: {count}',
+    'reader.announce.failed': { other: 'не вдалося оновити стрічок: {count}' },
     'reader.announce.error': 'оновлення не вдалося: {error}',
-    'reader.announce.cleared': 'заголовків видалено: {count}',
+    'reader.announce.cleared': { other: 'заголовків видалено: {count}' },
     'reader.announce.deleted': 'заголовок видалено',
     'reader.announce.marked': 'заголовок позначено прочитаним',
     'reader.announce.unmarked': 'позначку прочитаного знято',
@@ -768,7 +822,7 @@ const DICTIONARIES = {
     'feeds.health.checked': 'перевірено {since}',
     'feeds.health.next': 'наступна перевірка {until}',
     'feeds.health.error': 'помилка: {error}',
-    'feeds.health.streak': 'подряд збоїв: {count}',
+    'feeds.health.streak': { other: 'подряд збоїв: {count}' },
     'feeds.health.pause': 'наступна спроба {until}',
 
     'settings.title': 'Глобальні налаштування',
@@ -807,8 +861,8 @@ const DICTIONARIES = {
     'settings.status.cleared': 'Забуто прочитаних: {count}',
     'settings.status.emptyRead': 'Список прочитаних уже порожній',
     'settings.ttlError': 'Ціле число від {min} до {max} днів',
-    'settings.ttlDays': '{days} дн',
-    'settings.ttlYears': '{days} дн ({years} р)',
+    'settings.ttlDays': { other: '{days} дн' },
+    'settings.ttlYears': { other: '{days} дн ({years} р)' },
     'settings.savedTtl': 'згорають через {ttl}',
     'settings.savedSound': 'звук: {name}',
     'settings.savedSoundEnabled': 'звук {state}',
@@ -823,7 +877,7 @@ const DICTIONARIES = {
     'settings.language': 'Мова інтерфейсу',
 
     // Popup автоматичного завантаження: скільки заголовків воно принесло.
-    'notify.news': 'Отримано нових заголовків: {count}',
+    'notify.news': { other: 'Отримано нових заголовків: {count}' },
 
     'errors.feedNotFound': 'Стрічку не знайдено',
     'errors.feedUrl': 'Посилання стрічки має починатися з http:// або https://',
@@ -887,12 +941,12 @@ const DICTIONARIES = {
     'reader.feeds.title': 'Kanały',
     'reader.feeds.empty': 'Brak kanałów. Dodaj je na ekranie „Ustawienia kanałów”.',
     'reader.feeds.all': 'Wszystkie kanały',
-    'reader.feeds.allMeta': '{count} nagłówków',
+    'reader.feeds.allMeta': { one: '{count} nagłówek', few: '{count} nagłówki', other: '{count} nagłówków' },
     'reader.refresh.tooltip': 'Wczytaj nagłówki wybranego kanału',
     'reader.refresh.aria': 'Odśwież',
     'reader.refreshAll.tooltip': 'Wczytaj nagłówki wszystkich kanałów teraz',
     'reader.refreshAll.aria': 'Odśwież wszystkie kanały',
-    'reader.feed.itemMeta': '{count} nagłów. · odśwież. co {duration}',
+    'reader.feed.itemMeta': { other: '{count} nagłów. · odśwież. co {duration}' },
     'reader.feed.failedCount': 'błędy pobierania: {count}',
     'reader.feed.lastChecked': 'ostatnio sprawdzono: {since}',
     'reader.feed.lastError': 'ostatni błąd: {error}',
@@ -964,7 +1018,11 @@ const DICTIONARIES = {
     'reader.content.articleNone': 'Na stronie nie znaleziono tekstu artykułu.',
     'reader.undo.prompt': 'Usunięto „{title}”',
     'reader.undo.button': 'Cofnij',
-    'reader.confirmClear': 'Usunąć {count} nagłówków? Zostaną oznaczone jako przeczytane i nie wrócą, dopóki ich oznaczenia żyją.',
+    'reader.confirmClear': {
+      one: 'Usunąć {count} nagłówek? Zostanie oznaczony jako przeczytany i nie wróci, dopóki jego oznaczenie żyje.',
+      few: 'Usunąć {count} nagłówki? Zostaną oznaczone jako przeczytane i nie wrócą, dopóki ich oznaczenia żyją.',
+      other: 'Usunąć {count} nagłówków? Zostaną oznaczone jako przeczytane i nie wrócą, dopóki ich oznaczenia żyją.',
+    },
     'reader.refresh.noFeed': 'Najpierw wybierz kanał.',
     'reader.refresh.failed': 'Nie udało się odświeżyć kanału: {error}',
     'reader.refreshAll.failed': 'Nie udało się odświeżyć części kanałów: {error}',
@@ -975,11 +1033,23 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Duża czcionka',
     'reader.fontScale.xlarge': 'Bardzo duża czcionka',
 
-    'reader.announce.loaded': 'pobrano nowych nagłówków: {count}',
+    'reader.announce.loaded': {
+      one: 'pobrano {count} nowy nagłówek',
+      few: 'pobrano {count} nowe nagłówki',
+      other: 'pobrano {count} nowych nagłówków',
+    },
     'reader.announce.none': 'brak nowych nagłówków',
-    'reader.announce.failed': 'nie udało się odświeżyć kanałów: {count}',
+    'reader.announce.failed': {
+      one: 'nie udało się odświeżyć {count} kanału',
+      few: 'nie udało się odświeżyć {count} kanały',
+      other: 'nie udało się odświeżyć {count} kanałów',
+    },
     'reader.announce.error': 'odświeżanie nie powiodło się: {error}',
-    'reader.announce.cleared': 'usuniętych nagłówków: {count}',
+    'reader.announce.cleared': {
+      one: 'usunięto {count} nagłówek',
+      few: 'usunięto {count} nagłówki',
+      other: 'usunięto {count} nagłówków',
+    },
     'reader.announce.deleted': 'nagłówek usunięty',
     'reader.announce.marked': 'nagłówek oznaczony jako przeczytany',
     'reader.announce.unmarked': 'oznaczenie przeczytania zostało usunięte',
@@ -1039,7 +1109,7 @@ const DICTIONARIES = {
     'feeds.health.checked': 'sprawdzono {since}',
     'feeds.health.next': 'następne sprawdzenie {until}',
     'feeds.health.error': 'błąd: {error}',
-    'feeds.health.streak': '{count} błędy z rzędu',
+    'feeds.health.streak': { one: '{count} błąd z rzędu', few: '{count} błędy z rzędu', other: '{count} błędów z rzędu' },
     'feeds.health.pause': 'następna próba {until}',
 
     'settings.title': 'Ustawienia globalne',
@@ -1078,8 +1148,12 @@ const DICTIONARIES = {
     'settings.status.cleared': 'Zapomniane znaczniki przeczytanych: {count}',
     'settings.status.emptyRead': 'Lista przeczytanych jest już pusta',
     'settings.ttlError': 'Liczba całkowita od {min} do {max} dni',
-    'settings.ttlDays': '{days} dni',
-    'settings.ttlYears': '{days} dni ({years} lat)',
+    'settings.ttlDays': { one: '{days} dzień', other: '{days} dni' },
+    'settings.ttlYears': {
+      one: '{days} dzień ({years} rok)',
+      few: '{days} dni ({years} lata)',
+      other: '{days} dni ({years} lat)',
+    },
     'settings.savedTtl': 'wygasają po {ttl}',
     'settings.savedSound': 'dźwięk: {name}',
     'settings.savedSoundEnabled': 'dźwięk {state}',
@@ -1094,7 +1168,11 @@ const DICTIONARIES = {
     'settings.language': 'Język interfejsu',
 
     // Popup automatycznego pobierania: ile nagłówków przyniosło to pobieranie.
-    'notify.news': 'Wczytano nowe nagłówki: {count}',
+    'notify.news': {
+      one: 'Wczytano {count} nowy nagłówek',
+      few: 'Wczytano {count} nowe nagłówki',
+      other: 'Wczytano {count} nowych nagłówków',
+    },
 
     'errors.feedNotFound': 'Kanał nie znaleziony',
     'errors.feedUrl': 'Link kanału musi zaczynać się od http:// lub https://',
@@ -1158,12 +1236,12 @@ const DICTIONARIES = {
     'reader.feeds.title': 'Feeds',
     'reader.feeds.empty': 'Keine Feeds. Fügen Sie sie auf dem Bildschirm „Feed-Einstellungen“ hinzu.',
     'reader.feeds.all': 'Alle Feeds',
-    'reader.feeds.allMeta': '{count} Überschr.',
+    'reader.feeds.allMeta': { other: '{count} Überschr.' },
     'reader.refresh.tooltip': 'Überschriften des ausgewählten Feeds laden',
     'reader.refresh.aria': 'Aktualisieren',
     'reader.refreshAll.tooltip': 'Überschriften aller Feeds jetzt laden',
     'reader.refreshAll.aria': 'Alle Feeds aktualisieren',
-    'reader.feed.itemMeta': '{count} Überschr. · Aktualisierung alle {duration}',
+    'reader.feed.itemMeta': { other: '{count} Überschr. · Aktualisierung alle {duration}' },
     'reader.feed.failedCount': 'Abruf-Fehler: {count}',
     'reader.feed.lastChecked': 'zuletzt geprüft: {since}',
     'reader.feed.lastError': 'letzter Fehler: {error}',
@@ -1236,7 +1314,10 @@ const DICTIONARIES = {
     'reader.content.articleNone': 'Auf der Seite wurde kein Artikeltext gefunden.',
     'reader.undo.prompt': '„{title}“ gelöscht',
     'reader.undo.button': 'Rückgängig',
-    'reader.confirmClear': '{count} Schlagzeilen löschen? Sie werden als gelesen markiert und kommen nicht zurück, solange ihre Markierungen leben.',
+    'reader.confirmClear': {
+      one: '{count} Schlagzeile löschen? Sie wird als gelesen markiert und kommt nicht zurück, solange ihre Markierung lebt.',
+      other: '{count} Schlagzeilen löschen? Sie werden als gelesen markiert und kommen nicht zurück, solange ihre Markierungen leben.',
+    },
     'reader.refresh.noFeed': 'Zuerst einen Feed auswählen.',
     'reader.refresh.failed': 'Feed konnte nicht aktualisiert werden: {error}',
     'reader.refreshAll.failed': 'Einige Feeds konnten nicht aktualisiert werden: {error}',
@@ -1247,11 +1328,11 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Große Schrift',
     'reader.fontScale.xlarge': 'Sehr große Schrift',
 
-    'reader.announce.loaded': '{count} neue Schlagzeilen geladen',
+    'reader.announce.loaded': { one: '{count} neue Schlagzeile geladen', other: '{count} neue Schlagzeilen geladen' },
     'reader.announce.none': 'keine neuen Schlagzeilen',
-    'reader.announce.failed': '{count} Feeds konnten nicht aktualisiert werden',
+    'reader.announce.failed': { one: '{count} Feed konnte nicht aktualisiert werden', other: '{count} Feeds konnten nicht aktualisiert werden' },
     'reader.announce.error': 'Aktualisierung fehlgeschlagen: {error}',
-    'reader.announce.cleared': '{count} Schlagzeilen entfernt',
+    'reader.announce.cleared': { one: '{count} Schlagzeile entfernt', other: '{count} Schlagzeilen entfernt' },
     'reader.announce.deleted': 'Schlagzeile gelöscht',
     'reader.announce.marked': 'Schlagzeile als gelesen markiert',
     'reader.announce.unmarked': 'die Lese-Markierung wurde zurückgenommen',
@@ -1311,7 +1392,7 @@ const DICTIONARIES = {
     'feeds.health.checked': 'zuletzt geprüft {since}',
     'feeds.health.next': 'nächste Prüfung {until}',
     'feeds.health.error': 'Fehler: {error}',
-    'feeds.health.streak': '{count} Fehler in Folge',
+    'feeds.health.streak': { other: '{count} Fehler in Folge' },
     'feeds.health.pause': 'nächster Versuch {until}',
 
     'settings.title': 'Globale Einstellungen',
@@ -1350,8 +1431,8 @@ const DICTIONARIES = {
     'settings.status.cleared': 'Vergessene Gelesene: {count}',
     'settings.status.emptyRead': 'Die Liste der Gelesenen ist bereits leer',
     'settings.ttlError': 'Ganzzahl von {min} bis {max} Tagen',
-    'settings.ttlDays': '{days} T.',
-    'settings.ttlYears': '{days} T. ({years} J.)',
+    'settings.ttlDays': { other: '{days} T.' },
+    'settings.ttlYears': { other: '{days} T. ({years} J.)' },
     'settings.savedTtl': 'verfallen in {ttl}',
     'settings.savedSound': 'Ton: {name}',
     'settings.savedSoundEnabled': 'Ton {state}',
@@ -1366,7 +1447,7 @@ const DICTIONARIES = {
     'settings.language': 'Oberflächensprache',
 
     // Der Popup des automatischen Ladens: wie viele Schlagzeilen es gebracht hat.
-    'notify.news': '{count} neue Schlagzeilen geladen',
+    'notify.news': { one: '{count} neue Schlagzeile geladen', other: '{count} neue Schlagzeilen geladen' },
 
     'errors.feedNotFound': 'Feed nicht gefunden',
     'errors.feedUrl': 'Der Feed-Link muss mit http:// oder https:// beginnen',
@@ -1430,12 +1511,12 @@ const DICTIONARIES = {
     'reader.feeds.title': 'Flux',
     'reader.feeds.empty': 'Aucun flux. Ajoutez-les sur l’écran « Réglages des flux ».',
     'reader.feeds.all': 'Tous les flux',
-    'reader.feeds.allMeta': '{count} titres',
+    'reader.feeds.allMeta': { one: '{count} titre', other: '{count} titres' },
     'reader.refresh.tooltip': 'Charger les titres du flux sélectionné',
     'reader.refresh.aria': 'Actualiser',
     'reader.refreshAll.tooltip': 'Charger maintenant les titres de tous les flux',
     'reader.refreshAll.aria': 'Actualiser tous les flux',
-    'reader.feed.itemMeta': '{count} titres · actualisation toutes les {duration}',
+    'reader.feed.itemMeta': { one: '{count} titre · actualisation toutes les {duration}', other: '{count} titres · actualisation toutes les {duration}' },
     'reader.feed.failedCount': 'échecs de chargement : {count}',
     'reader.feed.lastChecked': 'dernière vérification : {since}',
     'reader.feed.lastError': 'dernière erreur : {error}',
@@ -1508,7 +1589,10 @@ const DICTIONARIES = {
     'reader.content.articleNone': 'Aucun texte d’article trouvé sur la page.',
     'reader.undo.prompt': '« {title} » supprimé',
     'reader.undo.button': 'Annuler',
-    'reader.confirmClear': 'Supprimer {count} titres ? Ils seront marqués comme lus et ne reviendront pas tant que leurs marques sont actives.',
+    'reader.confirmClear': {
+      one: 'Supprimer {count} titre ? Il sera marqué comme lu et ne reviendra pas tant que sa marque est active.',
+      other: 'Supprimer {count} titres ? Ils seront marqués comme lus et ne reviendront pas tant que leurs marques sont actives.',
+    },
     'reader.refresh.noFeed': 'Sélectionnez d’abord un flux.',
     'reader.refresh.failed': 'Échec de l’actualisation du flux : {error}',
     'reader.refreshAll.failed': 'Certains flux n’ont pas pu être actualisés : {error}',
@@ -1519,11 +1603,11 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Grande police',
     'reader.fontScale.xlarge': 'Très grande police',
 
-    'reader.announce.loaded': '{count} nouveaux titres chargés',
+    'reader.announce.loaded': { one: '{count} nouveau titre chargé', other: '{count} nouveaux titres chargés' },
     'reader.announce.none': 'aucun nouveau titre',
-    'reader.announce.failed': '{count} flux n’ont pas pu être actualisés',
+    'reader.announce.failed': { one: '{count} flux n’a pas pu être actualisé', other: '{count} flux n’ont pas pu être actualisés' },
     'reader.announce.error': 'actualisation échouée : {error}',
-    'reader.announce.cleared': '{count} titres supprimés',
+    'reader.announce.cleared': { one: '{count} titre supprimé', other: '{count} titres supprimés' },
     'reader.announce.deleted': 'titre supprimé',
     'reader.announce.marked': 'titre marqué comme lu',
     'reader.announce.unmarked': 'la marque de lecture a été retirée',
@@ -1583,7 +1667,7 @@ const DICTIONARIES = {
     'feeds.health.checked': 'vérifié {since}',
     'feeds.health.next': 'prochaine vérification {until}',
     'feeds.health.error': 'erreur : {error}',
-    'feeds.health.streak': '{count} échecs d’affilée',
+    'feeds.health.streak': { one: '{count} échec d’affilée', other: '{count} échecs d’affilée' },
     'feeds.health.pause': 'nouvel essai {until}',
 
     'settings.title': 'Réglages globaux',
@@ -1622,8 +1706,8 @@ const DICTIONARIES = {
     'settings.status.cleared': 'Lus oubliés : {count}',
     'settings.status.emptyRead': 'La liste des lus est déjà vide',
     'settings.ttlError': 'Nombre entier de {min} à {max} jours',
-    'settings.ttlDays': '{days} j',
-    'settings.ttlYears': '{days} j ({years} an(s))',
+    'settings.ttlDays': { other: '{days} j' },
+    'settings.ttlYears': { one: '{days} j ({years} an)', other: '{days} j ({years} ans)' },
     'settings.savedTtl': 'expiration dans {ttl}',
     'settings.savedSound': 'son : {name}',
     'settings.savedSoundEnabled': 'son {state}',
@@ -1638,7 +1722,7 @@ const DICTIONARIES = {
     'settings.language': 'Langue de l’interface',
 
     // Le popup du téléchargement automatique : combien de titres il a apportés.
-    'notify.news': '{count} nouveaux titres chargés',
+    'notify.news': { one: '{count} nouveau titre chargé', other: '{count} nouveaux titres chargés' },
 
     'errors.feedNotFound': 'Flux introuvable',
     'errors.feedUrl': 'Le lien du flux doit commencer par http:// ou https://',
@@ -1702,12 +1786,12 @@ const DICTIONARIES = {
     'reader.feeds.title': 'Fuentes',
     'reader.feeds.empty': 'No hay fuentes. Añádalas en la pantalla «Ajustes de fuentes».',
     'reader.feeds.all': 'Todas las fuentes',
-    'reader.feeds.allMeta': '{count} titulares',
+    'reader.feeds.allMeta': { one: '{count} titular', other: '{count} titulares' },
     'reader.refresh.tooltip': 'Cargar los titulares de la fuente seleccionada',
     'reader.refresh.aria': 'Actualizar',
     'reader.refreshAll.tooltip': 'Cargar ahora los titulares de todas las fuentes',
     'reader.refreshAll.aria': 'Actualizar todas las fuentes',
-    'reader.feed.itemMeta': '{count} titul. · actualización cada {duration}',
+    'reader.feed.itemMeta': { other: '{count} titul. · actualización cada {duration}' },
     'reader.feed.failedCount': 'fallos de carga: {count}',
     'reader.feed.lastChecked': 'última comprobación: {since}',
     'reader.feed.lastError': 'último error: {error}',
@@ -1780,7 +1864,10 @@ const DICTIONARIES = {
     'reader.content.articleNone': 'No se encontró texto del artículo en la página.',
     'reader.undo.prompt': '«{title}» eliminado',
     'reader.undo.button': 'Deshacer',
-    'reader.confirmClear': '¿Eliminar {count} titulares? Quedarán marcados como leídos y no volverán mientras sus marcas estén vivas.',
+    'reader.confirmClear': {
+      one: '¿Eliminar {count} titular? Quedará marcado como leído y no volverá mientras su marca esté viva.',
+      other: '¿Eliminar {count} titulares? Quedarán marcados como leídos y no volverán mientras sus marcas estén vivas.',
+    },
     'reader.refresh.noFeed': 'Primero seleccione una fuente.',
     'reader.refresh.failed': 'No se pudo actualizar la fuente: {error}',
     'reader.refreshAll.failed': 'No se pudieron actualizar algunas fuentes: {error}',
@@ -1791,11 +1878,11 @@ const DICTIONARIES = {
     'reader.fontScale.large': 'Letra grande',
     'reader.fontScale.xlarge': 'Letra muy grande',
 
-    'reader.announce.loaded': '{count} titulares nuevos cargados',
+    'reader.announce.loaded': { one: '{count} titular nuevo cargado', other: '{count} titulares nuevos cargados' },
     'reader.announce.none': 'no hay titulares nuevos',
-    'reader.announce.failed': '{count} fuentes no se pudieron actualizar',
+    'reader.announce.failed': { one: '{count} fuente no se pudo actualizar', other: '{count} fuentes no se pudieron actualizar' },
     'reader.announce.error': 'error al actualizar: {error}',
-    'reader.announce.cleared': '{count} titulares eliminados',
+    'reader.announce.cleared': { one: '{count} titular eliminado', other: '{count} titulares eliminados' },
     'reader.announce.deleted': 'titular eliminado',
     'reader.announce.marked': 'titular marcado como leído',
     'reader.announce.unmarked': 'la marca de lectura se ha quitado',
@@ -1855,7 +1942,7 @@ const DICTIONARIES = {
     'feeds.health.checked': 'comprobado {since}',
     'feeds.health.next': 'próxima comprobación {until}',
     'feeds.health.error': 'error: {error}',
-    'feeds.health.streak': '{count} fallos seguidos',
+    'feeds.health.streak': { one: '{count} fallo seguido', other: '{count} fallos seguidos' },
     'feeds.health.pause': 'próximo intento {until}',
 
     'settings.title': 'Ajustes globales',
@@ -1894,8 +1981,8 @@ const DICTIONARIES = {
     'settings.status.cleared': 'Leídos olvidados: {count}',
     'settings.status.emptyRead': 'La lista de leídos ya está vacía',
     'settings.ttlError': 'Número entero de {min} a {max} días',
-    'settings.ttlDays': '{days} d',
-    'settings.ttlYears': '{days} d ({years} a)',
+    'settings.ttlDays': { other: '{days} d' },
+    'settings.ttlYears': { other: '{days} d ({years} a)' },
     'settings.savedTtl': 'caducan en {ttl}',
     'settings.savedSound': 'sonido: {name}',
     'settings.savedSoundEnabled': 'sonido {state}',
@@ -1910,7 +1997,7 @@ const DICTIONARIES = {
     'settings.language': 'Idioma de la interfaz',
 
     // El popup de la descarga automática: cuántos titulares trajo esa descarga.
-    'notify.news': '{count} nuevos titulares descargados',
+    'notify.news': { one: '{count} nuevo titular descargado', other: '{count} nuevos titulares descargados' },
 
     'errors.feedNotFound': 'Fuente no encontrada',
     'errors.feedUrl': 'El enlace de la fuente debe empezar por http:// o https://',
@@ -2007,12 +2094,59 @@ function interpolate(template, params) {
   );
 }
 
-/** Строка текущего языка; недостающий ключ берётся из словаря по умолчанию (ru). */
+/**
+ * Форма для целого числа по правилам CLDR: русскому, украинскому и польскому нужны «один»,
+ * «несколько» и «много»; французское «один» накрывает и ноль («0 titre»); остальным хватает
+ * «один» и «много». Дробное число (срок, выраженный в годах) существительное не согласует.
+ */
+export function pluralCategory(lang, value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || !Number.isInteger(number)) return 'other';
+  const n = Math.abs(number);
+  if (lang === 'ru' || lang === 'uk' || lang === 'pl') {
+    const lastTwo = n % 100;
+    const last = n % 10;
+    if (lastTwo >= 11 && lastTwo <= 14) return 'many';
+    if (last === 1) return 'one';
+    if (last >= 2 && last <= 4) return 'few';
+    return 'many';
+  }
+  if (lang === 'fr') return n <= 1 ? 'one' : 'other';
+  return n === 1 ? 'one' : 'other';
+}
+
+/** Число, с которым согласует форма: первый из счётчиков, который передали записи. */
+function countParam(params) {
+  if (!params) return null;
+  for (const name of COUNT_PARAMS) {
+    if (params[name] !== undefined && params[name] !== null) return params[name];
+  }
+  return null;
+}
+
+/**
+ * Форма числа из записи-объекта: категория языка, а недостающие категории берут `other`. Форма
+ * обязана держать число сама — подставлять его нечем, если `{count}` пропал, и такая запись
+ * остаётся единственной ошибкой, которую словарь может сделать молча.
+ */
+function pluralForm(forms, lang, params, key) {
+  const count = countParam(params);
+  const template = (count === null ? null : forms[pluralCategory(lang, count)]) ?? forms.other ?? '';
+  if (count !== null && !COUNT_PARAMS.some((name) => template.includes(`{${name}}`))) {
+    console.warn(`i18n: ${key} (${lang}) has a plural form without the number itself`);
+  }
+  return template;
+}
+
+/**
+ * Строка текущего языка: недостающий ключ добирается из словаря `FALLBACK_LANGUAGE`, а запись с
+ * формами числа берёт ту из них, которая приходится числу в params.
+ */
 export function t(key, params) {
   const lang = currentLanguage();
-  const dictionary = DICTIONARIES[lang] ?? DICTIONARIES[LANGUAGES[0]];
-  const template =
-    dictionary[key] ?? DICTIONARIES[LANGUAGES[0]][key] ?? key;
+  const dictionary = DICTIONARIES[lang] ?? DICTIONARIES[FALLBACK_LANGUAGE];
+  const entry = dictionary[key] ?? DICTIONARIES[FALLBACK_LANGUAGE][key] ?? key;
+  const template = typeof entry === 'string' ? entry : pluralForm(entry, lang, params, key);
   return interpolate(template, params);
 }
 
@@ -2021,9 +2155,19 @@ export function dictionaryKeys(lang = LANGUAGES[0]) {
   return Object.keys(DICTIONARIES[lang] ?? {});
 }
 
+/**
+ * Запись словаря как есть: строка или объект форм числа. Тест сверяет по ней категории и
+ * placeholders между языками.
+ */
+export function dictionaryEntry(key, lang = LANGUAGES[0]) {
+  const entry = (DICTIONARIES[lang] ?? {})[key];
+  if (entry === undefined) return undefined;
+  return typeof entry === 'string' ? entry : { ...entry };
+}
+
 /** Единицы измерения (мин/ч/дн, «назад») для текущего языка — хелперы `util.js` берут их отсюда. */
 export function unitLabels(lang = currentLanguage()) {
-  const dictionary = DICTIONARIES[lang] ?? DICTIONARIES[LANGUAGES[0]];
+  const dictionary = DICTIONARIES[lang] ?? DICTIONARIES[FALLBACK_LANGUAGE];
   return {
     empty: dictionary['units.empty'],
     minutes: dictionary['units.minutes'],

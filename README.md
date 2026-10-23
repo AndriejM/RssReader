@@ -958,7 +958,13 @@ background.
   language is cached in `localStorage` (`rss-reader:language`): extension pages of one origin
   share the same `localStorage`, so labels are re-pasted before the read from
   `chrome.storage.local` resolves. Language names in the combobox are not translated (“Русский”,
-  “Deutsch”) — that way they are easier to recognize.
+  “Deutsch”) — that way they are easier to recognize. A key a language lacks is taken from the
+  dictionary of `FALLBACK_LANGUAGE` (`en`), so an incomplete language fills its holes with English
+  rather than with the first dictionary of the list. A count that stands next to its noun is not one
+  string: the keys of `PLURAL_KEYS` carry an object of plural forms, and `t()` takes the one
+  `pluralCategory()` gives that number in that language — `1 nagłówek`, `3 nagłówki`, `5 nagłówków`
+  for Polish, `1 headline` and `2 headlines` for English. A counter that reads the same at any
+  number (an abbreviation, or “read marks: N”) stays a single string.
 - **A feed refusal travels as a code, not as text**: `rss.js`, `lib/offscreen.js` and
   `lib/extract.js` mark an error with `code`/`params`, and `src/background.js` and the offscreen
   document pass them to the page as they are (for any error with a `code`, not only `FeedError`),
@@ -1045,7 +1051,7 @@ background.
 node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
                              # storage.js and rss.js), the guards over the screen markup and over what
                              one module borrows from another, and the popup an automatic load shows:
-                             152 tests
+                             157 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
@@ -1112,7 +1118,8 @@ after loading the extension. JSON Feed parsing needs no DOM, so its rules are co
     tooltips and messages of this screen change immediately, and the reader and the feed screen
     open in other tabs re-paste without a reload. First launch (no `language` in storage) → the
     language is taken from the browser; a browser language that is not among the dictionaries →
-    `English`.
+    `English`. Load one headline with the message switched on → the popup says “1 new headline
+    loaded” (in Polish — “Wczytano 1 nowy nagłówek”), not “1 new headlines”.
 18. Add a feed that answers in Windows-1251 (for example
     `https://nnmclub.to/forum/rss.php?f=2&show=0` or `https://nnmclub.to/forum/rssp.xml`) → the
     headlines read as Cyrillic rather than as characters like `ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ñ`; the console
