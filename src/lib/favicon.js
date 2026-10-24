@@ -2,7 +2,7 @@
 //
 // When a feed is added, its page is read once and the icon the site declares is stored on the feed
 // (`feeds.js` -> `store.upsertFeed`). The reader draws that stored link twice: next to the feed name
-// in the left column, and — in «Все ленты» — next to every headline of that feed in the middle one.
+// in the left column, and — in «All feeds» — next to every headline of that feed in the middle one.
 //
 // The two network-free parts are pure: reading the icon out of a page's text (`pageIconCandidates`)
 // and picking the best of the found links (`pickIcon`). They stay testable without a DOM or a network

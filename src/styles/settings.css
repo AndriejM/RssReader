@@ -27,7 +27,7 @@
   padding: 14px;
 }
 
-/* «Записать» commits the whole panel, so it sits in the panel's top-right corner. The «?» folds the
+/* "Save" commits the whole panel, so it sits in the panel's top-right corner. The "?" folds the
    explanation behind an icon so the table below holds only the fields themselves. */
 .card-head {
   align-items: center;
@@ -197,7 +197,7 @@
   color: var(--danger);
 }
 
-/* The field holds a value the store does not have yet; «Записать» is the way to commit it. */
+/* The field holds a value the store does not have yet; "Save" is the way to commit it. */
 .status.pending {
   color: var(--text-muted);
 }

@@ -75,18 +75,18 @@
       <polyline points="15 3 21 3 21 9"></polyline>
       <line x1="10" y1="14" x2="21" y2="3"></line>
     </symbol>
-    <!-- Метка «прочитано»: галочка в круге. Та же метка стоит на строке средней колонки. -->
+    <!-- The "read" marker: a check mark inside a circle. The same marker stands on the row of the middle column. -->
     <symbol id="icon-read" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
       <polyline points="22 4 12 14.01 9 11.01"></polyline>
     </symbol>
-    <!-- Та же метка, снятая: круг с крестом вместо галочки. -->
+    <!-- The same marker taken off: a circle with a cross instead of the check mark. -->
     <symbol id="icon-unread" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"></circle>
       <line x1="15" y1="9" x2="9" y2="15"></line>
       <line x1="9" y1="9" x2="15" y2="15"></line>
     </symbol>
-    <!-- Возврат удалённого заголовка: та же стрелка, что ведёт «назад» во всех экранах. -->
+    <!-- Bringing back a deleted headline: the same arrow that leads "back" on all three screens. -->
     <symbol id="icon-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="1 4 1 10 7 10"></polyline>
       <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
@@ -106,7 +106,7 @@
       <line x1="18" y1="6" x2="6" y2="18"></line>
       <line x1="6" y1="6" x2="18" y2="18"></line>
     </symbol>
-    <!-- Полный текст статьи: страница-документ со строками текста. -->
+    <!-- The full text of the article: a document page with lines of text. -->
     <symbol id="icon-article" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
       <polyline points="14 2 14 8 20 8"></polyline>
@@ -123,7 +123,7 @@
     <div class="actions">
       <!-- The switcher `lib/nav.js` fills with the three screen icons, current screen marked. -->
       <nav class="nav" data-nav-active="reader" data-i18n-aria="nav.group"></nav>
-      <!-- Подсказка по клавишам читалки: тот же список, что ведёт README, только внутри читалки. -->
+      <!-- The keyboard help of the reader: the same list that leads the README, only inside the reader. -->
       <button id="btn-keys" class="icon-btn" type="button" data-i18n-title="reader.keys.toggle" data-i18n-aria="reader.keys.toggle">
         <svg class="icon" aria-hidden="true"><use href="#icon-help"></use></svg>
       </button>
@@ -142,7 +142,7 @@
         <div class="font-scale" data-font-scale="feeds"></div>
       </div>
       <div class="panel-scroll">
-        <!-- Строки этой колонки — ленты, одна из них выбрана (`aria-current` в `index.js`). -->
+        <!-- The rows of this column are feeds, one of them selected (`aria-current` in `index.js`). -->
         <ul class="list" id="feed-list" role="list" data-i18n-aria="reader.feeds.list.aria"></ul>
         <p class="empty" id="feeds-empty" hidden data-i18n="reader.feeds.empty"></p>
       </div>
@@ -174,7 +174,7 @@
         />
         <!--
           Load / clear sit beside the feed name and follow the left column's selection: a single
-          feed loads/cleans just that feed, «Все ленты» does it for every feed at once.
+          feed loads/cleans just that feed, "All feeds" does it for every feed at once.
         -->
         <button id="btn-load" class="icon-btn" type="button" data-i18n-title="reader.refresh.tooltip" data-i18n-aria="reader.refresh.aria">
           <svg class="icon" aria-hidden="true"><use href="#icon-rss"></use></svg>
@@ -192,10 +192,11 @@
       <p class="panel-status muted" id="feed-status" hidden></p>
       <div class="panel-scroll">
         <!--
-          Средняя колонка — `listbox`: её строки — `option` (их ставит `index.js`), открытая новость —
-          `aria-selected`, а клавиатурный курсор — `aria-activedescendant` той же строки. Курсор стоит
-          на самом списке: одна строка `tabindex` на всю колонку, поэтому пять тысяч заголовков не
-          разбивают Tab на пять тысяч кнопок, а строка `option` не держит внутри себя действия.
+          The middle column is a `listbox`: its rows are `option`s (index.js puts them there), the open
+          news is the one with `aria-selected`, and the keyboard cursor is the `aria-activedescendant` of
+          that same row. The cursor stands on the list itself: one `tabindex` line for the whole column,
+          so five thousand headlines do not break Tab into five thousand buttons, and an `option` row holds
+          no actions inside itself.
         -->
         <ul
           class="list"
@@ -206,9 +207,9 @@
         ></ul>
         <p class="empty" id="headlines-empty" hidden data-i18n="reader.headlines.emptyNoFeed"></p>
         <!--
-          Первое открытие читалки: средней колонке нечего показывать, пока в хранилище нет ни одной
-          ленты. Карточка называет это прямо и даёт кнопку перехода на экран лент — тот же путь, что
-          иконка лент в переключателе экранов (`lib/nav.js`), только сказанная словами.
+          The first opening of the reader: the middle column has nothing to show while the storage holds no
+          feed at all. The card names this plainly and gives a button to the feeds screen — the same road
+          as the feeds icon in the screen switcher (`lib/nav.js`), only said in words.
         -->
         <div class="start-card" id="start-card" hidden>
           <svg class="icon start-card-icon" aria-hidden="true"><use href="#icon-rss"></use></svg>
@@ -231,7 +232,7 @@
       <!--
         Original link now lives in the article title itself, so the toolbar holds the three things a
         headline can be given: the full text the reader pulls from the page on demand, the mark that
-        keeps its news out of the polls («прочитано») and the trash that throws the headline itself away.
+        keeps its news out of the polls ("read") and the trash that throws the headline itself away.
       -->
       <div class="content-toolbar">
         <button
@@ -262,21 +263,22 @@
       </div>
       <article class="content-body" id="content-body">
         <!--
-          Плейсхолдер правой панели стоит в разметке и остаётся на месте, когда панель показывает
-          то себя, то статью: живой регион, который пересоздают, экрану объявить нельзя. Поэтому
-          строка статьи — отдельный сосед внутри той же панели. Роль строке (`status` или `alert`)
-          ставит `showPlaceholder()`: отказ загрузки — то, о чём нужно сказать сразу, пустота панели
-          — то, что не должно перебивать чтение (см. `index.js`).
+          The placeholder of the right panel stands in the markup and keeps its place when the panel shows
+          now itself, now the article: a live region that gets recreated cannot be announced to a screen
+          reader. That is why the article line is a separate neighbour inside the same panel. The role of
+          the line (`status` or `alert`) is put by `showPlaceholder()`: a failed load is something that has
+          to be said at once, the emptiness of the panel is something that must not interrupt reading (see
+          `index.js`).
         -->
         <p class="empty" id="content-empty" role="status" data-i18n="reader.content.empty"></p>
         <div class="article-body" id="article-body"></div>
       </article>
       <!--
-        Строка отмены: её ставит удаление заголовка, и она же возвращает его назад, пока её окно
-        стоит. Подпись кнопки названа словарём, сам текст строки называет удалённый заголовок
-        (см. `index.js` -> `renderUndo`). Она идёт после текста и лежит вдоль его нижнего края —
-        наложенной на колонку, а не в её ряду: появление строки не двигает статью (см.
-        `.undo-line` в `styles/reader.css`).
+        The undo line: a deleted headline puts it up, and it is also what brings the headline back while
+        its window stands. The caption of the button is named by the dictionary, the text of the line names
+        the deleted headline (see `index.js` -> `renderUndo`). It comes after the text and lies along its
+        lower edge — overlaid on the column rather than in its flow: the line appearing does not move the
+        article (see `.undo-line` in `styles/reader.css`).
       -->
       <p class="undo-line" id="undo-line" hidden>
         <span class="undo-text" id="undo-text"></span>
@@ -289,10 +291,10 @@
   </main>
 
   <!--
-    Подсказка по клавишам: список, который раньше жил только в README, теперь стоит там, где клавиши
-    применяются. `showModal()` (см. `index.js`) даёт ему всё, что нужно клавиатуре: фокус запирается
-    внутри, `Esc` и клик по фону закрывают окно, а соседям по экрану `index.js` ставит `aria-hidden`,
-    чтобы указатель Tab не уходил за окно.
+    The keyboard help: the list that used to live only in the README now stands where the keys are
+    applied. `showModal()` (see `index.js`) gives it everything the keyboard needs: the focus is locked
+    inside, `Esc` and a click on the background close the dialog, and `index.js` puts `aria-hidden` on the
+    screen's neighbours so the Tab pointer does not walk past the dialog.
   -->
   <dialog id="keys-help" class="keys-help" aria-labelledby="keys-help-title">
     <div class="keys-card">
@@ -362,10 +364,10 @@
   </dialog>
 
   <!--
-    Что читалка говорит вслух, когда перерисовывает панель: сколько заголовков пришло, сколько лент
-    отказалось, что удалено. Эта строка нигде не рисуется (см. `.sr-only` в `reader.css`), но экран
-    читает её вслух; та же правда стоит в самих панелях, где её видит глаз. Строку описывает общий
-    для всех экранов `theme.css` (см. `.sr-only`).
+    What the reader says out loud when it redraws a panel: how many headlines came, how many feeds refused,
+    what was deleted. This line is drawn nowhere (see `.sr-only` in `reader.css`), but a screen reader reads
+    it aloud; the same truth stands in the panels themselves, where the eye sees it. The line is described by
+    `theme.css`, which is shared by all three screens (see `.sr-only`).
   -->
   <p class="sr-only" id="reader-announce" role="status" aria-live="polite" aria-atomic="true"></p>
 

@@ -100,10 +100,10 @@ function actionButton(icon, caption, { danger = false, disabled = false } = {}) 
 }
 
 /**
- * Что экран настроек знает о последней попытке прочесть ленту: когда её читали, когда следующая,
- * и — если лента сейчас сломана — почему, сколько отказов подряд и когда её попробуют снова.
- * Отказ подписывается тем же `describeError`, что и ошибка загрузки, поэтому код отказа не
- * остаётся сырым ключом словаря.
+ * What the settings screen knows about the last attempt to read a feed: when it was read, when the
+ * next one is, and — if the feed is broken right now — why, how many failures in a row and when it
+ * will be tried again. The failure is labeled with the same `describeError` as a load error, so a
+ * failure code does not stay a raw dictionary key.
  */
 function feedHealthLine(feed, now = Date.now(), labels = unitLabels()) {
   const parts = [];
@@ -129,8 +129,8 @@ function feedHealthLine(feed, now = Date.now(), labels = unitLabels()) {
     parts.push(t('feeds.health.streak', { count: failures }));
   }
 
-  /* Отказ назначает паузу, растущую с каждым сбоем: будильник ленты остаётся своим, но попытка
-   * во время паузы пропускается (`background.js`), поэтому строка называет именно её срок. */
+  /* A failure assigns a pause that grows with every fault: the feed's alarm stays its own, but an
+   * attempt during the pause is skipped (`background.js`), so the line names exactly its deadline. */
   const retryAt = Number(feed.nextRetryAt);
   if (retryAt > now) {
     parts.push(t('feeds.health.pause', { until: formatUntil(retryAt, now, labels) }));
@@ -181,9 +181,10 @@ function buildRow(feed, { draft }) {
   const noteCell = document.createElement('td');
   noteCell.colSpan = 5;
 
-  /* Здоровье ленты — отдельная строка под ней, постоянная: когда её читали, что вышло из этой
-   * попытки и когда следующая. Она живёт отдельно от `status`, куда пишут мимолётный ответ кнопки
-   * «Загрузить сейчас», чтобы диагноз не пропал, как только кончилось сообщение о загрузке. */
+  /* A feed's health is its own line under it, a permanent one: when it was read, what came of this
+   * attempt and when the next one is. It lives apart from `status`, which a transient answer of the
+   * "Load now" button is written into, so the diagnosis does not vanish as soon as the load message
+   * ends. */
   const health = document.createElement('div');
   health.className = 'feed-health muted';
   const healthLine = draft ? '' : feedHealthLine(feed);
@@ -226,10 +227,10 @@ function buildRow(feed, { draft }) {
 }
 
 /**
- * Что экран сообщает вслух: те же слова, что пишет глаз под рядом или под таблицей, но прочитанные
- * экраном. Живой статус отвечает на изменение текста, поэтому одно и то же сообщение двух подряд
- * кнопок снимается и ставится заново — иначе вторая «Сохранено» была бы молчанием. Пустая строка
- * молчит: перерисовка ряда из-за изменения хранилища на другом экране рассказом не считается.
+ * What the screen announces aloud: the same words it writes under a row or under the table, but read
+ * out by a screen reader. A live status answers to a change of text, so the same message from two
+ * buttons in a row is cleared and set anew — otherwise the second "Saved" would be silence. An empty
+ * line is silent: a row redrawn because storage changed on another screen does not count as a story.
  */
 function announce(message) {
   if (!message) return;
@@ -280,8 +281,9 @@ async function saveRow(rowRecord) {
 
   feed.id = rowRecord.feed.id ?? newId();
 
-  /* Первый ряд пустой таблицы: читалка ещё не показывала ни одной своей ленты. Спрашивать о этом
-   * нужно до записи — после неё таблица уже не пуста, и отличить первый ряд от второго нельзя. */
+  /* The first row of an empty table: the reader has not shown a single one of its feeds yet. That
+   * must be asked before the write — after it the table is no longer empty, and the first row cannot
+   * be told from the second. */
   const firstFeed = (await storage.getFeeds()).length === 0 && !(await storage.getFirstFeedDone());
 
   await storage.upsertFeed(feed);
@@ -303,11 +305,11 @@ async function saveRow(rowRecord) {
   await render();
 
   /*
-   * Первый добавленный ряд получает подтверждение всей таблицы, а не заметку ряда: `render()` только
-   * что перестроил ряды и их заметки, а рассказ здесь о том, что читалке есть что показывать. Строка
-   * говорит о заголовках лишь тогда, когда их правда принесли: лента, которой не удалось прочесть
-   * сервер, называет свой отказ в заметке ряда, и повторять его под таблицей незачем. Отметка
-   * остаётся неснятой, чтобы подтверждение вышло один раз — при первом удачном добавлении.
+   * The first added row gets a confirmation for the whole table, not a row note: `render()` has just
+   * rebuilt the rows and their notes, and the story here is that the reader has something to show.
+   * The line speaks of headlines only when they really came: a feed that could not read the server
+   * names its failure in the row's note, and repeating it under the table is pointless. The mark
+   * stays uncleared so the confirmation comes out once — at the first successful add.
    */
   if (firstFeed && loaded?.ok && !loaded.busy) {
     await storage.setFirstFeedDone();
@@ -361,12 +363,14 @@ async function refreshRow(rowRecord) {
     });
     if (response?.ok) {
       if (response.busy) {
-        /* Ленту читает другой контекст: этот запрос её не начинал и поэтому не имеет своих цифр.
-         * Тот же адрес второй раз не спросили, и строка честно говорит, что лента загружается. */
+        /* Another context is reading the feed: this request did not start its read and therefore has
+         * no numbers of its own. The same address was not asked a second time, and the line honestly
+         * says the feed is loading. */
         setStatus(rowRecord, t('common.loading'));
       } else if (response.notModified) {
-        /* Сервер ответил пустым 304: лента ровно та, что уже лежит в хранилище. «считано: 0»
-         * выглядело бы как пустая лента, поэтому строка говорит прямо, что не изменилось ничего. */
+        /* The server answered with an empty 304: the feed is exactly the one already in storage.
+         * "read: 0" would look like an empty feed, so the line says straight out that nothing
+         * changed. */
         setStatus(rowRecord, t('feeds.resultUnchanged'));
       } else {
         setStatus(
@@ -391,12 +395,12 @@ async function refreshRow(rowRecord) {
     setStatus(rowRecord, describeError(error), 'error');
     return null;
   } finally {
-    /* Загрузка оставила в хранилище свежий диагноз ленты; перечитаем его, чтобы постоянная строка
-     * под рядом показала ту попытку, что только что случилась, а не ту, что была при открытии. */
+    /* The load left a fresh feed diagnosis in storage; re-read it so the permanent line under the
+     * row shows the attempt that just happened, not the one from when the screen opened. */
     const fresh = await storage.getFeed(rowRecord.feed.id);
     if (rowRecord.health && fresh) {
-      /* Тот же диагноз записывает и сам ряд: без этого следующий тик (`refreshHealthLines`)
-       * перечеркнул бы строку по ленте, какой та была до этой загрузки. */
+      /* The same diagnosis is written into the row record itself: without it the next tick
+       * (`refreshHealthLines`) would redraw the line from the feed as it was before this load. */
       rowRecord.feed = fresh;
       const line = feedHealthLine(fresh);
       rowRecord.health.textContent = line;
@@ -404,8 +408,8 @@ async function refreshRow(rowRecord) {
     }
   }
 
-  /* Ответ чтения нужен не только строке ряда: он говорит, что первая лента действительно принесла
-   * свои заголовки (см. `saveRow`). */
+  /* The read's answer is needed not only by the row's line: it says that the first feed really
+   * brought its headlines (see `saveRow`). */
   return response;
 }
 
@@ -427,8 +431,8 @@ async function render() {
     ...[...state.drafts].map((draft) => buildRow(draft, { draft: true })),
   ];
 
-  /* Ряды, которые экран держит открытыми: по ним `refreshHealthLines` перечёркивает возраст
-   * диагностики, не перестраивая таблицу. */
+  /* The rows the screen keeps open: `refreshHealthLines` strikes through the age of the diagnosis
+   * along them without rebuilding the table. */
   liveRows = rows.map(({ record }) => record);
 
   for (const { record, note } of rows) {
@@ -444,8 +448,8 @@ els.add.addEventListener('click', () => {
 });
 
 /**
- * Отчёт о переносе всей таблицы. Он не относится ни к одной строке, поэтому берёт себе строку под
- * таблицей, а не чужую заметку ряда.
+ * A report about moving the whole table. It belongs to no single row, so it takes its own line under
+ * the table instead of borrowing a row's note.
  */
 function sayTransfer(message, kind = '') {
   els.transfer.textContent = message;
@@ -455,9 +459,9 @@ function sayTransfer(message, kind = '') {
 }
 
 /**
- * Выписать таблицу лент в файл: то, что пользователь задал сам, без местных идентификаторов и без
- * диагноза чтения (см. `storage.buildFeedsExport`). Адрес живёт ровно столько, сколько нужно,
- * чтобы загрузка забрала файл.
+ * Write the feed table out to a file: what the user set themselves, without local ids and without a
+ * read diagnosis (see `storage.buildFeedsExport`). The address lives exactly as long as the download
+ * needs to take the file.
  */
 async function exportFeeds() {
   const feeds = await storage.getFeeds();
@@ -483,9 +487,9 @@ async function exportFeeds() {
 }
 
 /**
- * Прочитать принесённый файл и дописать его ленты тем, что уже настроены. Строки, которые не
- * прошли ту же проверку, что и строка таблицы, не спасаются «на глаз»: они просто не добавляются,
- * и их количество называется отдельно — пользователь видит, что в файле была кривая строка.
+ * Read the brought-in file and append its feeds to the ones already configured. Lines that do not
+ * pass the same check a table line passes are not saved "by eye": they simply are not added, and
+ * their count is named separately — the user sees the file held a broken line.
  */
 async function readFeedsFile(file) {
   let text;
@@ -513,8 +517,8 @@ async function readFeedsFile(file) {
   if (parts.length === 0) sayTransfer(t('feeds.import.none'), 'error');
   else sayTransfer(parts.join(' · '), added > 0 ? 'ok' : '');
 
-  /* Лента без будильника сама не читается: worker строит их по хранилищу, поэтому о новом ряду
-   * нужно сказать ему, а не ждать ближайшей проверки. */
+  /* A feed without an alarm never reads itself: the worker builds the alarms from storage, so a new
+   * row must be reported to it instead of waiting for the next sweep. */
   if (added > 0) await notifyBackground();
   await render();
 }
@@ -525,7 +529,7 @@ els.import.addEventListener('click', () => els.importFile.click());
 
 els.importFile.addEventListener('change', () => {
   const file = els.importFile.files?.[0] ?? null;
-  // Поле отвечает на тот же файл вторично как на новое значение только когда оно пустое.
+  // The field answers to the same file a second time as a new value only when it is empty.
   els.importFile.value = '';
   if (file) void readFeedsFile(file);
 });
@@ -557,10 +561,10 @@ applyI18n();
 await render();
 
 /*
- * Строка диагностики ряда говорит о времени: когда ленту читали и когда спросят снова. Её рисуют
- * вместе с рядом, а таблица стоит открытой ровно столько, сколько её правят, — поэтому раз в минуту
- * строки перечёркивают на месте. Вкладку, которой никто не видит, для этого не будят: она догонит
- * сама, когда снова станет видимой.
+ * A row's diagnosis line speaks of time: when the feed was read and when it will be asked again. It
+ * is drawn together with the row, and the table stands open exactly as long as it is being edited —
+ * so once a minute the lines are struck through in place. A tab nobody is looking at is not woken for
+ * this: it will catch up on its own once it becomes visible again.
  */
 function refreshHealthLines() {
   const now = Date.now();

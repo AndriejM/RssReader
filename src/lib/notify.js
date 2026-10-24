@@ -1,13 +1,13 @@
-// Сообщение об автоматической загрузке, принёсшей заголовки: popup самого Chrome
-// (`chrome.notifications`), потому что у service worker'а нет страницы, куда можно положить
-// текст. Показывается только когда на экране глобальных настроек включён флаг `show_message`.
+// A message about an automatic load that brought headlines: Chrome's own popup
+// (`chrome.notifications`), because a service worker has no page to put text on. It shows only
+// when the `show_message` flag is on on the global settings screen.
 //
-// Язык подписи — тот, что записан на экране настроек: `store.getLanguage()` попутно кладёт его
-// в кэш `i18n.t()`. Worker'у localStorage недоступен, но кэш в памяти у него свой, а при
-// отсутствии записи fallback берёт язык браузера.
+// The label's language is the one recorded on the settings screen: `store.getLanguage()` also
+// drops it into the `i18n.t()` cache. localStorage is unavailable to the worker, but it has its
+// own in-memory cache, and with no record stored the fallback takes the browser's language.
 //
-// Клик по сообщению открывает читалку (`wireNotificationClicks`): popup называет, сколько
-// заголовков пришло, — и смотреть их нужно там, где их показывает расширение.
+// A click on the message opens the reader (`wireNotificationClicks`): the popup names how many
+// headlines arrived — and they must be viewed where the extension shows them.
 
 import { t } from './i18n.js';
 import { getLanguage, getShowMessage } from './storage.js';
@@ -18,21 +18,22 @@ const NOTIFICATION_ID = 'rss-reader:ingest';
 const ID_PREFIX = `${NOTIFICATION_ID}:`;
 
 /*
-  Сообщения, которые расширение вынесло на экран и ещё не сняло, — от старых к новым. Список живёт
-  в памяти worker'а, а её снимают между делами: `chrome.notifications.getAll()` называет эти id при
-  следующем запуске, поэтому список — не начало, а только то, что worker успел запомнить.
+  The messages the extension has put on screen and not yet cleared — from oldest to newest. The
+  list lives in the worker's memory, which is dropped between jobs: `chrome.notifications.getAll()`
+  names these ids at the next run, so the list is not a beginning but only what the worker managed
+  to remember.
 */
 const shown = [];
 
-/** Счётчик внутри одного id: две ленты, отчитавшиеся в одну миллисекунду, не получают один id. */
+/** A counter inside one id: two feeds reporting in the same millisecond do not share one id. */
 let sequence = 0;
 
-/** id сообщения: время события и счётчик внутри него. */
+/** The message's id: the event's time and the counter inside it. */
 export function notificationId(now, step) {
   return `${ID_PREFIX}${now}:${step}`;
 }
 
-/** Время, которое `notificationId` прячет в своём втором поле, — или 0, если id не читается. */
+/** The time `notificationId` hides in its second field — or 0 if the id cannot be read. */
 function notificationTime(id) {
   if (!String(id ?? '').startsWith(ID_PREFIX)) return 0;
   const stamp = Number(id.slice(ID_PREFIX.length).split(':')[0]);
@@ -49,9 +50,9 @@ function forget(id) {
 }
 
 /**
- * Снять лишнее: одно автоматическое событие читает одну ленту и рапортует о себе само, поэтому
- * сорок лент, чьи будильники приходят в одну минуту, дают сорок сообщений. Chrome их не
- * ограничивает, а очередь системного центра тем временем перестаёт быть очередью новостей.
+ * Clear the excess: one automatic event reads one feed and reports on itself, so forty feeds whose
+ * alarms arrive in the same minute give forty messages. Chrome does not limit them, and meanwhile
+ * the system center's queue stops being a queue of news.
  */
 async function trimShown() {
   while (shown.length > NOTIFY_MAX_ACTIVE) {
@@ -62,12 +63,12 @@ async function trimShown() {
 }
 
 /**
- * Снять то, что пережило память worker'а: `getAll` даёт одни id, без времени, зато время лежит в
- * самом id. Список того, что worker помнит, строится по нему заново — иначе лимит считал бы только
- * новые сообщения, а старые висели бы поверх него.
+ * Clear what survived the worker's memory: `getAll` gives only ids, without time, but the time lies
+ * in the id itself. The list of what the worker remembers is rebuilt from it — otherwise the limit
+ * would count only the new messages while the old ones piled on top of it.
  *
- * @param {string[]} liveIds Сообщения, которые Chrome называет живыми
- * @returns {Promise<string[]>} Снятые сообщения — от старых к новым
+ * @param {string[]} liveIds Messages Chrome names as live
+ * @returns {Promise<string[]>} Cleared messages — from oldest to newest
  */
 export async function pruneLiveNotifications(liveIds) {
   const ours = liveIds
@@ -87,32 +88,32 @@ export async function pruneLiveNotifications(liveIds) {
 }
 
 /**
- * @param {number} count Сколько новых заголовков принесла загрузка
- * @returns {Promise<boolean>} Показался ли popup
+ * @param {number} count How many new headlines the load brought
+ * @returns {Promise<boolean>} Whether the popup showed
  */
 export async function notifyIngest(count) {
   if (!(count > 0)) return false;
   if (!(await getShowMessage())) return false;
 
-  // Язык берётся из того же `settings`, что и флаг: `getLanguage` кладёт его в кэш `t()`.
+  // The language comes from the same `settings` as the flag: `getLanguage` puts it into the `t()` cache.
   await getLanguage();
 
-  // Уникальный id на каждое событие: несколько лент, загрузившихся в одну минуту, получают
-  // по своему сообщению, а не переписывают друг друга.
+  // A unique id for every event: several feeds loaded in the same minute each get their own
+  // message instead of overwriting one another.
   const id = notificationId(Date.now(), (sequence += 1));
   try {
     await chrome.notifications.create(id, {
       type: 'basic',
-      // От service worker'а относительный iconUrl не разрешается — Chrome отвечает
-      // «Unable to download all specified images». Абсолютный адрес расширения работает.
+      // From a service worker a relative iconUrl is not resolved — Chrome answers
+      // "Unable to download all specified images". An absolute extension URL works.
       iconUrl: chrome.runtime.getURL('icons/icon128.png'),
       title: t('app.name'),
       message: t('notify.news', { count }),
     });
     remember(id);
     await trimShown();
-    // Chrome держит уведомление до закрытия пользователем; это короткое сообщение о загрузке,
-    // поэтому оно снимает себя само.
+    // Chrome keeps a notification until the user closes it; this is a short load message,
+    // so it clears itself.
     setTimeout(() => void chrome.notifications.clear(id), NOTIFY_TTL_SECONDS * 1000);
     return true;
   } catch (error) {
@@ -123,9 +124,9 @@ export async function notifyIngest(count) {
 }
 
 /**
- * Клик по сообщению: оно снимается с экрана и из списка, державшего для него место, а читалка —
- * там, где живут заголовки, о которых оно сообщило — та же вкладка, что поднимает и иконка в
- * тулбаре.
+ * A click on the message: it is cleared from the screen and from the list that kept its place, and
+ * the reader — where the headlines it reported on live — is raised in the same tab as the toolbar
+ * icon does.
  */
 export async function answerNotificationClick(id) {
   await chrome.notifications.clear(id);
@@ -133,13 +134,13 @@ export async function answerNotificationClick(id) {
   return focusOrCreateTab(READER_PAGE);
 }
 
-/* Слушатели стоят один раз: worker может быть вычислен заново, а Chrome не должен отвечать на один
-   клик дважды. */
+/* The listeners are placed once: the worker may be torn down and rebuilt, and Chrome must not
+   answer one click twice. */
 let wired = false;
 
 /**
- * Слушатели ставит worker, как и остальные свои слушатели (`chrome.action.onClicked`): им нужно,
- * чтобы они стояли до того, как Chrome позовёт их по событию.
+ * The worker places the listeners, like all its other listeners (`chrome.action.onClicked`): they
+ * need to stand before Chrome calls them on an event.
  */
 export function wireNotificationClicks() {
   if (wired) return;
@@ -149,12 +150,12 @@ export function wireNotificationClicks() {
     void answerNotificationClick(id);
   });
 
-  // Снятие сообщения освобождает место в лимите: и то, что снял пользователь, и то, что сняло
-  // само себя по `NOTIFY_TTL_SECONDS`.
+  // Clearing a message frees a slot in the limit: both what the user cleared and what cleared
+  // itself after `NOTIFY_TTL_SECONDS`.
   chrome.notifications.onClosed.addListener((id) => forget(id));
 
-  // Сообщения, пережившие память worker'а, снимаются при его запуске: иначе лимит считает только
-  // то, что worker помнит, а очередь системного центра — всё остальное.
+  // Messages that survived the worker's memory are cleared at its start: otherwise the limit counts
+  // only what the worker remembers, while the system center's queue holds everything else.
   void chrome.notifications
     .getAll()
     .then((live) => pruneLiveNotifications(Object.keys(live ?? {})))

@@ -19,15 +19,16 @@ export function feedIdFromAlarm(alarmName) {
 }
 
 /**
- * Когда будильник ленты сработает в следующий раз.
+ * When a feed's alarm will fire next.
  *
- * Chrome называет этот момент сам — `scheduledTime` (и `nextFireAt` там, где его ещё отдают),
- * но срок, который уже прошёл, описывает срабатывание, отработавшее или задержанное сном
- * устройства: для ленты он ничего не обещает, кроме следующего периода после него. Когда Chrome
- * срока не назвал вовсе, остаётся то, ради чего будильник заводился: один период от сейчас.
+ * Chrome names this moment itself — `scheduledTime` (and `nextFireAt` where it is still reported),
+ * but a deadline that has already passed describes a firing that already happened or was delayed
+ * by the device sleeping: for a feed it promises nothing beyond the next period after it. When
+ * Chrome names no deadline at all, what remains is the very reason the alarm was set: one period
+ * from now.
  * @param {{ periodInMinutes?: number, scheduledTime?: number, nextFireAt?: string }} alarm
- * @param {number} soon - момент, от которого считается срок, когда названного нет
- * @param {number} periodMinutes - период, с которым этот будильник заведён
+ * @param {number} soon - the moment the deadline is counted from when none was named
+ * @param {number} periodMinutes - the period this alarm was set with
  */
 export function alarmDueAt(alarm, soon, periodMinutes) {
   const period = Number(alarm?.periodInMinutes) || periodMinutes;

@@ -51,11 +51,11 @@
 }
 
 /*
-  Что делает читалку пригодной для клавиатуры и экрана:
+  What makes the reader usable by keyboard and by a screen reader:
 
-  - крутящийся значок — только движение, а не сообщение: без него та же работа видна по нажатой
-    (`disabled`) кнопке и по её подсказке «Загрузка…»;
-  - полоса-ручка границы колонки появляется без плавания цвета.
+  - the spinning icon is only movement, never a message: without it the same work still shows on the
+    pressed (`disabled`) button and on its "Loading…" tooltip;
+  - the column-border handle appears without colour floating in.
 */
 @media (prefers-reduced-motion: reduce) {
   .icon-btn.busy .icon {
@@ -219,7 +219,7 @@
   padding: 6px 12px 7px;
 }
 
-/* Отказ последней попытки стоит в этой же строке, но глухим сроком он быть не должен. */
+/* The failure of the last attempt stands in this same line, but it must not be a dim line. */
 .panel-status.error {
   color: var(--danger);
 }
@@ -242,9 +242,9 @@
   margin-bottom: 4px;
 }
 
-/* Строка левой колонки — кнопка, строка средней — `option` без действия внутри (см. `index.js`):
-   обе выглядят одинаково, поэтому их рисуют одни и те же правила. Курсор `pointer` средней колонке
-   нужен явно: блок сам по себе не говорит, что по нему кликают. */
+/* The row of the left column is a button, the row of the middle one an `option` with no action inside it
+   (see `index.js`): both look the same, so the same rules draw them. The middle column needs its
+   `pointer` cursor explicitly: a block by itself does not say it can be clicked. */
 .list-item > button,
 .list-item > .item-row {
   align-items: center;
@@ -272,10 +272,10 @@
 }
 
 /*
-  Клавиатурный курсор строки списка: рамка стоит вокруг всей строки, а не вокруг её текстовой части,
-  и она рисуется внутри строки — широкая строка на всю колонку не толкает соседние. Мышиный клик
-  рамки не получает: отвечает только `:focus-visible`, то есть ход по списку с клавиатуры.
-  Левой колонке рамка нужна на самой строке: фокус держит её кнопка.
+  The keyboard cursor of a list row: the frame stands around the whole row, not around its text part, and it
+  is drawn inside the row — a wide row spanning the column does not push its neighbours. A mouse click gets
+  no frame: only `:focus-visible` answers, that is, walking the list from the keyboard. The left column needs
+  the frame on the row itself: its button holds the focus.
 */
 .list-item > button:focus-visible {
   outline: 2px solid var(--accent);
@@ -287,10 +287,11 @@
 }
 
 /*
-  Курсор клавиатуры средней колонки держит сам список (см. `tabindex` и `aria-activedescendant` в
-  `index.html`): обвести колонку из нескольких тысяч заголовков — значит не сказать, где курсор.
-  Поэтому рамка берётся от строки, на которую список указывает, а сама колонка рамки не получает.
-  Строка открытой новости залита акцентом, поэтому рамка берёт цвет её текста, а не тот же акцент.
+  The keyboard cursor of the middle column is held by the list itself (see `tabindex` and
+  `aria-activedescendant` in `index.html`): drawing a frame around a column of several thousand headlines
+  would say nothing about where the cursor is. So the frame comes from the row the list points at, and the
+  column itself gets no frame. The row of the open news is filled with the accent, so the frame takes the
+  colour of its text rather than the same accent.
 */
 #headline-list:focus-visible {
   outline: none;
@@ -301,7 +302,7 @@
   outline-offset: -2px;
 }
 
-/* Список, у которого нет открытой строки, не должен оставаться без ответа на то, что фокус в нём. */
+/* A list with no open row must not stay without an answer to the focus being in it. */
 #headline-list:not(:has(.list-item.selected)):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
@@ -387,7 +388,7 @@
 /*
   The feed's icon is a fixed box every row reserves, whether or not the feed has one: the stored link
   is drawn inside it (see `index.js`), and a feed with no icon keeps the box empty, so the titles of
-  all feeds line up. `item-icon` holds the RSS glyph of the «Все ленты» row just as well.
+  all feeds line up. `item-icon` holds the RSS glyph of the "All feeds" row just as well.
 */
 .item-icon {
   align-items: center;
@@ -406,9 +407,10 @@
 }
 
 /*
-  Метка «прочитано» строки средней колонки: тот же глиф, что стоит на кнопке правой панели. Он стоит
-  при названии и не меняет его высоты; само название чуть глуше — эта строка уже не та, что читалка
-  предлагает прочесть. Залитая акцентом строка берёт цвет своего текста, как и глиф отказа ленты.
+  The "read" marker of a middle-column row: the same glyph that stands on the right panel's button. It stands
+  beside the title and does not change the title's height; the title itself is a little dimmer — this row is
+  no longer the one the reader offers to read. A row filled with the accent takes the colour of its own text,
+  like the glyph of a feed's failure does.
 */
 .item-title .read-flag {
   color: var(--text-muted);
@@ -434,15 +436,15 @@
   padding: 12px 10px;
 }
 
-/* Правая панель говорит об отказе загрузки — тем же цветом, что и заметка статьи о нём. */
+/* The right panel speaks of a failed load — in the same colour as the article's note about it. */
 .empty.error {
   color: var(--danger);
 }
 
 /*
-  Первый запуск читалки: карточка стоит на месте будущей средней колонки, а не посреди неё — список
-  заголовков начнётся ровно там, где стояла карточка. Её рамка и фон берут цвета панелей, чтобы это
-  была подпись экрана, а не чужое окно поверх него.
+  The reader's first run: the card stands at the place the future middle column will take, not in the middle
+  of it — the list of headlines begins exactly where the card stood. Its frame and background take the
+  colours of the panels, so it is a caption of the screen rather than a foreign window over it.
 */
 .start-card {
   background: var(--bg-panel-alt);
@@ -464,7 +466,7 @@
   max-width: 42ch;
 }
 
-/* Знак RSS над подписью — та же рука, что рисует ленту в строке списка, только крупнее. */
+/* The RSS sign above the caption — the same hand that draws the feed in a list row, only larger. */
 .start-card-icon {
   color: var(--text-muted);
   height: 30px;
@@ -472,17 +474,18 @@
 }
 
 /*
-  Подсказка по клавишам: окно поверх всех трёх колонок. Затемнение даёт само окно (`::backdrop`), а
-  его карточка носит цвета панелей, чтобы была частью читалки, а не чужим окном над ней.
+  The keyboard help: a window over all three columns. The darkening comes from the dialog itself
+  (`::backdrop`), and its card wears the colours of the panels so it is part of the reader rather than a
+  foreign window above it.
 
-  Окно растянуто на весь экран и центрирует свою карточку: тогда клик мимо карточки — это клик по
-  самому окну, и `index.js` может по нему закрыть подсказку. Без этого поле клика ограничено карточкой,
-  а остальной экран — уже `::backdrop`, который клику не отвечает.
+  The dialog is stretched over the whole screen and centers its card: then a click past the card is a click
+  on the dialog itself, and `index.js` can close the help by it. Without this the clickable field is bounded
+  by the card, and the rest of the screen is already `::backdrop`, which answers no click.
 
-  Раскладка стоит только на `[open]`: браузер прячет закрытое окно правилом
-  `dialog:not([open]) { display: none }`, а `display` без этого условия отменяет его — подсказка висит
-  над читалкой с её открытия и ни `Esc`, ни крестик её не закрывают, потому что окно никогда не было
-  открыто по-настоящему.
+  The layout stands only on `[open]`: the browser hides a closed dialog with the rule
+  `dialog:not([open]) { display: none }`, and a `display` without that condition cancels it — the help would
+  hang over the reader from its opening, and neither `Esc` nor the cross would close it, because the dialog
+  was never truly open.
 */
 .keys-help[open] {
   background: transparent;
@@ -507,8 +510,8 @@
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   color: var(--text);
-  /* `margin: auto`, а не `align-items: center`: подсказка ниже, чем окно, её верхний край не уезжает
-     за прокрутку, которую `overflow: auto` уже не достаёт. */
+  /* `margin: auto`, not `align-items: center`: the help is lower than the dialog, and its top edge does not
+     run past a scroll that `overflow: auto` can no longer reach. */
   margin: auto;
   max-width: min(560px, 92vw);
   padding: 14px 16px 16px;
@@ -559,7 +562,7 @@
   border-bottom: none;
 }
 
-/* Клавиша в колонке клавиш: квадратик с надписью, а не просто буква в строке текста. */
+/* A key in the keys column: a small box with a label on it, not just a letter in a line of text. */
 .keys-keys {
   white-space: nowrap;
 }
@@ -586,10 +589,10 @@
 }
 
 /*
-  `hidden` на элементе, у которого свой класс называет `display`, его не прячет: авторское правило
-  сильнее браузерного `[hidden] { display: none }`. Поэтому всё, что `index.js` снимает с экрана —
-  поле поиска и кнопки средней колонки, карточка первого запуска, корзина правой панели, — скрыто
-  правилом того экрана, где стоит.
+  `hidden` on an element whose own class names a `display` does not hide it: an author's rule is stronger than
+  the browser's `[hidden] { display: none }`. Therefore everything `index.js` takes off the screen — the
+  search field and the buttons of the middle column, the first-run card, the trash of the right panel — is
+  hidden by a rule of the screen where it stands.
 */
 .content-toolbar [hidden],
 .panel-head [hidden],
@@ -660,9 +663,9 @@
 }
 
 /*
-  Строка отмены лежит вдоль нижнего края колонки статьи: она называет, что читалка ещё может
-  вернуть, и забирается сама, как только её окно кончается. Она наложена на колонку, а не вставлена
-  в её ряд, — ни её появление, ни её уход не двигают текст статьи и её прокрутку.
+  The undo line lies along the lower edge of the article column: it names what the reader can still bring
+  back, and it takes itself off as soon as its window ends. It is overlaid on the column rather than inserted
+  into its flow — neither its appearing nor its going moves the article's text or its scroll.
 */
 .undo-line {
   align-items: center;
@@ -680,7 +683,7 @@
   z-index: 1;
 }
 
-/* `hidden` на элементе, у которого свой класс называет `display`, его не прячет (см. выше). */
+/* `hidden` on an element whose own class names a `display` does not hide it (see above). */
 .undo-line[hidden] {
   display: none;
 }
@@ -852,7 +855,7 @@
   border-left-color: var(--danger);
 }
 
-/* Открытая новость помечена прочитанной: это не отказ и не предупреждение, поэтому её черта глуше. */
+/* The open news is marked read: this is neither a failure nor a warning, so its line is dimmer. */
 .note.marked {
   border-left-color: var(--text-muted);
 }

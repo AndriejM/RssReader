@@ -174,10 +174,11 @@
     <p class="transfer-status muted" id="transfer-status" hidden></p>
 
     <!--
-      Что экран говорит вслух о работе своих кнопок: лента записана, в строке есть незаполненные
-      поля, сколько заголовков пришло по кнопке «Загрузить сейчас», сколько лент выписано в файл и
-      сколько прочиталось обратно. Те же слова стоят под рядом или под таблицей, где их видит глаз;
-      эта строка нигде не рисуется (см. `.sr-only` в `theme.css`), но экран читает её вслух.
+      What the screen says out loud about its buttons working: a feed is saved, a row has fields left
+      unfilled, how many headlines came on the "Load now" button, how many feeds were written out to a file
+      and how many were read back in. The same words stand under the row or under the table, where the eye
+      sees them; this line is drawn nowhere (see `.sr-only` in `theme.css`), but a screen reader reads it
+      aloud.
     -->
     <p class="sr-only" id="feeds-announce" role="status" aria-live="polite" aria-atomic="true"></p>
   </div>

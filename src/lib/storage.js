@@ -54,13 +54,13 @@ export const LANGUAGE_KEY = 'language';
 export const FONT_SCALES_KEY = 'font_scales';
 export const COLUMN_WIDTHS_KEY = 'column_widths';
 
-/** Отметка первого добавления ленты — см. `getFirstFeedDone`. */
+/** Marker of the first feed added — see `getFirstFeedDone`. */
 export const FIRST_FEED_KEY = 'first_feed_done';
 
-/** «Без звука»: автоматическая загрузка остаётся без сигнала. */
+/** "Sound off": the automatic load stays without a signal. */
 export const SOUND_NONE = 'none';
 
-/** Файлы-сигналы из `src/media` — то, что разрешено хранить и играть. Порядок = порядок в combobox. */
+/** Signal files from `src/media` — what may be stored and played. Order = order in the combobox. */
 export const SOUND_FILES = [
   'src/media/ariel.mp3',
   'src/media/beep.mp3',
@@ -78,7 +78,7 @@ export const SOUND_FILES = [
   'src/media/titan.mp3',
 ];
 
-/** Файл-сигнал по умолчанию — как во всех сборках до появления выбора на экране настроек. */
+/** The default signal file — as in every build before the settings screen had a choice. */
 export const DEFAULT_SOUND_FILE = 'src/media/ceres.mp3';
 
 export async function getFeeds() {
@@ -104,9 +104,9 @@ export async function upsertFeed(feed) {
   } else {
     const previous = feeds[index];
     const next = { ...previous, ...feed };
-    /* Сбои описывают тот адрес, по которому ленту читали. Когда адрес меняют, прошлые сбои
-     * относятся к другому URL и больше ничего не объясняют, поэтому они сбрасываются. Тот же
-     * смысл у ответов сервера: ключ `ETag` с другого адреса — готовый ответ 304 на чужую ленту. */
+    /* Failures describe the address the feed was read from. When the address changes, the past
+     * failures belong to another URL and explain nothing more, so they are reset. The same goes
+     * for the server answers: an `ETag` from another address is a ready 304 for another feed. */
     if (feed.rss_link && feed.rss_link !== previous.rss_link) {
       clearFeedDiagnostics(next);
       clearFeedValidators(next);
@@ -118,9 +118,9 @@ export async function upsertFeed(feed) {
 }
 
 /**
- * Диагностические поля строки ленты: они описывают последнюю попытку её прочесть, а не её
- * настройки. Появляются только после первой загрузки, поэтому строка ещё не читанной ленты остаётся
- * чистой, а `emptyFeed()` — ровно тем набором полей, что задаёт экран настроек.
+ * Diagnostic fields of a feed row: they describe the last attempt to read it, not its settings.
+ * They appear only after the first load, so the row of a feed that was not read yet stays clean,
+ * and `emptyFeed()` is exactly the set of fields the settings screen sets.
  */
 const FEED_DIAGNOSTIC_KEYS = [
   'lastCheckedAt',
@@ -135,13 +135,13 @@ const FEED_DIAGNOSTIC_KEYS = [
 ];
 
 /**
- * Ответы ленты на прошлую загрузку, по которым следующая может спросить «не изменилось ли что»:
- * `ETag` и `Last-Modified` сервера и момент, когда их получили. Как и диагноз, они описывают тот
- * адрес, по которому ленту читали: смена `rss_link` стирает их вместе с ним.
+ * The feed's answers to the past load, by which the next one may ask "did anything change":
+ * the server's `ETag` and `Last-Modified` and the moment they were received. Like the diagnosis,
+ * they describe the address the feed was read from: changing `rss_link` erases them with it.
  */
 const FEED_CACHE_KEYS = ['etag', 'lastModified', 'lastFetchedAt'];
 
-/** Текст отказа хранится коротким: он нужен для подписи в интерфейсе, а не как журнал. */
+/** The failure text is kept short: it is needed for a label in the interface, not as a log. */
 const MAX_FEED_ERROR_MESSAGE = 300;
 
 function clearFeedDiagnostics(feed) {
@@ -155,11 +155,11 @@ function clearFeedValidators(feed) {
 }
 
 /**
- * Записать в строку ленты её «состояние здоровья»: когда её читали последний раз, чем закончилась
- * эта попытка и сколько отказов подряд накопилось. Успех обнуляет счётчик и стирает прошлый отказ,
- * отказ — копит их, чтобы лента с постоянно недоступной адресной строкой была видна сразу.
- * Отказ заодно назначает, когда ленту можно спросить снова (`nextRetryAt`): пауза растёт
- * экспоненциально (`util.feedBackoffMinutes`), чтобы одна битая лента не съедала каждую загрузку.
+ * Write the "health state" of the feed into its row: when it was last read, how that attempt ended
+ * and how many failures piled up in a row. A success zeroes the counter and erases the past failure,
+ * a failure accumulates them, so a feed with a constantly unavailable address is visible at once.
+ * A failure also sets when the feed may be asked again (`nextRetryAt`): the pause grows
+ * exponentially (`util.feedBackoffMinutes`) so that one broken feed does not eat every load.
  * @param {{ ok?: boolean, error?: unknown, time?: number, nextAlarmAt?: number }} options -
  *   `nextAlarmAt` is the moment the worker already knows the feed's alarm will run
  *   (`lib/alarms.js` -> `alarmDueAt`); without it the schedule is read from the same period formula
@@ -176,8 +176,8 @@ export async function markFeedChecked(
   const checkedAt = Number(time) || Date.now();
   feed.lastCheckedAt = checkedAt;
 
-  /* Следующая проверка — это когда сработает будильник ленты. Храним её, чтобы читалка и экран
-   * настроек назвали срок, не догадываясь о нём по одному `delay_timeout`. */
+  /* The next check is when the feed's alarm goes off. We keep it so the reader and the settings
+   * screen name the date instead of guessing it from `delay_timeout` alone. */
   const scheduled = Number(nextAlarmAt);
   feed.nextAlarmAt =
     Number.isFinite(scheduled) && scheduled > 0
@@ -207,9 +207,9 @@ export async function markFeedChecked(
 
     feed.fetchFailureCount = Math.max(1, (Number(feed.fetchFailureCount) || 0) + 1);
 
-    /* Когда задать следующий вопрос: с каждой неудачей всё позже, но не позже
-     * `MAX_FEED_BACKOFF_MINUTES`. Будильник ленты при этом остаётся своим — лишние попытки просто
-     * пропускаются (см. `background.js`), поэтому пауза не сбивает расписание остальных лент. */
+    /* When to ask again: later with every failure, but never later than
+     * `MAX_FEED_BACKOFF_MINUTES`. The feed's own alarm stays its own - extra attempts are simply
+     * skipped (see `background.js`), so the pause does not disturb the schedule of other feeds. */
     feed.nextRetryAt =
       checkedAt + feedBackoffMinutes(feed.fetchFailureCount, feed.delay_timeout) * 60000;
   }
@@ -219,9 +219,9 @@ export async function markFeedChecked(
 }
 
 /**
- * Записать в строку ленты ответы сервера на эту загрузку — те самые `ETag` и `Last-Modified`, с которыми
- * следующий запрос может спросить «не изменилось ли что» вместо того, чтобы просить всю ленту заново.
- * Пустой ответ сервера стирает прежний ключ: тот, чего сервер больше не присылает, он и не примет.
+ * Write into the feed row the server's answers to this load - those very `ETag` and `Last-Modified`,
+ * with which the next request may ask "did anything change" instead of asking for the whole feed
+ * again. An empty server answer erases the old key: what the server no longer sends, it will not take.
  * @param {{ etag?: string, lastModified?: string, fetchedAt?: number }} answer - `fetchedAt` is the
  *   moment the server last sent the headlines these validators describe. Empty for a 304: the key is
  *   newer, the content is the same age it already was.
@@ -241,10 +241,10 @@ export async function rememberFeedValidators(
   if (lastModified) feed.lastModified = lastModified;
   else delete feed.lastModified;
 
-  /* Момент получения заголовков живёт вместе с ними, но не вместе с ключами: он отвечает на
-   * «когда ленту читали в последний раз», даже когда сервер не присылает того, чем можно спросить
-   * её дешевле. 304 обновляет ключ, но не возраст того, что эти ключи описывают, — за ним
-   * приходит пустой `fetchedAt`. */
+  /* The moment the headlines were received lives together with them, but not together with the
+   * keys: it answers "when the feed was read last", even when the server sends nothing by which
+   * the feed could be asked more cheaply. A 304 renews the key but not the age of what those keys
+   * describe - an empty `fetchedAt` comes with it. */
   const at = Number(fetchedAt);
   if (at > 0) feed.lastFetchedAt = at;
 
@@ -253,14 +253,14 @@ export async function rememberFeedValidators(
 }
 
 /**
- * Записать в строки лент момент, когда Chrome действительно соберётся разбудить их будильник.
- * `markFeedChecked` называет этот срок по формуле периода, отсчитанной от своей попытки;
- * здесь срок говорит само расписание (см. `lib/alarms.js`).
- * Лента, у которой записан тот же момент, не трогается, и весь список пишется только когда хоть
- * одна строка действительно изменилась: запись целого списка, которая ничего не меняет, разбудила
- * бы `chrome.storage.onChanged` — а через него новый `syncAlarms`, который снова записал бы его.
- * @param {Map<string, number>|Record<string, number>} times - `feedId` → момент срабатывания
- * @returns {number} сколько строк получили этот срок
+ * Write into the feed rows the moment Chrome will really wake their alarm. `markFeedChecked` names
+ * this date by the period formula counted from its own attempt; here the schedule itself states it
+ * (see `lib/alarms.js`). A feed that already has the same moment stored is not touched, and the whole
+ * list is written only when at least one row really changed: writing the whole list and changing
+ * nothing would wake `chrome.storage.onChanged` - and through it a new `syncAlarms`, which would
+ * write it again.
+ * @param {Map<string, number>|Record<string, number>} times - `feedId` -> the moment the alarm fires
+ * @returns {number} how many rows got this date
  */
 export async function recordFeedAlarmTimes(times) {
   const entries = times instanceof Map ? [...times.entries()] : Object.entries(times ?? {});
@@ -282,19 +282,20 @@ export async function recordFeedAlarmTimes(times) {
 }
 
 /**
- * Ленты, которые читаются прямо сейчас. Два параллельных чтения одного адреса — это два ответа,
- * которые пишут заголовки друг поверх друга, поэтому занятость ленты хранится здесь, а не только
- * в памяти воркера: service worker засыпает посреди загрузки и теряет быстрое состояние вместе
- * с собой, а билет в хранилище остаётся.
+ * Feeds that are being read right now. Two parallel reads of one address are two answers that write
+ * their headlines over each other, so a feed's busy state is kept here, not only in the worker's
+ * memory: a service worker falls asleep in the middle of a load and loses its fast state together
+ * with itself, while the ticket in the storage stays.
  */
 export const FETCH_LOCKS_KEY = 'feed_fetch_locks';
 
 /**
- * Сколько лента считается занятой: самое долгое чтение, какое воркер может начать. Загрузка ленты —
- * это `FEED_FETCH_TIMEOUT_MS` ожидания ответа; разбор в offscreen-документе может спросить его
- * дважды (свежесозданный документ ещё не успел принять сообщение) и этим таймаутом не ограничен,
- * а `+ 15000` — место на разметку XML и запись заголовков. Билет длиннее этого уже ничего не
- * защищает: загрузка, которая не вернулась, не должна закрывать ленту для следующих.
+ * How long a feed counts as busy: the longest read a worker can start. Reading a feed is
+ * `FEED_FETCH_TIMEOUT_MS` of waiting for an answer; parsing in the offscreen document may ask for it
+ * twice (a freshly created document has not had time to take the message) and is not bounded by that
+ * timeout, while `+ 15000` is room for the XML markup and for writing the headlines. A ticket longer
+ * than this protects nothing already: a load that never came back must not close the feed for the
+ * next ones.
  */
 export const FETCH_LOCK_TTL_MS = FEED_FETCH_TIMEOUT_MS * 2 + 15000;
 
@@ -308,15 +309,15 @@ function saveFetchLocks(locks) {
   return chrome.storage.local.set({ [FETCH_LOCKS_KEY]: locks });
 }
 
-/** Живой ли билет: `until` в прошлом — это загрузка, которая не вернулась, а не занятая лента. */
+/** Whether a ticket is alive: an `until` in the past is a load that did not come back, not a busy feed. */
 function lockHolds(lock, now) {
   return Number(lock?.until) > Number(now);
 }
 
 /**
- * Занять ленту на время её чтения. Отказывает только живой занятости, а просроченные билеты
- * стирает заодно — иначе уснувший воркер оставил бы ленту незчитываемой.
- * @returns {Promise<boolean>} `false` — ленту читает кто-то другой.
+ * Occupy a feed for the time of its read. Only live busy state is refused, and expired tickets are
+ * erased along the way - otherwise a worker that fell asleep would leave the feed unreadable.
+ * @returns {Promise<boolean>} `false` - someone else is reading the feed.
  */
 export async function tryLockFeed(feedId, { now = Date.now(), ttlMs = FETCH_LOCK_TTL_MS } = {}) {
   const stored = await getFetchLocks();
@@ -338,7 +339,7 @@ export async function tryLockFeed(feedId, { now = Date.now(), ttlMs = FETCH_LOCK
   return true;
 }
 
-/** Отдать ленту: её прочитали — следующая загрузка может её спросить. */
+/** Give the feed back: it has been read - the next load may ask it. */
 export async function releaseFeedLock(feedId) {
   const locks = await getFetchLocks();
   if (!(feedId in locks)) return false;
@@ -348,7 +349,7 @@ export async function releaseFeedLock(feedId) {
 }
 
 /**
- * Стереть билеты лент, загрузка которых так и не вернула ответ.
+ * Erase the tickets of feeds whose load never brought an answer.
  * @returns {{ removed: number }}
  */
 export async function cleanupFetchLocks(now = Date.now()) {
@@ -371,8 +372,8 @@ export async function deleteFeed(feedId) {
   await saveFeeds(feeds.filter((feed) => feed.id !== feedId));
   const items = await getItems();
   await saveItems(items.filter((item) => item.feedId !== feedId));
-  /* Отдать билет удалённой ленты больше некому: без этого он пролежал бы в хранилище, пока сам
-   * не истечёт. */
+  /* Nobody can give back the deleted feed's ticket anymore: without this it would stay in the
+   * storage until it expired on its own. */
   await releaseFeedLock(feedId);
 }
 
@@ -999,18 +1000,18 @@ export async function setTheme(theme) {
 
 /* ------------------------------------------------- font size of the reader's columns */
 
-/** Колонки читалки, у каждой из которых свой размер шрифта, — слева направо, как они стоят на странице. */
+/** The reader's columns, each with its own font size - left to right, as they stand on the page. */
 export const FONT_PANELS = ['feeds', 'headlines', 'content'];
 
-/** Шаги переключателя: множитель базового размера текста колонки. */
+/** Steps of the switch: a multiplier of the column's base text size. */
 export const FONT_SCALES = [0.85, 1, 1.2, 1.45];
 
-/** Размер колонки, пока пользователь не выбрал другой. */
+/** A column's size until the user chooses another one. */
 export const DEFAULT_FONT_SCALE = 1;
 
 /**
- * Хранимой карте доверяем ровно в той мере, в какой она описывает колонки читалки: неизвестной
- * колонке и шагу вне списка возвращаем базовый размер.
+ * A stored map is trusted exactly as far as it describes the reader's columns: to an unknown column
+ * or a step outside the list we return the base size.
  */
 export function normalizeFontScales(value) {
   const scales = {};
@@ -1021,15 +1022,15 @@ export function normalizeFontScales(value) {
   return scales;
 }
 
-/** Размер шрифта каждой колонки читалки — из `settings.font_scales`. */
+/** Font size of every reader column - from `settings.font_scales`. */
 export async function getFontScales() {
   const settings = await getSettings();
   return normalizeFontScales(settings[FONT_SCALES_KEY]);
 }
 
 /**
- * Запомнить размер одной колонки: остальные берут то, что уже лежит в хранилище, а не то, что
- * было в памяти этой страницы, — две открытые читалки не затирают выбор друг друга.
+ * Remember the size of one column: the others take what already lies in the storage, not what was in
+ * this page's memory - two open readers do not overwrite each other's choice.
  */
 export async function setFontScale(panel, scale) {
   if (!FONT_PANELS.includes(panel)) return null;
@@ -1042,25 +1043,26 @@ export async function setFontScale(panel, scale) {
 
 /* ------------------------------------------------ width of the reader's columns */
 
-/** Колонки, чью ширину меняют мышью: граница тянет колонку слева от себя, сосед отдаёт остаток. */
+/** Columns whose width is moved by mouse: a border pulls the column to its left, the neighbour gives the rest away. */
 export const RESIZABLE_PANELS = ['feeds', 'headlines'];
 
 /**
- * Ниже этой ширины колонку сделать нельзя: уже не влезет ни один заголовок, и колонка перестаёт
- * быть колонкой. Это же число стоит нижним пределом в `minmax()` сетки — так предел держится и
- * без скрипта.
+ * Below this width a column cannot go: not even one headline fits, and the column stops being a
+ * column. The same number stands as the lower bound in the grid's `minmax()` - so the bound holds it
+ * even without the script.
  */
 export const MIN_PANEL_WIDTH = 160;
 
-/** Выше этой ширины колонку не растягиваем: три колонки читалки должны уместиться в окно. */
+/** Above this width we do not stretch a column: the reader's three columns must fit in the window. */
 export const MAX_PANEL_WIDTH = 900;
 
-/** Ширина колонки, пока пользователь не потянул её границу. */
+/** A column's width until the user pulls its border. */
 export const DEFAULT_PANEL_WIDTHS = { feeds: 240, headlines: 340 };
 
 /**
- * Ширины колонок читалки: доверяем хранимой карте ровно в той мере, в какой она описывает тянимые
- * колонки — неизвестной колонке и числу вне границ отдаём ширину по умолчанию.
+ * The widths of the reader's columns: we trust the stored map exactly as far as it describes the
+ * draggable columns - to an unknown column and to a number outside the bounds we give the default
+ * width.
  */
 export function normalizeColumnWidths(value) {
   const widths = {};
@@ -1076,15 +1078,15 @@ export function normalizeColumnWidths(value) {
   return widths;
 }
 
-/** Ширины колонок — из `settings.column_widths`. */
+/** Column widths - from `settings.column_widths`. */
 export async function getColumnWidths() {
   const settings = await getSettings();
   return normalizeColumnWidths(settings[COLUMN_WIDTHS_KEY]);
 }
 
 /**
- * Запомнить ширину одной колонки: остальные берут то, что уже лежит в хранилище, а не то, что было
- * в памяти этой страницы, — две открытые читалки не затирают границу друг друга.
+ * Remember the width of one column: the others take what already lies in the storage, not what was in
+ * this page's memory - two open readers do not overwrite each other's border.
  */
 export async function setColumnWidth(panel, width) {
   if (!RESIZABLE_PANELS.includes(panel)) return null;
@@ -1096,9 +1098,9 @@ export async function setColumnWidth(panel, width) {
 }
 
 /**
- * Язык интерфейса. Записанный — это выбор пользователя. Если записи нет (первый запуск), берём
- * язык браузера; если он не поддерживается расширением — английский. Определение по браузеру
- * ничего не пишет: язык сохраняется только когда его выбирают на экране настроек.
+ * The interface language. A stored one is the user's choice. When there is no record (first run) we
+ * take the browser's language; when the extension does not support it - English. Detecting it from
+ * the browser writes nothing: the language is stored only when it is chosen on the settings screen.
  */
 export async function getLanguage() {
   const settings = await getSettings();
@@ -1122,16 +1124,16 @@ export async function setLanguage(language) {
 
 /**
  * Play only the signals bundled with the extension: an unknown path — a stored `SOUND_NONE` of
- * the old «Без звука» builds included — is replaced by the default file.
+ * the old "no sound" builds included — is replaced by the default file.
  */
 export function normalizeSoundChoice(value) {
   return SOUND_FILES.includes(value) ? value : DEFAULT_SOUND_FILE;
 }
 
 /**
- * Файл-сигнал, выбранный на экране глобальных настроек: путь от корня расширения. Строит,
- * которые хранили только старый признак звука, не имели выбора файла: для них играет файл
- * по умолчанию, а `false` в старом ключе гасит сигнал через `getSoundEnabled`.
+ * The signal file chosen on the global settings screen: a path from the extension's root. Builds
+ * that stored only the old sound flag had no choice of a file: for them the default file plays, and
+ * a `false` in the old key silences the signal through `getSoundEnabled`.
  */
 export async function getSoundChoice() {
   const settings = await getSettings();
@@ -1145,10 +1147,10 @@ export async function setSoundChoice(choice) {
 }
 
 /**
- * «Звук»: играть ли сигнал вообще — отдельный признак на экране глобальных настроек, он
- * не связан с выбором файла, его громкостью или сообщением о загрузке. Строит, которые
- * хранили только старый признак, читаются через него: записанный `false` (там был «Без
- * звука») гасит сигнал, всё остальное — звуку быть.
+ * "Sound": whether the signal plays at all - a separate flag on the global settings screen, it is
+ * not tied to the choice of the file, its volume or the load message. Builds that stored only the
+ * old flag are read through it: a stored `false` (there was "Sound off") silences the signal,
+ * everything else - there is sound.
  */
 export async function getSoundEnabled() {
   const settings = await getSettings();
@@ -1164,8 +1166,9 @@ export async function setSoundEnabled(enabled) {
 }
 
 /**
- * Громкость сигнала в процентах (0–100), выбранная на экране глобальных настроек: её делят на
- * 100 и отдают `HTMLAudioElement.volume` и в превью, и в offscreen-сигнале автозагрузки.
+ * The signal's volume in percent (0-100), chosen on the global settings screen: it is divided by
+ * 100 and given to `HTMLAudioElement.volume` both in the preview and in the offscreen signal of the
+ * automatic load.
  */
 export async function getSoundVolume() {
   const settings = await getSettings();
@@ -1179,9 +1182,9 @@ export async function setSoundVolume(volume) {
 }
 
 /**
- * «Показывать сообщение»: фон сообщает через `chrome.notifications`, сколько заголовков
- * принесла автоматическая загрузка. Записи нет — значит сборка без этого поля жила без
- * сообщений: флаг выключен.
+ * "Show a message": the background reports through `chrome.notifications` how many headlines the
+ * automatic load brought. There is no record - the build lived without this field, without
+ * messages: the flag is off.
  */
 export async function getShowMessage() {
   const settings = await getSettings();
@@ -1195,10 +1198,10 @@ export async function setShowMessage(enabled) {
 }
 
 /**
- * Первый запуск на экране лент: отметка о том, что лента уже была добавлена и её заголовки пришли.
- * Отметки нет — значит читалка ещё не показала ни одной своей ленты, и после первого сохранения
- * экран подтверждает результат отдельной строкой. Ставится один раз и больше не снимается: экран
- * лент не повторяет то же подтверждение при каждой сохранённой строке.
+ * First run on the feeds screen: a mark that a feed has already been added and its headlines came.
+ * No mark - the reader has not shown any of its feeds yet, and after the first save the screen
+ * confirms the result with a separate line. The mark is set once and never taken back: the feeds
+ * screen does not repeat the same confirmation for every saved row.
  */
 export async function getFirstFeedDone() {
   const settings = await getSettings();
@@ -1236,19 +1239,19 @@ export function emptyFeed() {
 /* ------------------------------ carrying feeds between profiles ------------------------------ */
 
 /**
- * Версия файла, который экран лент умеет выписать и прочесть. Изменился формат — меняется число,
- * и файл другой версии отвергается целиком, а не читается наугад.
+ * The version of the file the feeds screen knows how to write out and to read. The format changes -
+ * the number changes, and a file of another version is refused whole, not read at random.
  */
 export const FEED_EXPORT_VERSION = 1;
 
-/** Имя выписанного файла — оно не переводится: это имя файла, а не подпись интерфейса. */
+/** Name of the written-out file - it is not translated: it is a file name, not an interface label. */
 export const FEED_EXPORT_FILE_NAME = 'rss-reader-feeds.json';
 
 /**
- * Что уносит лента с собой: только те поля, которые задал сам пользователь. `id` даёт этот
- * профиль — в другом он уже может принадлежать другой ленте; диагноз (`lastErrorCode`,
- * `fetchFailureCount`) и ответ сервера (`etag`, `lastModified`) описывают чтение, сделанное
- * здесь, и на другом месте были бы чужими.
+ * What a feed takes with it: only the fields the user himself set. `id` belongs to this profile - in
+ * another one it may already belong to another feed; the diagnosis (`lastErrorCode`,
+ * `fetchFailureCount`) and the server answer (`etag`, `lastModified`) describe a reading done here,
+ * and somewhere else they would be someone else's.
  */
 export function buildFeedsExport(feeds) {
   const rows = (Array.isArray(feeds) ? feeds : []).map((feed) => ({
@@ -1262,12 +1265,12 @@ export function buildFeedsExport(feeds) {
 }
 
 /**
- * Прочитать файл, который пользователь принёс на экран. Возвращает `{ feeds, skipped, code }`:
- * `feeds` — строки файла, прошедшие ту же проверку, что и строка таблицы, но без `id` (его даст
- * этот профиль); `skipped` — сколько строк проверка отвергла, в том числе повтор одного и того же
- * адреса внутри файла; `code` — почему отвергнут весь файл (`json` / `version` / `shape`) либо
- * `null`, когда файл прочитан. Код называет ключ `feeds.import.error.<code>`, чтобы экран ответил
- * на своём языке, а не текстом, замороженным в одном.
+ * Read the file the user brought to the screen. Returns `{ feeds, skipped, code }`: `feeds` are the
+ * file's rows that passed the same check as a table row, but without `id` (this profile gives it);
+ * `skipped` - how many rows the check refused, among them a repeat of the same address inside the
+ * file; `code` - why the whole file was refused (`json` / `version` / `shape`) or `null` when the
+ * file was read. The code names the key `feeds.import.error.<code>`, so the screen answers in its
+ * own language and not in text frozen in one.
  */
 export function parseFeedsExport(text) {
   let parsed;
@@ -1303,9 +1306,9 @@ export function parseFeedsExport(text) {
 }
 
 /**
- * Дописать к хранилищу ленты, пришедшие из файла. Лента того же адреса уже настроена — она
- * остаётся как есть: перенос не должен перечёркивать местные сроки и не должен молча трогать
- * заголовки, которые у этой ленты уже есть. Возвращает `{ added, existing }`.
+ * Add to the storage the feeds that came from the file. A feed of the same address is already
+ * configured - it stays as it is: a transfer must not strike out the local dates and must not
+ * silently touch the headlines that this feed already has. Returns `{ added, existing }`.
  */
 export async function mergeFeeds(feeds) {
   const stored = await getFeeds();

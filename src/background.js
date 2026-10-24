@@ -29,9 +29,9 @@ chrome.action.onClicked.addListener((clickedTab) => {
   void focusOrCreateTab(READER_PAGE, clickedTab?.windowId);
 });
 
-/* Клик по сообщению о загрузке ведёт туда же, куда и иконка в тулбаре: popup называет,
- * сколько заголовков пришло, а сами они живут только в читалке. Слушатели ставятся здесь же,
- * где и остальные: worker'у нужно, чтобы они стояли до того, как Chrome позовёт его по событию. */
+/* A click on the load message leads to the same place as the toolbar icon: the popup names how
+ * many headlines arrived, while the headlines themselves live only in the reader. The listeners are
+ * placed here, like the rest: the worker needs them standing before Chrome calls it on an event. */
 wireNotificationClicks();
 
 // Pages write feeds/items directly, so the worker watches the storage to keep the alarms and
@@ -102,8 +102,8 @@ async function readFeed(feed, validators = {}) {
 }
 
 /**
- * Готовить ответ страницы об ошибке: отказ с i18n-кодом (`rss.js`, `lib/offscreen.js`) уходит как
- * `{ code, params }`, чтобы страница подписала его на своём языке; всё остальное — как есть.
+ * Prepare a page's error answer: a refusal with an i18n code (`rss.js`, `lib/offscreen.js`) goes
+ * out as `{ code, params }` so the page labels it in its own language; everything else — as is.
  */
 function errorPayload(error) {
   if (error?.code) {
@@ -113,8 +113,8 @@ function errorPayload(error) {
 }
 
 /**
- * Записать диагноз ленты. Он второстепенен: его собственный сбой (например, хранилище переполнено)
- * не должен подменять собой настоящую причину, по которую загрузку не удалось дочитать.
+ * Record a feed's diagnosis. It is secondary: its own failure (e.g. storage overflow) must not
+ * stand in for the real reason the load could not be read to the end.
  */
 async function reportFeedHealth(feedId, health) {
   try {
@@ -125,9 +125,9 @@ async function reportFeedHealth(feedId, health) {
 }
 
 /**
- * Сервер отверг наш ключ: та же адресная строка отвечает не лентой, а 412 / 404 / 410. Чаще всего
- * причина — валидатор, который лента уже не узнаёт, поэтому следующая попытка идёт без него: упрямый
- * сервер не должен превращать каждую загрузку в отказ.
+ * The server rejected our key: the same address line answers not with a feed but with 412 / 404 /
+ * 410. Most often the reason is a validator the feed no longer recognizes, so the next attempt goes
+ * without it: a stubborn server must not turn every load into a refusal.
  */
 async function forgetValidators(feed, error) {
   const status = Number(error?.status);
@@ -142,10 +142,10 @@ async function forgetValidators(feed, error) {
 }
 
 /**
- * Отказ, который принадлежит не ленте, а самой читалке: её хранилище не отдало заголовки или не
- * принял их. Лента на такой отказ не отвечала — у неё уже лежит ответ, — поэтому отказ назван своим
- * кодом: строка ленты подписывает его как сбой читалки, а не как ответ ленты, и лента от него не
- * уходит в паузу.
+ * A failure that belongs not to the feed but to the reader itself: its storage did not give out the
+ * headlines or did not accept them. The feed did not answer with such a failure — it already has an
+ * answer on hand — so the failure is named by its own code: the feed's row renders it as a reader
+ * fault, not as the feed's answer, and the feed does not go into a pause because of it.
  */
 function storageFailure(feed, error) {
   const cause = error?.message ?? String(error);
@@ -168,19 +168,19 @@ function storageFailure(feed, error) {
  * extension, not to the feed: counted as a feed failure it would push a healthy feed into an
  * exponential pause, show it broken on the settings screen and keep the reader from asking it again
  * at all. Such a read is recorded as what it was, an answer that came through.
- * @param {{ nextAlarmAt?: number }} options - момент следующего будильника этой загрузки, чтобы
- *   диагноз ленты назвал его, а не вывел из `delay_timeout` (см. `storage.markFeedChecked`).
+ * @param {{ nextAlarmAt?: number }} options - the moment of this load's next alarm, so the feed's
+ *   diagnosis names it instead of deriving it from `delay_timeout` (see `storage.markFeedChecked`).
  */
 async function readFeedOnce(feed, { nextAlarmAt = 0 } = {}) {
   const startedAt = Date.now();
   let result;
 
   try {
-    /* Ключи описывают те заголовки, которые у нас лежат. Если их уже нет — ленту вычистил
-     * `clean_timeout`, их удалили, хранилище очистили, — спрашивать по ним значит получить пустой
-     * ответ вместо ленты и оставить читалку пустой до первой правки на сервере. Без ключей ленту
-     * просят целиком, как раньше; с тем же смыслом их не посылают, когда своей полки не видно:
-     * лента не отвечает за то, что хранилище не ответило. */
+    /* The keys describe the headlines we hold. If they are already gone — `clean_timeout` cleaned
+     * the feed, they were deleted, the storage was cleared — asking with them means getting an empty
+     * answer instead of a feed and leaving the reader empty until the first edit on the server.
+     * Without keys the feed is asked in full, as before; with the same sense they are not sent when
+     * one's own shelf is out of sight: a feed is not answerable for storage not answering. */
     let held = [];
     try {
       held = await store.getItems();
@@ -194,10 +194,11 @@ async function readFeedOnce(feed, { nextAlarmAt = 0 } = {}) {
 
     const fetched = await readFeed(feed, validators);
 
-    /* Всё, что дальше, — полка читалки, а не ответ ленты. Ключи пишутся до заголовков, чтобы отказ
-     * ленты не обнулил то, что она только что подтвердила; 304 обновляет ключ, но не возраст
-     * заголовков, которые этот ключ описывает. Сбой полки ключам не мешает: их на этот ответ
-     * просто не записали, прежние остались у ленты. */
+    /* Everything past this point is the reader's shelf, not the feed's answer. The keys are written
+     * before the headlines so a feed failure does not zero what the feed has just confirmed; a 304
+     * updates the key but not the age of the headlines this key describes. A shelf failure does not
+     * hinder the keys: for this answer they simply were not written, the previous ones stayed with
+     * the feed. */
     try {
       await store.rememberFeedValidators(feed.id, {
         etag: fetched.etag,
@@ -206,8 +207,8 @@ async function readFeedOnce(feed, { nextAlarmAt = 0 } = {}) {
       });
 
       if (fetched.notModified) {
-        /* «Не изменилось»: заголовки те же, что уже лежат в хранилище. Нечего ни парсить, ни
-         * добавлять — а значит, и считать «новыми». */
+        /* "Unchanged": the headlines are the same ones already in storage. There is nothing to parse
+         * or add — and therefore nothing to count as "new". */
         result = { added: 0, skipped: 0, seen: 0, notModified: true };
       } else {
         const now = Date.now();
@@ -233,15 +234,15 @@ async function readFeedOnce(feed, { nextAlarmAt = 0 } = {}) {
     }
   } catch (error) {
     if (!(error instanceof FeedError)) {
-      /* Отказ, у которого нет метки ленты, — сбой самой читалки: без служебной страницы спросить
-       * ленту вообще нечем. Диагноз такой ленте не пишут. */
+      /* A failure with no feed mark on it is a fault of the reader itself: without the helper page
+       * there is no way to ask the feed at all. Such a feed gets no diagnosis. */
       await reportFeedHealth(feed.id, { ok: true, time: Date.now(), nextAlarmAt });
       throw error;
     }
 
     await forgetValidators(feed, error);
-    /* Диагноз пишется именно здесь: иначе отказ ленты не отличить от сбоя бейджа или сигнала, а
-     * экран настроек показал бы здоровую ленту сломанной. */
+    /* The diagnosis is written exactly here: otherwise a feed failure cannot be told apart from a
+     * badge or signal fault, and the settings screen would show a healthy feed as broken. */
     await reportFeedHealth(feed.id, { ok: false, error, time: startedAt, nextAlarmAt });
     throw error;
   }
@@ -252,31 +253,31 @@ async function readFeedOnce(feed, { nextAlarmAt = 0 } = {}) {
 }
 
 /**
- * Ленты, которые читает *этот* экземпляр воркера: `feedId` → его загрузка. `Set` здесь не годится:
- * второй запрос той же ленты должен не просто пропуска́ться, а дождаться ответа первого, чтобы
- * «Обновить» на ленте, которую как раз читают, не осталось без результата.
+ * The feeds *this* worker instance is reading: `feedId` → its load. A `Set` does not work here: a
+ * second request for the same feed must not merely be skipped but wait for the first one's answer,
+ * so "Refresh" on a feed that is being read right now does not end up without a result.
  */
 const readingFeedIds = new Map();
 
 /**
- * Занять ленту на время её чтения.
- * @returns {Promise<{ read: Promise<object> } | { locked: true } | null>} `read` — ленту читает этот
- *   же воркер; `locked` — её читает другой контекст (живой билет в хранилище); `null` — лента
- *   досталась этому вызову: её id стоит в `readingFeedIds`, билет хранилища взят.
+ * Hold a feed for the duration of its read.
+ * @returns {Promise<{ read: Promise<object> } | { locked: true } | null>} `read` — the feed is being
+ *   read by this same worker; `locked` — another context is reading it (a live ticket in storage);
+ *   `null` — this call got the feed: its id stands in `readingFeedIds`, the storage ticket is taken.
  */
 async function holdFeedRead(feedId) {
-  /* Локальная проверка идёт первой и не ждёт хранилища: пока воркер читает ленту, любой другой
-   * запрос той же ленты отсекается сразу — без гонки «прочитали билет — записали билет».
-   * Просроченный билет при этом ленту не держит: локально она свободна, и `tryLockFeed` стирает
-   * его сам. */
+  /* The local check goes first and does not wait for storage: while the worker reads a feed, any
+   * other request for the same feed is cut off at once — without a "read the ticket — write the
+   * ticket" race. An expired ticket does not hold the feed here: locally it is free, and
+   * `tryLockFeed` erases the ticket itself. */
   const running = readingFeedIds.get(feedId);
   if (running) return { read: running.read };
 
   try {
     if (!(await store.tryLockFeed(feedId))) return { locked: true };
   } catch (error) {
-    /* Хранилище не ответило — не причина отказать в загрузке: локального билета достаточно,
-     * а лента, запертая из-за сбоя хранилища, не прочиталась бы вовсе. */
+    /* Storage not answering is no reason to refuse a load: the local ticket is enough, and a feed
+     * locked because of a storage fault would never be read at all. */
     console.warn(`could not lock feed ${feedId}:`, error?.message ?? error);
   }
 
@@ -284,29 +285,29 @@ async function holdFeedRead(feedId) {
   const read = new Promise((resolve, reject) => {
     settle = { resolve, reject };
   });
-  /* Отказ этой загрузки может остаться без того, кто его ждёт: без обработчика воркер записал бы
-   * его как «unhandled rejection». */
+  /* A failure of this load may end up with nobody waiting for it: without a handler the worker
+   * would record it as an "unhandled rejection". */
   read.catch(() => {});
 
   readingFeedIds.set(feedId, { read, settle });
   return null;
 }
 
-/** Отдать ленту: её прочитали (или прочесть не удалось) — её могут спросить снова. */
+/** Release a feed: it has been read (or reading failed) — it can be asked again. */
 async function releaseFeedRead(feedId) {
   readingFeedIds.delete(feedId);
   try {
     await store.releaseFeedLock(feedId);
   } catch (error) {
-    /* Просроченный билет снимает следующая уборка; лента от этого не заперта. */
+    /* The next cleanup sweep removes an expired ticket; the feed is not locked because of it. */
     console.warn(`could not release feed ${feedId}:`, error?.message ?? error);
   }
 }
 
-/** Ответ тому, кому ленту не отдали: её читает другой контекст, и у этого запроса нет своих цифр. */
+/** The answer to whoever was not given the feed: another context is reading it, and this request has no numbers of its own. */
 function lockedFeedResult() {
-  /* `busy` отличает этот ответ от «0 заголовков»: лента не пуста и не сломана — её читают.
-   * Диагноз ленты (`lastCheckedAt`) остаётся нетронутым: его пишет тот, кто её держит. */
+  /* `busy` tells this answer apart from "0 headlines": the feed is neither empty nor broken — it is
+   * being read. The feed's diagnosis (`lastCheckedAt`) stays untouched: whoever holds the feed writes it. */
   return { added: 0, skipped: 0, seen: 0, notModified: false, busy: true };
 }
 
@@ -325,9 +326,9 @@ async function ingestFeed(feed, { notify = false, nextAlarmAt = 0 } = {}) {
   const held = await holdFeedRead(feed.id);
 
   if (held?.read) {
-    /* Звук и сообщение принадлежат загрузке, которая их начала: присоединившийся запрос только
-     * берёт её ответ, каким бы он ни был — отказ приходит тем же текстом. Цифры этого ответа
-     * настоящие: заголовки в хранилище именно эту ленту и принесли. */
+    /* The sound and the message belong to the load that started them: a joining request only takes
+     * its answer, whatever it is — a failure arrives as the same text. The numbers of this answer
+     * are real: the headlines in storage are exactly what this feed brought. */
     const result = await held.read;
     console.info(`feed "${feed.name}": already being read, this request takes its answer`);
     return result;
@@ -358,7 +359,7 @@ async function ingestFeed(feed, { notify = false, nextAlarmAt = 0 } = {}) {
 
   if (result.added > 0 && notify) {
     // The two notifications of the same automatic event answer to their own flags on the
-    // settings screen: «Звук» gates the signal, «Показывать сообщение» gates the popup that
+    // settings screen: «Sound on download» gates the signal, «Show a message» gates the popup that
     // names how many headlines came in. Neither one looks at the other's setting.
     await playSound();
     await notifyIngest(result.added);
@@ -385,11 +386,11 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       return;
     }
 
-    /* Лента, которая читается всё хуже, ждёт между попытками дольше своего будильника
-     * (`storage.markFeedChecked` пишет `nextRetryAt`). Будильник при этом не двигается: лишняя
-     * попытка просто пропускается, поэтому одна битая лента не растягивает автоматическую загрузку
-     * на весь свой отказ и не мешает остальным. Запрошенную вручную ленту читаем всегда. Так же
-     * пропускается будильник ленты, которую читают прямо сейчас: тот же адрес уже спрошен. */
+    /* A feed that reads ever worse waits between attempts longer than its alarm
+     * (`storage.markFeedChecked` writes `nextRetryAt`). The alarm does not move meanwhile: the extra
+     * attempt is simply skipped, so one broken feed does not stretch the automatic load over its
+     * whole failure or hinder the others. A feed requested by hand is always read. The alarm of a
+     * feed being read right now is skipped the same way: that same address was already asked. */
     const paused = feedPauseRemaining(feed);
     if (paused > 0) {
       console.info(
@@ -398,8 +399,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       return;
     }
 
-    /* Когда ленту спросят снова — это следующий период её будильника, а не «сейчас + период»:
-     * сработавший будильник Chrome уже ставит себе следующую встречу, и читалка называет её. */
+    /* When the feed is asked again is the next period of its alarm, not "now + period": a fired
+     * alarm has already set its next meeting with Chrome, and the reader names that one. */
     const result = await ingestFeed(feed, {
       notify: true,
       nextAlarmAt: alarmDueAt(alarm, Date.now(), alarmPeriodMinutes(feed.delay_timeout)),

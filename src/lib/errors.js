@@ -1,10 +1,10 @@
 import { t } from './i18n.js';
 
 /**
- * Описать ошибку для интерфейса. Ошибки приходят из background/offscreen как помеченные
- * кодом данные `{ code, params, message }` (см. `rss.js`): код указывает на ключ
- * `errors.<code>`, а `params` заполняет его placeholders — так текст строится на языке
- * страницы. Строковые ошибки прошлых версий возвращаются как есть.
+ * Describe an error for the interface. Errors arrive from background/offscreen as code-tagged
+ * data `{ code, params, message }` (see `rss.js`): the code points at the `errors.<code>` key,
+ * and `params` fills its placeholders — so the text is built in the language of the page.
+ * String errors from past versions are returned as they are.
  */
 export function describeError(error) {
   const source = error?.error ?? error;

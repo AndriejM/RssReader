@@ -1,7 +1,7 @@
 // Global settings screen. It holds the horizon for «read» markers — how many days a deleted
 // headline stays out of the list — the mp3 signal played when an automatic fetch brings news
 // (with its on/off flag and volume) and the interface language. None of the fields writes on
-// its own: all of them go to storage only when «Записать» is pressed, next to a button that
+// its own: all of them go to storage only when «Save» is pressed, next to a button that
 // wipes the whole read list.
 //
 // The values are persisted in the shared settings store (chrome.storage.local), the same place the
@@ -54,7 +54,7 @@ const state = {
   soundVolume: DEFAULT_SOUND_VOLUME,
   showMessage: false,
   language: currentLanguage(),
-  /** A field holds a value the store does not have yet; only «Записать» commits it. */
+  /** A field holds a value the store does not have yet; only «Save» commits it. */
   ttlPending: false,
   soundPending: false,
   soundEnabledPending: false,
@@ -64,9 +64,10 @@ const state = {
 };
 
 /**
- * Что экран сообщает вслух: та же строка, что стоит под таблицей полей, но прочитанная экраном.
- * Живой статус отвечает на изменение текста, поэтому одно и то же сообщение двух подряд нажатий
- * снимается и ставится заново — иначе вторая «Записано» была бы молчанием. Пустая строка молчит.
+ * What the screen announces aloud: the same line that stands under the field table, but read out by
+ * a screen reader. A live status answers to a change of text, so the same message from two presses in
+ * a row is cleared and set anew — otherwise the second "Saved" would be silence. An empty line is
+ * silent.
  */
 function announce(message) {
   if (!message) return;
@@ -77,8 +78,9 @@ function announce(message) {
 }
 
 /**
- * Итог работы с полями — вслух, подсказка о незаписанном — нет: `pending` висит на экране с первого
- * знака в поле, и повторять его при каждом нажатии клавиши значит заглушить экран.
+ * The outcome of working with the fields — aloud; the hint about unwritten values — not: `pending`
+ * hangs on the screen from the first character typed in a field, and repeating it on every keypress
+ * would deafen the screen.
  */
 function setStatus(message, kind = '') {
   els.status.textContent = message;
@@ -197,7 +199,7 @@ async function refreshFields() {
 
 /**
  * A field asks for a value the store does not have yet. A malformed value counts as pending too,
- * so pressing «Записать» explains the problem inline instead of looking inert.
+ * so pressing «Save» explains the problem inline instead of looking inert.
  */
 function ttlIsPending() {
   if (els.days.value.trim() === '' || !els.days.checkValidity()) return true;
@@ -225,7 +227,7 @@ function languageIsPending() {
 }
 
 /**
- * Track every field against the store: «Записать» is enabled only when at least one of them has
+ * Track every field against the store: «Save» is enabled only when at least one of them has
  * something to write.
  */
 function markPending() {
@@ -250,7 +252,7 @@ function markPending() {
     if (!els.daysError.textContent) setStatus(t('settings.status.pending'), 'pending');
     return;
   }
-  // Only our own hint goes away: a «Записано» confirmation must survive the storage event that
+  // Only our own hint goes away: a «Saved» confirmation must survive the storage event that
   // this very save announces back to the page.
   if (els.status.classList.contains('pending')) setStatus('');
 }
@@ -258,7 +260,7 @@ function markPending() {
 /**
  * A raw days value is either an accepted whole number of days or a rejection we surface inline.
  * Storing clamps to the same bounds the input advertises, so an accepted value round-trips exactly.
- * The signal and the language are written by the same press of «Записать»: only a bundled sound
+ * The signal and the language are written by the same press of «Save»: only a bundled sound
  * reach storage, and the worker picks the new file up on its very next alert.
  */
 async function saveFields() {
@@ -354,7 +356,7 @@ async function saveFields() {
 }
 
 /**
- * A field edit is not written until «Записать» is pressed, so leaving the screen with a pending
+ * A field edit is not written until «Save» is pressed, so leaving the screen with a pending
  * value would drop it quietly — ask before doing that.
  */
 function leavePage(url) {
@@ -372,15 +374,15 @@ function leavePage(url) {
 }
 
 /**
- * Прослушать сигнал, выбранный в combobox, — даже тот, что ещё не записан, — чтобы выбрать его
- * на слух. У этой страницы есть DOM, поэтому она играет встроенный файл прямо через <audio>, а не
- * через offscreen-документ, которым пользуется service worker для сигнала автозагрузки.
+ * Listen to the signal chosen in the combobox — even one not yet written to storage — so it can be
+ * picked by ear. This page has a DOM, so it plays the bundled file directly through <audio>, not
+ * through the offscreen document a service worker uses for the automatic-load signal.
  */
 function playPreview() {
   const choice = els.sound.value;
   const audio = new Audio(chrome.runtime.getURL(choice));
   // The preview answers to the slider as it stands now — even to a volume not written yet —
-  // so the alert can be adjusted by ear before «Записать».
+  // so the alert can be adjusted by ear before «Save».
   audio.volume = volumeFraction();
   els.playSound.classList.add('playing');
 

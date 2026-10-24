@@ -51,8 +51,8 @@ export async function wireThemeButton(button) {
   const iconOnly = button.classList.contains('theme-toggle');
 
   const render = (theme) => {
-    // Метка зависит от темы, а язык — от словаря: ключ кладём в data-i18n-title, чтобы
-    // `applyI18n()` переклеил и её, когда интерфейс сменит язык.
+    // The label depends on the theme and the language comes from the dictionary: the key goes
+    // into data-i18n-title so `applyI18n()` relabels it too when the interface switches language.
     const key = theme === 'light' ? 'common.theme.dark' : 'common.theme.light';
     const label = t(key);
     button.dataset.i18nTitle = key;

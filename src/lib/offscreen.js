@@ -1,6 +1,6 @@
-// Offscreen-документ: единственное место расширения, где есть настоящий DOM.
-// Service worker разрешает fetch, но в нём нет ни DOMParser, ни Web Audio, поэтому разбор XML
-// лент и короткий сигнал играются здесь (разрешение manifest "offscreen").
+// The offscreen document: the extension's only place with a real DOM.
+// The service worker allows fetch but has neither DOMParser nor Web Audio, so parsing feed XML
+// and playing the short signal happen here (manifest permission "offscreen").
 
 const OFFSCREEN_URL = 'src/offscreen.html';
 const REASONS = ['AUDIO_PLAYBACK', 'DOM_PARSER'];
@@ -11,15 +11,15 @@ const JUSTIFICATION =
 
 let creationPromise = null;
 
-/* Документ нужен только на время запроса: разобрать ответ ленты или сыграть сигнал. Chrome держит
- * offscreen-документ открытым, пока его явно не закроют, то есть без этого шага он живёт до конца
- * сессии браузера — живой документ с DOM и выходом в сеть, никем не востребованный. Поэтому после
- * последнего запроса он закрывается сам.
+/* The document is needed only for the duration of a request: parse a feed response or play a
+ * signal. Chrome keeps an offscreen document open until it is explicitly closed, so without this
+ * step it lives until the browser session ends — a live document with a DOM and network access that
+ * nobody is using. So after the last request it closes itself.
  *
- * Срок выбран так, чтобы успеть сработать: сам фон Chrome снимает за 30 с спокойствия, и таймер
- * дольше этого мог бы просто не дожить до своего запуска. Он длиннее любого сигнала из `src/media`
- * (файлы в несколько секунд) — чтобы документ не пропал под играющим звуком, — и достаточно
- * короткий, чтобы пакетная перечитка лент не создавала окно заново на каждой ленте. */
+ * The period is chosen so it can actually fire: Chrome itself tears the background down after 30 s
+ * of quiet, and a longer timer might simply not live to run. It is longer than any signal in
+ * `src/media` (files of a few seconds) — so the document does not vanish under playing sound — and
+ * short enough that a batch re-read of feeds does not recreate the window on every feed. */
 export const IDLE_CLOSE_MS = 20_000;
 
 let activeRequests = 0;
@@ -27,8 +27,8 @@ let closeTimer = null;
 let closingPromise = null;
 
 /**
- * Ошибка с i18n-кодом: `code` указывает на ключ `errors.<code>`, `params` заполняет его
- * placeholders, а `message` остаётся техническим — его показывает только консоль.
+ * An error with an i18n code: `code` points at the `errors.<code>` key, `params` fills its
+ * placeholders, and `message` stays technical — only the console shows it.
  */
 function codedError(code, message, params) {
   const error = new Error(message);
@@ -42,11 +42,11 @@ function sleep(ms) {
 }
 
 /**
- * Есть ли уже offscreen-документ.
- * `chrome.offscreen.hasDocument` есть только с Chrome 150, `chrome.runtime.getContexts` — с Chrome 116,
- * и этот нижний край записан в манифесте как `minimum_chrome_version`: ниже 116 спросить нечем, а без
- * ответа `ensureOffscreenDocument()` создавал бы документ поверх уже открытого и ленты падали бы с
- * `errors.offscreenUnavailable`.
+ * Whether an offscreen document already exists.
+ * `chrome.offscreen.hasDocument` exists only from Chrome 150, `chrome.runtime.getContexts` from
+ * Chrome 116, and this lower edge is written in the manifest as `minimum_chrome_version`: below 116
+ * there is nothing to ask with, and without an answer `ensureOffscreenDocument()` would create a
+ * document on top of an already open one and feeds would fail with `errors.offscreenUnavailable`.
  */
 export async function hasOffscreenDocument() {
   if (chrome.offscreen?.hasDocument) {
@@ -65,7 +65,7 @@ export async function hasOffscreenDocument() {
   return false;
 }
 
-/** Создаёт offscreen-документ, если его ещё нет. Одно и то же окно служит и звуку, и разбору XML. */
+/** Creates the offscreen document if it is not there yet. The same window serves both sound and XML parsing. */
 export async function ensureOffscreenDocument() {
   if (await hasOffscreenDocument()) return true;
 
@@ -96,7 +96,7 @@ function cancelIdleClose() {
   }
 }
 
-/** Отложить закрытие на конец простоя: запросы, идущие один за другим, держат документ живым. */
+/** Postpone closing to the end of the idle period: requests coming one after another keep the document alive. */
 function armIdleClose() {
   cancelIdleClose();
   closeTimer = setTimeout(() => {
@@ -106,7 +106,7 @@ function armIdleClose() {
 }
 
 async function closeWhenIdle() {
-  /* Запрос мог начаться, пока таймер шёл: тогда документ снова нужен. */
+  /* A request may have started while the timer was running: then the document is needed again. */
   if (activeRequests > 0) {
     armIdleClose();
     return;
@@ -124,15 +124,14 @@ async function closeWhenIdle() {
 }
 
 /**
- * Отправить сообщение offscreen-документу и дождаться его ответа.
- * Свежесозданный документ мог ещё не успеть зарегистрировать слушателя, поэтому одна повторная
- * попытка.
- * @returns {Promise<unknown>} ответ offscreen-документа
- * @throws {Error} если документа нет или он не ответил
+ * Send a message to the offscreen document and wait for its answer.
+ * A just-created document may not have managed to register its listener yet, so there is one retry.
+ * @returns {Promise<unknown>} the offscreen document's answer
+ * @throws {Error} if there is no document or it did not answer
  */
 export async function requestOffscreen(message, { attempts = 2, retryDelay = 150 } = {}) {
-  /* Закрытие по простою уже началось — значит, создавать документ поверх закрываемого нельзя:
-   * сначала дождаться, пока оно закончится. */
+  /* The idle close has already begun — so a document must not be created on top of the closing one:
+   * wait for the close to finish first. */
   if (closingPromise) await closingPromise;
 
   if (!(await ensureOffscreenDocument())) {
@@ -158,7 +157,7 @@ export async function requestOffscreen(message, { attempts = 2, retryDelay = 150
         });
       });
 
-      // Ключ есть даже когда ответ — undefined: документ ответил, просто без полезных данных.
+      // The key exists even when the answer is undefined: the document answered, just without useful data.
       if (sent && 'reply' in sent) return sent.reply;
 
       lastError = sent?.error ?? null;
@@ -171,16 +170,16 @@ export async function requestOffscreen(message, { attempts = 2, retryDelay = 150
       { cause: lastError ? `: ${lastError}` : '' },
     );
   } finally {
-    /* Запрос закончен — ответом или отказом. Отсчёт простоя начинается заново: документ, который
-     * не ответил, закрывается вместе с остальными и в следующее чтение создаётся заново. */
+    /* The request is over — by answer or by failure. The idle countdown starts anew: a document
+     * that did not answer closes together with the rest and is created fresh on the next read. */
     activeRequests -= 1;
     armIdleClose();
   }
 }
 
 /**
- * Закрыть документ, если он открыт. Это же зовёт таймер простоя: документ живёт ровно столько,
- * сколько им пользуются.
+ * Close the document if it is open. The idle timer calls this too: the document lives exactly as
+ * long as it is being used.
  */
 export async function closeOffscreenDocument() {
   if (!(await hasOffscreenDocument())) return;

@@ -5,17 +5,17 @@
 import { MSG_FETCH_FEED, MSG_PLAY_SOUND } from './lib/messages.js';
 import { fetchFeed } from './lib/rss.js';
 
-/** Путь от корня расширения к файлу-сигналу (src/media/ceres.mp3). */
+/** Path from the extension root to the signal file (src/media/ceres.mp3). */
 const DEFAULT_SOUND_FILE = 'src/media/ceres.mp3';
 
 let alertAudio = null;
 
-/** Проигрывание, которое ещё не дошло до звука: его `play()` висит, пока файл грузится. */
+/** A playback that has not reached sound yet: its `play()` hangs while the file loads. */
 let playback = null;
 
 /**
- * Один переиспользуемый плеер: файл загружается в памяти offscreen-документа один раз и при
- * каждом сигнале начинается сначала. Значит, не тратится декодирование и не копятся слои звука.
+ * One reused player: the file is loaded once in the offscreen document's memory and restarted on
+ * every signal. So no decoding is wasted and no layers of sound pile up.
  */
 function getAlertAudio(src) {
   if (alertAudio && alertAudio.dataset.src === src) return alertAudio;
@@ -27,26 +27,27 @@ function getAlertAudio(src) {
     console.warn('could not load the sound file:', src);
     if (alertAudio === player) alertAudio = null;
   });
-  /* Смена файла на экране настроек: проигрывание старого игрока больше не описывает звук, который
-   * читалка хочет услышать, поэтому новый сигнал не должен к нему присоединяться. */
+  /* Changing the file on the settings screen: the old player's playback no longer describes the
+   * sound the reader wants to hear, so a new signal must not join it. */
   playback = null;
   alertAudio = player;
   return alertAudio;
 }
 
 /**
- * Отказ, который Chrome даёт `pause()`, не давшему начатому `play()` дойти до звука: «The play()
- * request was interrupted by a call to pause()». Такой обрыв — не сбой, а следующий сигнал,
- * пришедший, пока предыдущий ещё грузился (ленты перечитываются одна за другой).
+ * The failure Chrome gives when a started-but-not-yet-sounding `play()` is answered by `pause()`:
+ * "The play() request was interrupted by a call to pause()". Such a break is not a fault but the
+ * next signal arriving while the previous one was still loading (feeds are re-read one after
+ * another).
  */
 function wasInterrupted(error) {
   return error?.name === 'NotSupportedError' && /interrupted/i.test(String(error?.message ?? ''));
 }
 
 /**
- * Сигнал «автоматическая загрузка принесла заголовки» — играем файл, а не синтезированный тон.
- * `volume` — доля громкости (0–1), выбранная на экране глобальных настроек; она применяется к
- * переиспользуемому плееру при каждом сигнале, чтобы новая громкость действовала сразу.
+ * The "automatic load brought headlines" signal — we play a file, not a synthesized tone.
+ * `volume` is the volume fraction (0–1) chosen on the global settings screen; it is applied to the
+ * reused player on every signal so a new volume takes effect at once.
  * @returns {Promise<void>}
  */
 async function playSoundFile(src = DEFAULT_SOUND_FILE, volume = 1) {
@@ -55,19 +56,20 @@ async function playSoundFile(src = DEFAULT_SOUND_FILE, volume = 1) {
   const fraction = Number(volume);
   player.volume = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 1;
 
-  /* Сигнал, который ещё не заиграл, нечего обрывать: его `play()` и так начнёт файл с нуля, а
-   * `pause()` поверх него лишь отвергает то проигрывание — Chrome поднимает отказ «The play()
-   * request was interrupted by a call to pause()» в консоль, и он попадает в ошибки расширения.
-   * Поэтому новый сигнал догоняет такое проигрывание, а не обрывает его. */
+  /* There is no point breaking a signal that has not started playing yet: its `play()` will begin
+   * the file from zero anyway, while a `pause()` on top of it only rejects that playback — Chrome
+   * raises the failure "The play() request was interrupted by a call to pause()" in the console,
+   * and it lands in the extension's errors. So a new signal catches up with such a playback
+   * instead of breaking it. */
   const pending = playback;
 
   if (pending === null) {
-    // Прежде играющий звук уже дошёл до проигрывания: его прерывают и начинают файл сначала.
+    // A sound that was already playing has reached playback: it is interrupted and the file starts over.
     player.pause();
     player.currentTime = 0;
   }
 
-  // Chrome может отказать в воспроизведении без жеста пользователя — это не должно ронять фон.
+  // Chrome may refuse playback without a user gesture — that must not bring the background down.
   const started = pending ?? player.play();
   playback = started;
 
@@ -75,16 +77,16 @@ async function playSoundFile(src = DEFAULT_SOUND_FILE, volume = 1) {
     if (playback === started) playback = null;
   }
 
-  /* Отклонение принимается здесь же: обрыв `play()` — рабочее событие, а не сбой, и он не должен
-   * остаться необработанным. Заодно по нему видно, что проигрывание больше не идёт. */
+  /* The rejection is handled right here: a broken `play()` is a working event, not a fault, and it
+   * must not stay unhandled. It also shows that the playback is no longer running. */
   const settled = started.then(forget, forget);
 
   try {
     await settled;
   } catch (error) {
-    /* Отказ мог принести и следующий сигнал, оборвав этот: звук тогда сыграл тот сигнал, и
-     * сообщать об отказе не нужно. Настоящий отказ (файл, политика автовоспроизведения)
-     * остаётся ошибкой. */
+    /* The failure may have come from the next signal breaking this one: the sound then played that
+     * signal, and no failure needs reporting. A real failure (the file, the autoplay policy)
+     * stays an error. */
     if (!wasInterrupted(error)) throw error;
   }
 }

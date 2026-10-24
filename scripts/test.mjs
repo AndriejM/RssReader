@@ -3539,7 +3539,7 @@ test('the middle column filters its headlines, and the reader answers to the key
   assert.ok(page.includes("document.getElementById('headline-search')"), 'the page does not know the field the markup declares');
   assert.ok(page.includes("els.headlineSearch.addEventListener('input'"), 'what is typed in that field is read by nobody');
 
-  /* A search narrows the selection of the left column; it must not replace it, or «Все ленты» would
+  /* A search narrows the selection of the left column; it must not replace it, or "All feeds" would
    * stop being the whole stored list. */
   assert.ok(
     page.includes('state.items.filter(inSelection).filter(matchesQuery)'),
@@ -3824,7 +3824,7 @@ test('the reader shows the read mark, its toggle and the way back from a delete'
 });
 
 /**
- * The README promises «содержание подгружается динамически в момент клика»: a headline click shows
+ * The README promises that the content is pulled dynamically at the moment of the click: a headline click
  * the stored `<description>`, and the full text of the page is pulled over it on demand — by the
  * button in the article toolbar or by the `f` key. `extract.fetchArticle` and `extract.extractArticle`
  * stand only for this, so the guard keeps the whole trip — the import, the button, its glyph, the key,
@@ -3934,7 +3934,7 @@ test('the feeds screen reports the health of each feed and the reader flags a fa
 /* ---------------- the load the reader names ---------------- */
 
 /**
- * The reader answers «почему новости не пришли» on its own screen: the line under the head of the
+ * The reader answers "why no news came" on its own screen: the line under the head of the
  * middle column names when the headlines of what is selected came in and when they are next asked
  * for automatically. Markup, script, stylesheet and the seven dictionaries are kept in step here.
  */
@@ -3950,13 +3950,13 @@ test('the reader names the last load and the next check of what it shows', () =>
   assert.ok(page.includes('renderFeedStatus();'), 'the line the markup declares is drawn by nobody');
   assert.ok(css.includes('.panel-status'), 'the line the markup declares is not styled');
 
-  /* One feed and «Все ленты» are both covered: the age is the newest of the feeds the selection
+  /* One feed and "All feeds" are both covered: the age is the newest of the feeds the selection
    * stands for, the next check is the earliest of them. */
   assert.ok(page.includes('state.feeds : feed ? [feed] : []'), 'the line does not follow the selection of the left column');
   assert.ok(page.includes('feedNextCheckAt('), 'the reader names no next check of its own selection');
   assert.ok(page.includes('lastFetchedAt'), 'the reader names no moment its headlines came in');
 
-  /* «4 мин назад» is drawn once and then left standing; it has to be redrawn while the reader is open. */
+  /* "4 min ago" is drawn once and then left standing; it has to be redrawn while the reader is open. */
   assert.ok(page.includes('setInterval('), 'the line stops aging while the reader sits open');
   assert.ok(page.includes("'visibilitychange'"), 'a tab that came back shows the age it sat out');
 
@@ -4526,7 +4526,7 @@ test('every name a file borrows from another is one that module really exports',
 /* ---------------- the schedule the reader names ---------------- */
 
 /**
- * The reader answers «когда ленту спросят снова» with a moment it did not invent: `syncAlarms` reads
+ * The reader answers "when is a feed asked again" with a moment it did not invent: `syncAlarms` reads
  * it off the alarms Chrome really runs and writes it into the feed row. A sync that learned nothing
  * has to write nothing — otherwise the write would wake `chrome.storage.onChanged`, which asks for
  * the same sync again, and the worker would chase its own storage forever.
@@ -5520,7 +5520,7 @@ test('a feed whose headlines are gone is asked for plainly, not with the keys th
 });
 
 /**
- * «не изменилось» and «0 headlines» are two words for two different answers, and the feeds screen can
+ * "unchanged" and "0 headlines" are two words for two different answers, and the feeds screen can
  * only tell them apart if the worker's answer says which one it was. Both reads run here on the same
  * feed: one server answers an empty 304, the other sends the whole feed again and every headline of it
  * is already on the shelf — the same `added: 0`, a different read.
@@ -6520,9 +6520,9 @@ test('the offscreen document is closed once the reader stops borrowing it', asyn
 });
 
 /**
- * Простой не должен закрыть документ под запросом, который ещё идёт: одно чтение уже ответило и
- * поставило таймер закрытия, а другое всё ещё держит связь с offscreen-документом. Тот же таймер
- * в этом случае ставит новую попытку вместо закрытия.
+ * The standby must not close the document under a request that is still going: one read has already answered
+ * and armed its close timer, while another still holds the link to the offscreen document. The same timer,
+ * in that case, arms a new attempt instead of a close.
  */
 test('a close on standby waits for the read that is still going', async () => {
   const closed = [];
@@ -6548,7 +6548,7 @@ test('a close on standby waits for the read that is still going', async () => {
       },
       sendMessage(_message, callback) {
         sends += 1;
-        /* Первое чтение отвечает не сразу: оно держит документ, пока тест сам не ответит. */
+        /* The first read answers not at once: it holds the document until the test itself answers. */
         if (sends === 1) {
           answer = () => callback({ ok: true, result: { entries: [] } });
           return;
@@ -6578,7 +6578,7 @@ test('a close on standby waits for the read that is still going', async () => {
     });
     await settle();
 
-    /* Чтение, которое ответило: оно и ставит тот таймер, что собирается закрыть документ. */
+    /* The read that answered: it is the one that arms the timer about to close the document. */
     await offscreenLib.requestOffscreen({ type: MSG_PLAY_SOUND, src: 'src/media/ceres.mp3' });
 
     const armed = waits.filter((wait) => !wait.cancelled);
@@ -6612,8 +6612,8 @@ test('a close on standby waits for the read that is still going', async () => {
 });
 
 /**
- * Срок закрытия — не украшение: он должен и дожить до своего запуска, и переждать сигнал, который
- * играет в этом же документе.
+ * The wait before the close is not decoration: it has to both live long enough to run and outlast the signal
+ * that plays in this same document.
  */
 test('the wait before the close is short enough to happen and long enough to be safe', () => {
   assert.ok(
@@ -6629,10 +6629,10 @@ test('the wait before the close is short enough to happen and long enough to be 
 /* ------------------------- the age written on a row ------------------------- */
 
 /**
- * «5 мин назад» строки списка, подсказка строки ленты, строка источника открытой статьи и строка
- * диагностики под рядом таблицы лент — всё это нарисовано один раз, когда колонка или таблица
- * собрана. Через минуту каждая из них говорит неправду, если её не перечеркнуть на том же месте:
- * перестроить среднюю колонку ради одной такой строки — значит выбросить место читателя в списке.
+ * "5 min ago" on the list row, the tooltip of the feed row, the source line of the open article and the
+ * diagnosis line under the row of the feeds table — all of them are drawn once, when the column or the table
+ * is built. After a minute each of them says something untrue unless it is rewritten on the very same spot:
+ * rebuilding the middle column for one such line would throw away the reader's place in the list.
  */
 test('every age the screens write is redrawn while they sit open', () => {
   const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');

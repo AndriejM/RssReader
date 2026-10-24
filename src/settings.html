@@ -85,8 +85,8 @@
       </div>
 
       <table class="settings-table">
-        <!-- Поля называет их `<label>`, а само поле таблицы — эту подпись: без неё экран, входя в
-             таблицу, не говорит, что за неё отвечает. -->
+        <!-- The fields are named by their `<label>`, the table itself by this caption: without it a screen
+             reader, entering the table, does not say what it answers for. -->
         <caption class="sr-only" data-i18n="settings.caption"></caption>
         <tbody>
           <tr>
@@ -195,11 +195,11 @@
     </section>
 
     <!--
-      Что экран говорит вслух о нажатии «Записать»: что именно записано, что поле с днями принято не
-      было, сколько отметок о прочитанном стёрто и почему сигнал не зазвучал. Те же слова стоят строкой
-      под таблицей полей, где их видит глаз; эта строка нигде не рисуется (см. `.sr-only` в `theme.css`),
-      но экран читает её вслух. Подсказка «изменения не записаны» вслух не повторяется: она стоит на
-      экране постоянно.
+      What the screen says out loud about a press of "Save": what exactly was saved, that a field with days
+      was not accepted, how many marks about what was read were erased, and why the sound did not ring. The
+      same words stand as a line under the table of fields, where the eye sees them; this line is drawn
+      nowhere (see `.sr-only` in `theme.css`), but a screen reader reads it aloud. The hint "Changes are not
+      saved" is not repeated out loud: it stands on the screen all the time.
     -->
     <p class="sr-only" id="settings-announce" role="status" aria-live="polite" aria-atomic="true"></p>
   </div>

@@ -193,11 +193,12 @@ export function feedPauseRemaining(feed, now = Date.now()) {
 }
 
 /**
- * Когда ленту прочтут в следующий раз. Срок стоит искать позже обоих, что его называют: будильник
- * ленты (`nextAlarmAt`) идёт своим расписанием, а пауза после отказа (`nextRetryAt`) только
- * пропуска́ет попытку — сам будильник не двигается (см. `background.js`). Лента, у которой срок
- * уже прошёл, отвечает на этот вопрос собой: её вопрос стоит задать сейчас.
- * 0 — срока нет вовсе: ленту никто не читал и её будильник ещё не записан.
+ * When a feed will be read next. The deadline should be looked for later of the two that name it:
+ * the feed's alarm (`nextAlarmAt`) runs on its own schedule, while the pause after a failure
+ * (`nextRetryAt`) only skips an attempt — the alarm itself does not move (see `background.js`). A
+ * feed whose deadline has already passed answers this question with itself: its question should be
+ * asked now. 0 — there is no deadline at all: nobody has read the feed and its alarm is not yet
+ * recorded.
  */
 export function feedNextCheckAt(feed, now = Date.now()) {
   const alarmAt = Number(feed?.nextAlarmAt);
@@ -211,7 +212,7 @@ function round2(value) {
   return String(Math.round(value * 100) / 100);
 }
 
-/** Подставить число в шаблон единицы измерения вида «{n} мин» (шаблоны приходят из i18n). */
+/** Substitute a number into a unit template like "{n} мин" (the templates come from i18n). */
 function unitFormat(template, value) {
   return String(template).replace('{n}', String(value));
 }
@@ -514,10 +515,10 @@ export function linkKey(link) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return raw;
 
   url.protocol = 'https:';
-  /* Порт уже сброшен самим `URL`: адрес, названный портом своего же протокола, читается без порта
-   * ещё при разборе (`http://host:80` и `https://host:443` приходят с пустым `port`), а смена
-   * протокола дописывает оставшийся порт до implied. Поэтому здесь остаются только настоящие порты
-   * — `https://host:8080` это другой сайт. */
+  /* The port has already been dropped by `URL` itself: an address named with its own protocol's
+   * default port reads without a port already during parsing (`http://host:80` and `https://host:443`
+   * arrive with an empty `port`), and changing the protocol fills the remaining port up to implied.
+   * So only real ports are left here — `https://host:8080` is a different site. */
   url.username = '';
   url.password = '';
   url.hash = '';

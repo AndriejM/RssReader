@@ -47,12 +47,12 @@ const els = {
   contentRead: document.getElementById('content-read'),
   contentArticle: document.getElementById('content-article'),
   contentBody: document.getElementById('content-body'),
-  /* Плейсхолдер правой панели и сама статья — два соседа, а не одно место: панель говорит то одно,
-   * то другое, живой регион при этом не пересоздаётся (см. `sayEmpty`). */
+  /* The right panel's placeholder and the article itself are two neighbours, not one spot: the panel
+   * says now the one, now the other, while the live region is not recreated (see `sayEmpty`). */
   contentEmpty: document.getElementById('content-empty'),
   articleBody: document.getElementById('article-body'),
 
-  /* Строка отмены: её ставит удаление заголовка, и она же возвращает его назад. */
+  /* The undo line: headline deletion puts it up, and it is also what brings the headline back. */
   undoLine: document.getElementById('undo-line'),
   undoText: document.getElementById('undo-text'),
   undoButton: document.getElementById('btn-undo'),
@@ -61,23 +61,23 @@ const els = {
 const state = {
   feeds: [],
   items: [],
-  /** `uid` тех заголовков, которых метка «прочитано» держит вне выборок (см. `store.readMarksFor`). */
+  /** The `uid`s of the headlines the "read" mark keeps out of the selections (see `store.readMarksFor`). */
   read: new Set(),
   feedId: null,
   uid: null,
   query: '',
-  /** Заголовок, который читалка ещё может вернуть: сам он и сколько живёт его строка отмены. */
+  /** The headline the reader can still bring back: the headline itself and how long its undo line lives. */
   undo: null,
   /**
-   * Номер запроса полного текста: `renderArticle` поднимает его при каждом открытии заголовка, а
-   * `loadArticleText` сверяет свой номер с этим — чтобы страница, пришедшая поздно, не растёрла
-   * уже открытый заголовок.
+   * The request number for full text: `renderArticle` raises it on every headline open, and
+   * `loadArticleText` compares its own number against it — so a page that arrives late does not rub
+   * out an already open headline.
    */
   articleToken: 0,
   /**
-   * Отказ последней попытки прочесть то, что выбрано сейчас: ключ словаря и сам отказ. Его держит
-   * строка под головой средней колонки, а не правая панель: отказ сети не имеет права затирать
-   * открытую статью.
+   * The failure of the last attempt to read what is selected now: a dictionary key and the failure
+   * itself. The line under the middle column's header holds it, not the right panel: a network
+   * failure has no right to overwrite an open article.
    */
   refreshError: null,
 };
@@ -161,9 +161,9 @@ function matchesQuery(item) {
 }
 
 /**
- * Заголовки выбранного пункта левой колонки — в том же порядке, что в средней панели (свежие
- * сверху). «Все ленты» — это `state.items`, которые `renderAll()` уже отсортировал по дате.
- * Поиск сузает этот список, но не меняет его порядок.
+ * The headlines of the chosen left-column entry — in the same order as in the middle panel (fresh on
+ * top). "All feeds" is `state.items`, which `renderAll()` has already sorted by date. Search narrows
+ * this list but does not change its order.
  */
 function visibleItems() {
   if (!state.feedId) return [];
@@ -171,8 +171,9 @@ function visibleItems() {
 }
 
 /*
- * Чем закончилась загрузка: сколько заголовков пришло и сколько лент отказалось. Ответ за одну ленту
- * и за все — одной формы: `added` в ответе или в каждой строке `results`, `failed` — их число.
+ * How a load ended: how many headlines came in and how many feeds refused. The answer for one feed
+ * and for all of them has one shape: `added` in the answer or in each row of `results`, `failed` —
+ * their count.
  */
 function outcomeOf(response) {
   if (!response?.ok) return t('reader.announce.error', { error: describeError(response?.error) });
@@ -187,19 +188,20 @@ function outcomeOf(response) {
 }
 
 /**
- * Отказ последней попытки прочесть ленты. `state.refreshError` держит сам отказ (`{ code, params,
- * message }`, каким его приносит работник) и ключ его подписи, а не их перевод: строку статуса
- * перечёркивают и на смене языка, и тогда о неисправности она должна сказать новым языком.
+ * The failure of the last attempt to read the feeds. `state.refreshError` holds the failure itself
+ * (`{ code, params, message }`, as the worker brings it) and the key of its label, not their
+ * translation: the status line is redrawn on a language change, and then it must tell of the fault in
+ * the new language.
  */
 function refreshFailureText(failure) {
   return t(failure.key, { error: describeError(failure.error) });
 }
 
 /**
- * Открытая статья остаётся статьёй: её текст лежит в хранилище, и временный сбой сети не имеет права
- * выбрасывать читателя к первому заголовку. Поэтому отказ встаёт в строку под головой средней
- * колонки — туда, где читалка уже говорит о загрузке того же выбора, — и только в правую панель,
- * когда статьи в ней всё равно нет.
+ * An open article stays an article: its text lies in storage, and a temporary network fault has no
+ * right to throw the reader out to the first headline. So the failure stands in the line under the
+ * middle column's header — where the reader already speaks about loading the very same selection —
+ * and only in the right panel when there is no article in it anyway.
  */
 function reportRefreshFailure(key, error) {
   state.refreshError = { key, error: error ?? null };
@@ -212,9 +214,9 @@ function renderTotal() {
 }
 
 /**
- * Откладывает вызов `fn`, пока вызывающий замолчит на `wait` мс: быстрые подряд идущие события
- * (каждый символ поиска, каждая запись фона в `chrome.storage.onChanged`) перерисовывают панели
- * один раз по окончании пачки, а не на каждое событие.
+ * Postpones a call of `fn` until the caller falls quiet for `wait` ms: fast events coming one after
+ * another (every search character, every background write in `chrome.storage.onChanged`) redraw the
+ * panels once at the end of the batch, not on every event.
  */
 function debounce(fn, wait) {
   let timer = null;
@@ -228,15 +230,15 @@ function debounce(fn, wait) {
 }
 
 /**
- * Что читалка говорит вслух, когда панель перерисовывается: строка `role="status"` (см. `index.html`)
- * нигде не рисуется — её только читает экран, и та же правда стоит в самих панелях. Пустая строка
- * не говорит ничего: так перезагрузка от `chrome.storage.onChanged` не пересказывает вслух то, о чём
- * уже сказал щелчок мыши или клавиша.
+ * What the reader says aloud when a panel is redrawn: a `role="status"` line (see `index.html`) is
+ * never drawn anywhere — only a screen reader reads it, and the same truth stands in the panels
+ * themselves. An empty line says nothing: that way a reload from `chrome.storage.onChanged` does not
+ * retell aloud what a mouse click or a key already said.
  */
 function say(message) {
   if (!message) return;
-  /* Одни и те же слова подряд — не то изменение, о котором экран сообщит: строка сначала пустеет,
-   * а наполняется следующим тиком, поэтому «получено 5» звучит и когда ленту обновили дважды. */
+  /* The same words one after another are not the change a screen reader will report: the line first
+   * empties and fills on the next tick, so "got 5" sounds even when a feed was refreshed twice. */
   els.announce.textContent = '';
   setTimeout(() => {
     els.announce.textContent = message;
@@ -280,9 +282,9 @@ function renderAllFeedsRow() {
 }
 
 /**
- * Подсказка строки ленты: когда её читали в последний раз и чем закончилась эта попытка. Отказ
- * подписывается на языке страницы тем же `describeError`, что и ошибка загрузки в средней панели,
- * поэтому код отказа не остаётся сырым ключом словаря.
+ * A feed row's tooltip: when it was read last and how that attempt ended. The failure is labeled in
+ * the page's language with the same `describeError` as a load error in the middle column, so a failure
+ * code does not stay a raw dictionary key.
  */
 function feedHealthTitle(feed) {
   const parts = [];
@@ -303,9 +305,9 @@ function feedHealthTitle(feed) {
     );
   }
 
-  /* Когда ленту спросят снова. Будильник стоит своего расписания, а пауза после отказа только
-   * пропуска́ет попытку (см. `background.js`), поэтому во время паузы говорят о её сроке,
-   * а вне её — о сроке, который называет сам будильник. */
+  /* When the feed will be asked again. The alarm stands on its own schedule, and the pause after a
+   * failure only skips an attempt (see `background.js`), so during a pause the line speaks of the
+   * pause's deadline, and outside it — of the deadline the alarm itself names. */
   const retryAt = Number(feed.nextRetryAt);
   if (retryAt > Date.now()) {
     parts.push(t('reader.feed.nextRetry', { until: formatUntil(retryAt, Date.now(), unitLabels()) }));
@@ -333,11 +335,11 @@ function paintFeeds() {
 
     const button = document.createElement('button');
     button.type = 'button';
-    /* Строка хранит, какой ленте она принадлежит: по этому `refreshAgedLabels` перечёркивает её
-     * подсказку о последней проверке, не перестраивая колонку. */
+    /* The row remembers which feed it belongs to: `refreshAgedLabels` uses this to redraw its
+     * last-check tooltip without rebuilding the column. */
     button.dataset.feedId = feed.id;
-    // Строка левой колонки выбирает ленту: `aria-current` говорит экрану, какая из них выбрана, —
-    // то же самое, что цвет выделения говорит глаз.
+    // The left column's row selects a feed: `aria-current` tells a screen reader which of them is
+    // selected — the same thing the selection color tells the eye.
     if (selected) button.setAttribute('aria-current', 'true');
     button.append(feedIconImg(feed.id));
 
@@ -354,8 +356,8 @@ function paintFeeds() {
     });
     body.append(title, meta);
 
-    /* Лента, которую не удаётся прочесть, не должна выглядеть обычной строкой: значок отказа стоит
-     * рядом с её названием, счётчик отказов — под названием, а подробности — в подсказке строки. */
+    /* A feed that cannot be read must not look like an ordinary row: the failure glyph stands beside
+     * its name, the failure counter under the name, and the details in the row's tooltip. */
     const failures = Number(feed.fetchFailureCount) || 0;
     if (failures > 0 && feed.lastErrorAt) {
       const warn = icon('warning');
@@ -378,14 +380,14 @@ function paintFeeds() {
 }
 
 /**
- * Строка под головой средней панели: что читалка знает о загрузке того, что она показывает.
- * «Заголовки получены 4 мин назад» отвечает на «почему новости не пришли» без console воркера,
- * а рядом называет, когда их спросят сами: у одной ленты — её будильник, у «всех лент» — самый
- * ранний из будильников всех.
+ * The line under the middle panel's header: what the reader knows about loading what it shows.
+ * "Headlines received 4 min ago" answers "why did no news come" without the worker's console, and
+ * names beside it when they will be asked next: one feed has its own alarm, "all feeds" has the
+ * earliest alarm of them all.
  *
- * Возраст заголовков и возраст проверки — разные вещи: ответ 304 ничего не приносит, поэтому он
- * не двигает момент, когда их получили. Именно это и стоит знать: спрашивали недавно, на сервере
- * с тех пор ничего нет.
+ * The age of the headlines and the age of the check are different things: a 304 answer brings
+ * nothing, so it does not move the moment they were received. That is exactly what is worth knowing:
+ * the reader asked recently, and the server has had nothing newer since.
  */
 function renderFeedStatus() {
   const all = isAllFeeds();
@@ -407,8 +409,9 @@ function renderFeedStatus() {
     parts.push(t('reader.status.nextCheck', { until: formatUntil(nextAt, now, unitLabels()) }));
   }
 
-  /* Отказ последней попытки — о том же выборе, о котором говорит эта строка. Он стоит в её конце
-   * и берёт свой цвет (см. `.panel-status.error`), чтобы не выглядеть обычным сроком. */
+  /* The failure of the last attempt is about the very selection this line speaks of. It stands at the
+   * line's end and takes its own color (see `.panel-status.error`) so it does not look like an
+   * ordinary deadline. */
   const failed = state.refreshError ? [refreshFailureText(state.refreshError)] : [];
 
   els.feedStatus.hidden = parts.length === 0 && failed.length === 0;
@@ -417,10 +420,10 @@ function renderFeedStatus() {
 }
 
 /**
- * Первый запуск читалки: пока в хранилище нет ни одной ленты, средней колонке нечего показывать, а
- * её поле поиска и кнопки «Загрузить» / «Удалить» действовали бы над пустым выбором. Поэтому до
- * первой ленты их место занимает карточка с переходом на экран лент. Ответ функции говорит и правой
- * панели, что показывать вместо статьи.
+ * The reader's first run: while storage holds not a single feed, the middle column has nothing to
+ * show, and its search field and "Load" / "Delete" buttons would act over an empty selection. So
+ * until the first feed their place is taken by a card linking to the feeds screen. The function's
+ * answer also tells the right panel what to show instead of an article.
  */
 function renderStartCard() {
   const noFeeds = state.feeds.length === 0;
@@ -432,9 +435,9 @@ function renderStartCard() {
 }
 
 /**
- * Подписать строку заголовка тем, что знает о нём колонка: лентой, откуда он взялся (нужно только
- * «Всем лентам»), и возрастом самой новости. Одно и то же делает и тик, который перечёркивает возраст
- * на месте (см. `refreshAgedLabels`).
+ * Label a headline row with what the column knows about it: the feed it came from (needed only by
+ * "All feeds") and the age of the news itself. The same work is done by the tick that strikes through
+ * the age in place (see `refreshAgedLabels`).
  */
 function paintItemMeta(meta, item, all) {
   const when = itemTime(item);
@@ -460,8 +463,9 @@ function paintHeadlines() {
   const noFeeds = renderStartCard();
   els.headlinesCount.textContent = items.length ? `${items.length}` : '';
 
-  /* Без лент о пустоте средней колонки говорит карточка первого запуска, а не строка пустого
-   * списка: «Выберите ленту слева» при пустой левой колонке советовало бы выбрать то, чего нет. */
+  /* With no feeds the first-run card, not the empty-list line, speaks of the middle column's emptiness:
+   * "Choose a feed on the left" above an empty left column would advise choosing something that is
+   * not there. */
   els.headlinesEmpty.hidden = items.length > 0 || noFeeds;
   if (!noFeeds) {
     els.headlinesEmpty.textContent = searching
@@ -474,7 +478,7 @@ function paintHeadlines() {
   }
 
   // The load/clear buttons sit in this head and act on this very selection, so their tooltip names
-  // exactly what they now cover: a single feed, or every feed when «Все ленты» is picked.
+  // exactly what they now cover: a single feed, or every feed when «All feeds» is picked.
   els.reload.title = t(all ? 'reader.refreshAll.tooltip' : 'reader.refresh.tooltip');
   els.reload.setAttribute('aria-label', t(all ? 'reader.refreshAll.aria' : 'reader.refresh.aria'));
   els.clear.title = t(all ? 'reader.clearAll.tooltip' : 'reader.clearFeed.tooltip');
@@ -486,15 +490,15 @@ function paintHeadlines() {
   let rowNumber = 0;
   for (const item of items) {
     const li = document.createElement('li');
-    // `data-uid` даёт строке имя, по которому `showHeadline()` находит её и переносит выделение, не
-    // перестраивая весь список (см. `selectHeadline`).
+    // `data-uid` gives the row a name by which `showHeadline()` finds it and moves the selection
+    // without rebuilding the whole list (see `selectHeadline`).
     li.dataset.uid = item.uid;
-    /* Средняя колонка — `listbox` (см. `index.html`), поэтому её строка — `option`, а открытая
-     * новость — та, что `aria-selected`; без этого экран назвал бы список списком кнопок. Строке
-     * нужен и `id`: по нему список называет строку, на которой стоит клавиатурный курсор (см.
-     * `setActiveDescendant`). Имя берёт место строки в списке: оно заведомо не повторяется, тогда
-     * как `uid` построен на идентификаторе ленты и мог бы дать имя с символами, которых `id` не
-     * выносит (см. `lib/util.js` -> `normalizeUid`). */
+    /* The middle column is a `listbox` (see `index.html`), so its row is an `option`, and the open
+     * news is the one with `aria-selected`; without it a screen reader would call the list a list of
+     * buttons. The row also needs an `id`: by it the list names the row the keyboard cursor stands on
+     * (see `setActiveDescendant`). The name takes the row's place in the list: it is guaranteed not to
+     * repeat, whereas `uid` is built on a feed id and could give a name with characters an `id` does
+     * not tolerate (see `lib/util.js` -> `normalizeUid`). */
     li.id = `hl-${(rowNumber += 1)}`;
     li.setAttribute('role', 'option');
     const selected = item.uid === state.uid;
@@ -502,13 +506,14 @@ function paintHeadlines() {
     li.setAttribute('aria-selected', selected ? 'true' : 'false');
     li.className = `list-item${selected ? ' selected' : ''}${read ? ' read' : ''}`;
 
-    /* Строка `option` не держит внутри себя действия: кнопка в ней была бы вторым фокусом внутри
-     * одного выбора и ломала бы сам список для экрана. Поэтому строка — обычный блок, а клик
-     * берёт строку целиком; курсор клавиатуры при этом стоит на самом списке (см. `index.html`). */
+    /* An `option` row holds no actions inside it: a button in it would be a second focus within one
+     * selection and would break the list itself for a screen reader. So the row is a plain block, and
+     * a click takes the whole row; the keyboard cursor meanwhile stands on the list itself (see
+     * `index.html`). */
     const row = document.createElement('div');
     row.className = 'item-row';
     li.addEventListener('click', () => showHeadline(item));
-    // Only «Все ленты» needs a feed to stand beside the headline, so only there does the headline
+    // Only «All feeds» needs a feed to stand beside the headline, so only there does the headline
     // carry its feed's icon; a single feed's list names that feed in the panel title instead.
     if (all) row.append(feedIconImg(item.feedId));
 
@@ -518,8 +523,8 @@ function paintHeadlines() {
     title.className = 'item-title';
     // A headline the feed gave no title is labelled here, in the reader's language.
     title.textContent = item.title || t('common.untitled');
-    /* Глиф заголовка, помеченного прочитанным: то же состояние, что ставит и снимает его кнопка
-     * правой панели, и та причина, по которой выборки эту новость уже не приносят. */
+    /* The glyph of a headline marked as read: the same state the right panel's button puts on and
+     * takes off, and the very reason the selections no longer bring this news. */
     if (read) title.append(readFlag());
 
     const meta = document.createElement('span');
@@ -534,16 +539,16 @@ function paintHeadlines() {
   }
 
   setActiveDescendant();
-  /* Списку, которому нечего показать курсору, нечего быть и узлом Tab: остановка Tab, которая ничего
-   * не называет, только держит читателя на месте там, где колонка пуста. */
+  /* A list that has nothing to show the cursor has no business being a Tab node either: a Tab stop
+   * that names nothing only keeps the reader in place where the column is empty. */
   if (items.length > 0) els.headlineList.tabIndex = 0;
   else els.headlineList.removeAttribute('tabindex');
 }
 
 /**
- * Курсор клавиатуры средней колонки: он стоит на самом списке — одном узле Tab на всю колонку, —
- * а `aria-activedescendant` называет строку, на которой этот курсор стоит. Без неё экран знал бы,
- * какая строка выбрана, но не знал бы, куда ведут следующую стрелку и что читать вслух.
+ * The middle column's keyboard cursor: it stands on the list itself — one Tab node for the whole
+ * column — and `aria-activedescendant` names the row the cursor stands on. Without it a screen reader
+ * would know which row is selected but not where to lead the next arrow or what to read aloud.
  */
 function setActiveDescendant() {
   const active = state.uid
@@ -554,15 +559,15 @@ function setActiveDescendant() {
 }
 
 /**
- * Move the left column's cursor — to a feed or to «Все ленты» — and put the middle column on the
+ * Move the left column's cursor — to a feed or to «All feeds» — and put the middle column on the
  * first headline of whatever that selection now covers.
  */
 function chooseFeed(feedId) {
   state.feedId = feedId;
   // Switching feeds drops whatever headline was open.
   state.uid = null;
-  /* Строка под головой средней колонки говорит о загрузке того, что выбрано сейчас: отказ другой
-   * ленты не должен переходить с неё на новую строку. */
+  /* The line under the middle column's header speaks about loading what is selected now: another
+   * feed's failure must not carry over onto the new line. */
   state.refreshError = null;
   paintFeeds();
   paintHeadlines();
@@ -577,10 +582,10 @@ function chooseFeed(feedId) {
 }
 
 /**
- * Правая панель без статьи: вместо неё строка о том, почему показывать нечего. Она стоит в разметке
- * и остаётся на месте, когда панель переходит то на неё, то на статью, — живой регион, который
- * пересоздают, экрану сказать нельзя. `alert` значит отказ, о котором нужно сказать сразу;
- * `status` — обычное «здесь пусто», которое не перебивает чтение.
+ * The right panel without an article: in its place a line about why there is nothing to show. It
+ * stands in the markup and keeps its place when the panel switches now to it, now to the article — a
+ * live region that gets recreated cannot be announced to a screen reader. `alert` means a failure that
+ * must be said at once; `status` — an ordinary "it is empty here" that must not interrupt reading.
  */
 function sayEmpty(message, { alert = false } = {}) {
   state.uid = null;
@@ -598,9 +603,9 @@ function sayEmpty(message, { alert = false } = {}) {
 }
 
 /**
- * Поиск меняет среднюю колонку, а с ней и открытый заголовок: он остаётся тем же, пока его видно,
- * иначе переходит на первый из тех, что остались, а когда не осталось ничего — правая панель
- * говорит об этом вместо статьи.
+ * Search changes the middle column, and with it the open headline: it stays the same one while it is
+ * visible, otherwise it moves to the first of those that remain, and when nothing remains the right
+ * panel says so instead of an article.
  */
 function applyQuerySelection() {
   const visible = visibleItems();
@@ -614,8 +619,9 @@ function applyQuerySelection() {
 
   const current = visible.find((item) => item.uid === state.uid);
   const target = current ?? visible[0];
-  /* Поиск меняет сам набор видимых строк, поэтому колонку перестраиваем заново: `showHeadline()`
-   * выделил бы нужную строку на месте, но старые — уже не подходящие под запрос — остались бы в списке. */
+  /* Search changes the very set of visible rows, so the column is rebuilt from scratch:
+   * `showHeadline()` would highlight the needed row in place, but the old rows — no longer matching
+   * the query — would have stayed in the list. */
   state.uid = target.uid;
   saveSelection();
   paintHeadlines();
@@ -667,7 +673,7 @@ function feedIconImg(feedId) {
 
 /**
  * The headline itself is the link to the original: it opens the news in a new tab, which is
- * why the toolbar no longer carries a separate «Открыть оригинал» control.
+ * why the toolbar no longer carries a separate "Open the original" control.
  */
 function titleHeading(text, link) {
   const h1 = document.createElement('h1');
@@ -690,13 +696,13 @@ function titleHeading(text, link) {
 function showHeadline(item, { followFocus = false } = {}) {
   state.uid = item.uid;
   saveSelection();
-  /* Перемещение курсора (`j`/`k`) не меняет, какие заголовки показывает колонка, поэтому новую
-   * строку выделяем на месте, а не перестраиваем всю среднюю колонку: полный `paintHeadlines()` —
-   * это несколько тысяч `<li>` и столько же замыканий на каждое нажатие клавиши. Если же строки на
-   * экране нет (набор видимых изменился), колонку приходится перестроить целиком — она и сама
-   * называет строку активного курсора.
-   * `focus()` средней колонке, а не её строке: курсор держит список, строка — только то, на что он
-   * направлен (см. `setActiveDescendant`). */
+  /* Moving the cursor (`j`/`k`) does not change which headlines the column shows, so the new row is
+   * highlighted in place instead of rebuilding the whole middle column: a full `paintHeadlines()` is
+   * several thousand `<li>` and the same number of closures on every keypress. If the row is not on
+   * screen (the visible set changed), the column has to be rebuilt entirely — it names the active
+   * cursor's row itself anyway.
+   * `focus()` goes to the middle column, not to its row: the list holds the cursor, the row is only
+   * what it points at (see `setActiveDescendant`). */
   if (selectHeadline(item.uid)) setActiveDescendant();
   else paintHeadlines();
   if (followFocus) els.headlineList.focus();
@@ -705,9 +711,9 @@ function showHeadline(item, { followFocus = false } = {}) {
 }
 
 /**
- * Заголовок, который загрузка приносит читателю, когда у ней нет открытого: первый из тех,
- * что показывает средняя колонка. Открытый заголовок загрузка не двигает — тем более когда она
- * отказалась и новых заголовков нет.
+ * The headline a load brings the reader when it has no open one: the first of what the middle column
+ * shows. A load does not move an open headline — all the more when the load failed and there are no
+ * new headlines.
  */
 function openTopHeadline() {
   if (state.uid) return;
@@ -716,9 +722,9 @@ function openTopHeadline() {
 }
 
 /**
- * Переносит выделение средней колонки на строку `uid`, меняя только две строки: ту, что была
- * открыта, и ту, что открылась. Возвращает `false`, когда строки на экране нет — значит, видимый
- * набор изменился и колонку нужно перестроить, а не подправлять на месте.
+ * Moves the middle column's selection onto row `uid`, changing only two rows: the one that was open
+ * and the one that opens. Returns `false` when the row is not on screen — meaning the visible set
+ * changed and the column must be rebuilt, not patched in place.
  */
 function selectHeadline(uid) {
   const next = els.headlineList.querySelector(`.list-item[data-uid="${CSS.escape(uid)}"]`);
@@ -734,11 +740,11 @@ function selectHeadline(uid) {
   return true;
 }
 
-/** Правая панель открытой новости: заголовок-ссылка, источник и сохранённое `<description>`. */
+/** The right panel of an open news item: a title-link, the source and the stored `<description>`. */
 function renderArticle(item) {
-  /* Новая открытая новость начинается с её сохранённого превью; полный текст, если читатель его
-   * запросит, подтянется поверх. Поднятый номер отменяет страницу, которую грузили для прежнего
-   * заголовка: она не должна прийти позже и растереть этот. */
+  /* A newly open news item starts with its stored preview; the full text, if the reader asks for it,
+   * pulls in on top of it. The raised number cancels the page that was loading for the previous
+   * headline: it must not arrive later and rub out this one. */
   state.articleToken += 1;
   els.contentDelete.hidden = false;
   els.contentEmpty.hidden = true;
@@ -761,7 +767,7 @@ function renderArticle(item) {
   els.articleBody.replaceChildren(...articleHead(item), ...marked, preview.node, ...notes);
 }
 
-/** Заголовок-ссылка и строка источника — общая шапка правой панели для превью и для полного текста. */
+/** The title link and the source line — the shared head of the right panel for the preview and for the full text. */
 function articleHead(item) {
   const title = titleHeading(item.title || t('common.untitled'), item.link);
   const source = document.createElement('div');
@@ -771,8 +777,8 @@ function articleHead(item) {
 }
 
 /**
- * Строка источника открытой статьи: та же метка возраста, что держит строка списка, и та же
- * перерисовка на месте.
+ * The source line of the open article: the same age label the list row holds, and the same redraw in
+ * place.
  */
 function paintSource(source, item) {
   const name = item.feedName || item.rss_link;
@@ -783,8 +789,8 @@ function paintSource(source, item) {
 }
 
 /**
- * Кнопка полного текста есть только у заголовка, куда можно сходить: без ссылки идти некуда, а
- * кнопка, которая не может ничего сделать, была бы пустой дырой в панели.
+ * The full-text button exists only for a headline there is somewhere to go to: without a link there is
+ * nowhere to go, and a button that cannot do anything would be an empty hole in the panel.
  */
 function paintArticleButton(item) {
   els.contentArticle.hidden = !item.link;
@@ -792,11 +798,11 @@ function paintArticleButton(item) {
 }
 
 /**
- * Требование «содержание подгружается динамически»: по кнопке (или клавише `f`) читалка идёт на
- * страницу заголовка и вынимает из неё текст статьи, ставя его поверх сохранённого превью.
- * Страница грузится ровно `ARTICLE_FETCH_TIMEOUT_MS`; отказ назван своим кодом и подписан языком
- * читалки (`describeError`). Номер запроса сторожит гонку: если за это время курсор ушёл на другой
- * заголовок, поздняя страница не должна растереть то, что открылось сейчас.
+ * The requirement "content is loaded dynamically": on the button (or the `f` key) the reader goes to the
+ * headline's page and takes the article's text out of it, putting it over the stored preview.
+ * The page loads for exactly `ARTICLE_FETCH_TIMEOUT_MS`; a refusal is named by its own code and signed in
+ * the reader's language (`describeError`). The request number guards the race: if by then the cursor has
+ * gone to another headline, the late page must not rub out what has just opened.
  */
 async function loadArticleText() {
   const item = openHeadline();
@@ -821,12 +827,12 @@ async function loadArticleText() {
     );
     return;
   } finally {
-    /* Кнопка возвращается в строй, только если этот заголовок ещё открыт: иначе за неё уже
-     * отвечает `renderArticle` нового. */
+    /* The button is back in service only if this headline is still open: otherwise `renderArticle` of the
+     * new one already answers for it. */
     if (token === state.articleToken) els.contentArticle.disabled = false;
   }
 
-  if (token !== state.articleToken) return; // курсор ушёл: поздняя страница больше не нужна
+  if (token !== state.articleToken) return; // the cursor has gone: the late page is no longer wanted
 
   const paragraphs = article.paragraphs.map((text) => {
     const p = document.createElement('p');
@@ -855,7 +861,7 @@ function note(text, kind = '') {
 }
 
 /**
- * «Почитано» — the read model where the reader can see it: the headline stays exactly where it
+ * "Mark read" is the read model where the reader can see it: the headline stays exactly where it
  * stands and takes the marker that keeps its news out of the polls for `read_ttl_days` (see
  * `store.markRead`). The same button takes the marker back, so what the reader marks is something it
  * can undo — unlike a delete, which throws the headline itself away.
@@ -873,15 +879,15 @@ async function toggleHeadlineRead() {
     els.contentRead.disabled = false;
   }
 
-  /* Сам заголовок никуда не двигался, поэтому перекрашивается только его метка: строка средней
-   * колонки и кнопка правой панели, а не вся колонка. */
+  /* The headline itself has not moved anywhere, so only its label is repainted: the middle column's row
+   * and the right panel's button, not the whole column. */
   state.read = store.readMarksFor(state.items, await store.getRead());
   paintReadRow(item.uid, state.read.has(item.uid));
   paintReadButton(item);
   say(t(wasRead ? 'reader.announce.unmarked' : 'reader.announce.marked'));
 }
 
-/** Кнопка правой панели: она называет, в какую сторону действует сейчас, и стоит нажатой, когда метка стоит. */
+/** The right panel's button: it names which way it acts now, and stands pressed when the mark stands. */
 function paintReadButton(item) {
   const isRead = state.read.has(item.uid);
   const key = isRead ? 'unmark' : 'mark';
@@ -893,7 +899,7 @@ function paintReadButton(item) {
   els.contentRead.replaceChildren(icon(isRead ? 'unread' : 'read'));
 }
 
-/** Ставит или снимает метку с одной строки, не перестраивая среднюю колонку. */
+/** Puts a mark on a single row or takes it off without rebuilding the middle column. */
 function paintReadRow(uid, isRead) {
   const li = els.headlineList.querySelector(`.list-item[data-uid="${CSS.escape(uid)}"]`);
   const title = li?.querySelector('.item-title');
@@ -908,10 +914,10 @@ function paintReadRow(uid, isRead) {
 const UNDO_MS = 15000;
 
 /**
- * Строка отмены удаления: она лежит вдоль нижнего края текста статьи, наложенной на колонку (см.
- * `.undo-line` в `styles/reader.css`), и называет, что именно читалка может вернуть — текст статьи
- * от неё никуда не съезжает. Окно стоит `UNDO_MS` и закрывается по `Esc`, поэтому клавиша не трогает
- * ни открытый заголовок, ни то, что набрано в поле поиска.
+ * The undo line for a delete: it lies along the lower edge of the article text, overlaid on the column
+ * (see `.undo-line` in `styles/reader.css`), and names exactly what the reader can bring back — the
+ * article text does not shift because of it. The window stands `UNDO_MS` and closes on `Esc`, so the key
+ * touches neither the open headline nor what is typed in the search field.
  */
 function offerUndo(item) {
   clearUndo();
@@ -927,7 +933,7 @@ function clearUndo() {
   els.undoText.textContent = '';
 }
 
-/** Перекладывает строку отмены на новый язык: её текст называет удалённый заголовок. */
+/** Moves the undo line to the new language: its text names the deleted headline. */
 function renderUndo() {
   if (!state.undo) {
     els.undoLine.hidden = true;
@@ -939,9 +945,9 @@ function renderUndo() {
 }
 
 /**
- * Возвращает удалённый заголовок: он встаёт на полку там, где был, а метка, которая держала его вне
- * выборок, снимается (см. `store.restoreItem`) — иначе возвращённая новость не пришла бы обратно из
- * ленты, хотя читатель именно об этом и просил.
+ * Brings the deleted headline back: it takes its place on the shelf where it was, and the mark that kept
+ * it out of the selections is taken off (see `store.restoreItem`) — otherwise the returned news would not
+ * come back out of the feed, which is exactly what the reader asked for.
  */
 async function undoDelete() {
   const removed = state.undo?.item;
@@ -956,17 +962,16 @@ async function undoDelete() {
 
   state.uid = removed.uid;
   await renderAll();
-  /* `renderAll()` перестраивает колонки, но статью не рисует: без этого средняя колонка вернула бы
-   * выделение на возвращённый заголовок, а правая панель осталась с тем, что стояло до удаления. */
+  /* `renderAll()` rebuilds the columns but does not draw the article: without this the middle column
+   * would put the selection back on the returned headline while the right panel stayed with what stood
+   * before the delete. */
   const restoredItem = openHeadline();
   if (restoredItem) renderArticle(restoredItem);
   saveSelection();
   say(t('reader.announce.undone'));
 }
 
-/**
- * Удаление заголовка передаёт читалку следующему заголовку того же выделения.
- */
+/** Deleting a headline hands the reader to the next headline of the same selection. */
 async function deleteItem() {
   if (!state.uid) return;
 
@@ -982,7 +987,7 @@ async function deleteItem() {
   say(t('reader.announce.deleted'));
   if (removed) offerUndo(removed);
 
-  // «Все ленты» keeps the whole list: the next headline is the one that stood below the removed
+  // "All feeds" keeps the whole list: the next headline is the one that stood below the removed
   // one, whatever feed it belongs to. The search field filters that list exactly as it filters the
   // middle column, so the cursor lands on the next headline the reader can actually see.
   const remaining = visibleItems();
@@ -1006,7 +1011,7 @@ async function deleteItem() {
 
 /**
  * The trash icon beside the middle panel's title: it removes from storage the headlines the left
- * column has selected — one feed's headlines, or (with «Все ленты») every headline. They are
+ * column has selected — one feed's headlines, or (with "All feeds") every headline. They are
  * remembered as read so the next feed read does not hand them straight back. Deleting the whole
  * selection at once is the one thing on this screen that no undo window takes back, so it is
  * confirmed before it happens — the way a feed and a read list are deleted on the other two screens.
@@ -1031,7 +1036,7 @@ async function clearSelectionHeadlines() {
 
 /**
  * The load icon beside the middle panel's title: it reads the headlines of whatever the left column
- * has selected — a single feed, or (with «Все ленты») every feed of the list at once.
+ * has selected — a single feed, or (with "All feeds") every feed of the list at once.
  */
 async function reloadSelection() {
   if (isAllFeeds()) {
@@ -1050,8 +1055,8 @@ async function reloadSelection() {
   els.reload.classList.add('busy');
   els.reload.title = t('common.loading');
   try {
-    /* Строка статуса говорит о последней попытке: её прошлый отказ снимается, даже когда
-     * перерисовка панелей ещё не началась. */
+    /* The status line speaks of the last attempt: its past failure is taken off even before the panels
+     * have been redrawn. */
     state.refreshError = null;
     const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_FEED, feedId: feed.id });
     if (!response?.ok) reportRefreshFailure('reader.refresh.failed', response?.error);
@@ -1072,7 +1077,7 @@ async function reloadSelection() {
  */
 async function refreshAllFeeds() {
   if (state.feeds.length === 0) {
-    // Просьба обновить то, чего ещё нет, — то же первое знакомство, что и пустая средняя колонка.
+    // Asking to refresh what does not exist yet is the same first meeting as the empty middle column.
     sayEmpty(t('reader.start.contentHint'));
     return;
   }
@@ -1108,11 +1113,11 @@ async function renderAll() {
   ]);
   state.feeds = feeds;
   state.items = store.sortItems(items);
-  /* Средняя колонка рисует метку «прочитано» там же, где её держит хранилище: по тому же совпадению,
-   * по которому свежий заголовок не проходит через список прочитанного (см. `store.addItems`). */
+  /* The middle column draws the "read" marker where the storage holds it: by the very matching that keeps
+   * a fresh headline out of the list of read ones (see `store.addItems`). */
   state.read = store.readMarksFor(state.items, read);
 
-  // The selected feed may have been deleted on the settings screen; «Все ленты» is no feed, so it
+  // The selected feed may have been deleted on the settings screen; "All feeds" is no feed, so it
   // is not looked for in the list.
   if (state.feedId !== ALL_FEEDS_ID && !state.feeds.some((feed) => feed.id === state.feedId)) {
     state.feedId = null;
@@ -1128,8 +1133,8 @@ async function renderAll() {
   renderTotal();
   paintFeeds();
   paintHeadlines();
-  /* Правая панель говорит либо о том, что открытый заголовок исчез, либо о первой ленте, которой
-   * ещё нет: без неё там нечего показывать, и «выберите заголовок» было бы советом выбрать пустоту. */
+  /* The right panel speaks either of the open headline having gone, or of the first feed there is not yet:
+   * without it there is nothing to show there, and "select a headline" would be advice to select emptiness. */
   if (message) sayEmpty(message);
   else if (state.feeds.length === 0) sayEmpty(t('reader.start.contentHint'));
   return message;
@@ -1147,17 +1152,18 @@ function redraw() {
   const item = openHeadline();
   if (item) showHeadline(item);
   else if (state.feeds.length === 0) sayEmpty(t('reader.start.contentHint'));
-  /* Отказ последней загрузки — то, что рисует сама страница: смена языка его тоже переводит. */
+  /* The failure of the last load is something the page draws itself: a language change translates it too. */
   else if (state.refreshError) sayEmpty(refreshFailureText(state.refreshError), { alert: true });
-  /* Строка отмены тоже рисуется словами словаря: смена языка на экране настроек доходит и до неё. */
+  /* The undo line is also drawn in the words of the dictionary: a language change on the settings screen
+   * reaches it too. */
   renderUndo();
 }
 
 /* Storage is written by the background worker while this page is open, so react to it. */
 
-/* Фоновый рабочий может сделать несколько записей подряд (обход лент, метки прочитанного), и каждая
- * из них поднимает `storage.onChanged`. Перерисовку складываем в один вызов по окончании пачки.
- * Вкладку, которую никто не видит, не перерисовываем впустую: она догонит на `visibilitychange`. */
+/* The background worker can make several writes in a row (walking the feeds, read marks), and each of
+ * them raises `storage.onChanged`. The redraw is gathered into one call at the end of the batch. A tab
+ * nobody sees is not redrawn in vain: it catches up on `visibilitychange`. */
 let pendingStorageRender = false;
 const scheduleStorageRender = debounce(() => {
   if (document.hidden) {
@@ -1200,14 +1206,14 @@ els.contentRead.addEventListener('click', () => void toggleHeadlineRead());
 els.contentArticle.addEventListener('click', () => void loadArticleText());
 els.undoButton.addEventListener('click', () => void undoDelete());
 /*
- * Подсказка по клавишам: её открывает кнопка «?» шапки, закрывают её же крестик и клик по фону окна;
- * сам список закрывается и клавишей `?` (см. обработчик ниже). Возврат фокуса — тот же во всех
- * случаях: курсор становится на кнопку, которая окно открыла.
+ * The keyboard help: the "?" button of the header opens it, its own cross and a click on the window's
+ * background close it; the list itself closes on the `?` key too (see the handler below). The return of
+ * focus is the same in every case: the cursor stands on the button that opened the window.
  */
 els.keysButton.addEventListener('click', openKeysHelp);
 els.keysClose.addEventListener('click', closeKeysHelp);
 els.keysHelp.addEventListener('click', (event) => {
-  // Карточка подсказки лежит внутри окна: клик по самому окну — это клик мимо карточки.
+  // The card of the help lies inside the dialog: a click on the dialog itself is a click past the card.
   if (event.target === els.keysHelp) closeKeysHelp();
 });
 els.keysHelp.addEventListener('close', () => {
@@ -1215,32 +1221,32 @@ els.keysHelp.addEventListener('close', () => {
   els.panels.removeAttribute('aria-hidden');
   els.keysButton.focus();
 });
-/* Кнопка карточки первого запуска идёт той же дорогой, что и иконка лент в переключателе экранов:
- * переход в этой же вкладке, чтобы выбор и поиск остались там, где были. */
+/* The button of the first-run card goes the same road as the feeds icon in the screen switcher: a jump in
+ * this same tab, so the selection and the search stay where they were. */
 els.openFeeds.addEventListener('click', () => window.location.assign(pageUrl(SETTINGS_PAGE)));
 void wireThemeButton(els.theme);
 
-/* Каждое нажатие клавиши в поле поиска перестраивает среднюю колонку целиком, поэтому колонку
- * перерисовываем не на каждый символ, а когда читатель замолчит на мгновение. */
+/* Every keypress in the search field rebuilds the whole middle column, so the column is redrawn not on
+ * every character but when the reader falls silent for a moment. */
 const onSearchInput = debounce(() => {
   state.query = els.headlineSearch.value ?? '';
   applyQuerySelection();
 }, 180);
 els.headlineSearch.addEventListener('input', onSearchInput);
 
-/* Курсор клавиатуры средней колонки держит сама колонка, а не её строки: когда фокус переходит на
- * неё, строка, на которой этот курсор стоит, возвращается в поле зрения. Иначе её рамка осталась бы
- * за краем панели, а вместе с ней и ответ на вопрос, где читатель сейчас стоит. */
+/* The keyboard cursor of the middle column is held by the column itself, not by its rows: when the focus
+ * moves to it, the row that cursor stands on is brought back into view. Otherwise its frame would stay
+ * past the edge of the panel, and with it the answer to where the reader stands now. */
 els.headlineList.addEventListener('focus', () => {
   els.headlineList.querySelector('.list-item[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
 });
 
 /*
- * Возраст, названный один раз, через минуту уже неправда: «5 мин назад» строки списка и подсказка
- * строки ленты рисуются один раз, при перестроении колонки. Перестраивать колонку ради этого —
- * значит выбросить место читателя в списке и его курсор (см. `showHeadline`), поэтому тик перечёркивает
- * сами метки: строка списка находит свой заголовок по `data-uid`, строка ленты — свою ленту по
- * `data-feed-id`, панель статьи — заголовок, открытый сейчас.
+ * An age named once is already untrue a minute later: "5 min ago" on the list row and the tooltip of the
+ * feed row are drawn once, when the column is rebuilt. Rebuilding the column for this would throw away the
+ * reader's place in the list and their cursor (see `showHeadline`), so the tick rewrites the labels
+ * themselves: the list row finds its headline by `data-uid`, the feed row its feed by `data-feed-id`, the
+ * article panel the headline open now.
  */
 function refreshAgedLabels() {
   const all = isAllFeeds();
@@ -1269,10 +1275,9 @@ function refreshAgedLabels() {
 }
 
 /*
- * «4 мин назад» должно оставаться правдой, пока читалка стоит открытой, — иначе строка говорит о
- * загрузке, какой она была в момент, когда страницу последний раз перерисовывали. Раз в минуту
- * перечёркивают все метки возраста разом; вкладку, которой никто не видит, для этого не будят — она
- * догонит сама, когда снова станет видимой.
+ * "4 min ago" should stay true while the reader stands open — otherwise the line speaks of the load as it
+ * was at the moment the page was last redrawn. Once a minute all the age labels are rewritten together; a
+ * tab nobody sees is not woken for this — it catches up on its own once it becomes visible again.
  */
 setInterval(() => {
   if (!document.hidden) refreshAgedLabels();
@@ -1280,8 +1285,8 @@ setInterval(() => {
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  /* Вкладку прятали во время записи фона — перечитаем панели сейчас, одним `renderAll()`; он
-   * освежит и возраст меток, поэтому отдельный вызов не нужен. */
+  /* The tab was hidden while the background was writing — re-read the panels now with one `renderAll()`;
+   * it refreshes the age of the labels too, so a separate call is not needed. */
   if (pendingStorageRender) {
     pendingStorageRender = false;
     void renderAll();
@@ -1303,7 +1308,7 @@ function isTypingTarget(target) {
 
 /**
  * Move the cursor of the middle column by one headline — of the same selection and in the same order
- * the column shows them, so a feed, «Все ленты» and an active search all step through what is on
+ * the column shows them, so a feed, "All feeds" and an active search all step through what is on
  * screen. The row is brought back into view because the keyboard moves the cursor faster than the
  * eye scrolls the list.
  */
@@ -1332,11 +1337,11 @@ function openOriginal() {
 }
 
 /*
- * Подсказка по клавишам читалки — тот же список, что ведёт README, только там, где клавиши применяются.
- * `showModal()` ставит окно поверх экрана и запирает в нём клавиатурный курсор; шапка и колонки на это
- * время получают `aria-hidden`, чтобы Tab не ушёл за окно и не остался на скрытом под ним элементе.
- * Снимается `aria-hidden` по событию `close`, то есть любым способом, которым окно кончается: `Esc`,
- * крестик, клик по фону или вторая же клавиша `?`.
+ * The keyboard help of the reader — the same list that leads the README, only where the keys are used.
+ * `showModal()` puts the dialog over the screen and locks the keyboard cursor inside it; the header and the
+ * columns get `aria-hidden` for that time, so Tab cannot leave the dialog and stay on an element hidden
+ * under it. `aria-hidden` is taken off on the `close` event, that is, by any way the dialog ends: `Esc`,
+ * the cross, a click on the background, or the very same `?` key.
  */
 function openKeysHelp() {
   if (els.keysHelp.open) return;
@@ -1359,7 +1364,7 @@ function closeKeysHelp() {
  *   ↓ / j    next headline          ↑ / k  previous headline
  *   Enter    open the original of the open headline
  *   f        pull the full text of the open headline from its page
- *   r        re-read the selected feed («Все ленты» — every feed)
+ *   r        re-read the selected feed ("All feeds" — every feed)
  *   m        mark the open headline read, or take the mark back
  *   d        delete the open headline
  *   u        take the last delete back, while its window stands
@@ -1369,8 +1374,8 @@ function closeKeysHelp() {
 document.addEventListener('keydown', (event) => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-  /* Пока подсказка открыта, окно забирает клавиатуру себе: `?` и `Esc` принадлежат ему, а заголовок
-   * не должен удалиться или открыться через тот список, который объясняет, как это делается. */
+  /* While the help stands open the dialog takes the keyboard for itself: `?` and `Esc` belong to it, and a
+   * headline must not be deleted or opened through the very list that explains how it is done. */
   if (els.keysHelp.open) {
     if (event.key === '?' || event.key === 'Escape') {
       event.preventDefault();
@@ -1394,8 +1399,8 @@ document.addEventListener('keydown', (event) => {
     return;
   }
 
-  /* Окно отмены уступает полю поиска: там `Esc` принадлежит набранному. Вне поля он значит
-   * «отменить» и возвращает только что удалённый заголовок. */
+  /* The undo window gives way to the search field: there `Esc` belongs to what was typed. Outside a field
+   * it means "take it back" and returns the headline deleted just now. */
   if (state.undo && event.key === 'Escape' && !isTypingTarget(event.target)) {
     event.preventDefault();
     void undoDelete();
@@ -1404,13 +1409,14 @@ document.addEventListener('keydown', (event) => {
 
   if (isTypingTarget(event.target)) return;
 
-  /* Из имён нажатой клавиши действует то, которое читалка знает: отпечаток раскладки раньше, чтобы
-   * клавиша отвечала и там, где раскладка печатает другую букву. */
+  /* Of the names the pressed key carries, the reader acts on the one it knows: the layout's print comes
+   * first, so the key answers also where the layout prints another letter. */
   for (const key of readerKeys(event)) {
     switch (key) {
       case '/':
         event.preventDefault();
-        // Пока лент нет, поля поиска в средней колонке нет: `/` не должен вести фокус в скрытое поле.
+        // While there are no feeds there is no search field in the middle column: `/` must not lead the
+        // focus into a hidden field.
         if (els.headlineSearch.hidden) break;
         els.headlineSearch.focus();
         els.headlineSearch.select();
@@ -1489,7 +1495,7 @@ async function init() {
   const lostHeadline = await renderAll();
 
   // renderAll() has already dropped a feed or a headline that no longer exists. With nothing
-  // left selected the cursor goes to the top of the left column: «Все ленты», taken through
+  // left selected the cursor goes to the top of the left column: "All feeds", taken through
   // chooseFeed() to the newest headline of all of them.
   if (!isAllFeeds() && !selectedFeed() && state.feeds.length > 0) {
     chooseFeed(ALL_FEEDS_ID);

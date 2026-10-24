@@ -1,22 +1,22 @@
-// Все тексты интерфейса расширения собраны здесь: чтобы добавить язык, достаточно добавить
-// словарь, а не искать строки по разметке и скриптам. Страница применяет их через `applyI18n`,
-// а динамические сообщения строятся через `t(key, params)`.
+// All interface texts of the extension are gathered here: to add a language it is enough to add a
+// dictionary instead of hunting for strings through markup and scripts. The page applies them via
+// `applyI18n`, and dynamic messages are built via `t(key, params)`.
 //
-// Ключи с placeholders вида {name} подставляют значения из params; порядок ключей в словарях
-// одинаков, поэтому словари легко сверять между собой. Словарь по умолчанию — FALLBACK_LANGUAGE
-// (английский), поэтому чистые хелперы (`util.js`) остаются тестируемыми без доступа к
-// chrome.storage.
+// Keys with placeholders like {name} substitute values from params; the key order in the
+// dictionaries is the same, so the dictionaries are easy to compare against each other. The default
+// dictionary is FALLBACK_LANGUAGE (English), so the pure helpers (`util.js`) stay testable without
+// access to chrome.storage.
 
-/** Ключ localStorage, куда кэшируется выбранный язык для синхронного `t()` до чтения chrome.storage. */
+/** The localStorage key where the chosen language is cached for a synchronous `t()` before chrome.storage is read. */
 export const LANGUAGE_CACHE_KEY = 'rss-reader:language';
 
-/** Поддерживаемые языки. Первый — базовый словарь, с которым сверяются остальные. */
+/** Supported languages. The first is the base dictionary the others are compared against. */
 export const LANGUAGES = ['ru', 'en', 'uk', 'pl', 'de', 'fr', 'es'];
 
-/** Язык по умолчанию, когда в настройках его нет и язык браузера не поддерживается. */
+/** The default language when settings hold none and the browser language is unsupported. */
 export const FALLBACK_LANGUAGE = 'en';
 
-/** Нативное имя каждого языка — показывается в picker как «Русский», «English». */
+/** Each language's native name — shown in the picker as «Русский», «English». */
 export const LANGUAGE_NAMES = {
   ru: 'Русский',
   en: 'English',
@@ -27,7 +27,7 @@ export const LANGUAGE_NAMES = {
   es: 'Español',
 };
 
-/** Код локали для `<html lang>`, CSS и `toLocaleDateString`. */
+/** The locale code for `<html lang>`, CSS and `toLocaleDateString`. */
 export const LOCALES = {
   ru: 'ru-RU',
   en: 'en-US',
@@ -39,12 +39,12 @@ export const LOCALES = {
 };
 
 /**
- * Формы числа, которые различает каждый язык (правила CLDR): славянские разделяют 1, 2-4, 5-20 и
- * остальные десятки, западные — только «одно» и «многое». Запись словаря — строка (одна форма на
- * все числа) либо объект с такими категориями: тогда `t()` берёт ту, которая приходится числу из
- * params (см. `COUNT_PARAMS`). Объект перечисляет только те категории, чья форма отличается от
- * `other`: недостающие категории берут `other`. Так «загол.» или «мин», которые при любом числе
- * одни и те же, пишутся одним `other`.
+ * The number forms each language tells apart (CLDR rules): Slavic languages split 1, 2-4, 5-20 and
+ * the remaining tens, Western ones only "one" and "many". A dictionary entry is a string (one form
+ * for all numbers) or an object with these categories: then `t()` takes the one a number from
+ * params falls into (see `COUNT_PARAMS`). The object lists only the categories whose form differs
+ * from `other`: missing categories take `other`. So «загол.» or «мин», which are the same at any
+ * number, are written as a single `other`.
  */
 export const PLURAL_CATEGORIES = {
   ru: ['one', 'few', 'many', 'other'],
@@ -57,9 +57,9 @@ export const PLURAL_CATEGORIES = {
 };
 
 /**
- * Ключи, где число стоит рядом с существительным или глаголом и соглашается с ним: они держатся
- * формой на каждую категорию языка. Счётчики после подписи («прочитанных меток: {count}») вне
- * списка: такая форма грамотна при любом числе.
+ * Keys where a number stands next to a noun or verb and agrees with it: they are held by a form per
+ * language category. Counters after a label («прочитанных меток: {count}») are outside the list:
+ * that form is correct at any number.
  */
 export const PLURAL_KEYS = [
   'reader.feeds.allMeta',
@@ -74,7 +74,7 @@ export const PLURAL_KEYS = [
   'notify.news',
 ];
 
-/** Параметры, чьё число задаёт форму: счётчики заголовков и лент, срок в днях. */
+/** Parameters whose number sets the form: headline and feed counters, a period in days. */
 const COUNT_PARAMS = ['count', 'n', 'days'];
 
 const DICTIONARIES = {
@@ -89,7 +89,7 @@ const DICTIONARIES = {
     'common.theme.dark': 'Тёмная тема',
     'common.theme.toggle': 'Переключить тему',
 
-    // Подписи переключателя экранов — одна на все три экрана: здесь же tooltip и aria-label.
+    // The screen switcher's labels — one set for all three screens: the tooltip and aria-label too.
     'nav.reader': 'Читалка',
     'nav.feeds': 'Настройки лент',
     'nav.global': 'Глобальные настройки',
@@ -119,8 +119,9 @@ const DICTIONARIES = {
     'reader.status.lastFetched': 'заголовки получены {since}',
     'reader.status.nextCheck': 'следующая проверка {until}',
 
-    // Первое знакомство с читалкой: средняя колонка пуста, пока не добавлено ни одной ленты, и её
-    // кнопка ведёт на экран лент. Подпись правой панели говорит то же самое там, где стоит статья.
+    // First acquaintance with the reader: the middle column is empty until a single feed is added,
+    // and its button leads to the feeds screen. The right panel's label says the same where the
+    // article stands.
     'reader.start.title': 'Лент пока нет',
     'reader.start.hint': 'Добавьте первую ленту: её заголовки появятся в этой колонке, а текст новости — в правой.',
     'reader.start.openFeeds': 'Открыть настройки лент',
@@ -136,8 +137,8 @@ const DICTIONARIES = {
     'reader.search.aria': 'Поиск по заголовкам',
     'reader.published': 'опубл. {since}',
 
-    // Подсказка по клавишам самой читалки: кнопка «?» в её шапке и та же клавиша `?`. Её строки
-    // говорят то же, что перечисляет таблица README, — теперь рядом с тем, где клавиши применяются.
+    // The reader's own keyboard hint: the "?" button in its header and the `?` key itself. Its lines
+    // say what the README table lists — now beside where the keys are used.
     'reader.keys.toggle': 'Показать, чем управляется читалка',
     'reader.keys.title': 'Клавиши читалки',
     'reader.keys.close': 'Закрыть подсказку',
@@ -191,16 +192,16 @@ const DICTIONARIES = {
     'reader.refresh.failed': 'Не удалось обновить ленту: {error}',
     'reader.refreshAll.failed': 'Не удалось обновить часть лент: {error}',
 
-    // Переключатель размера шрифта колонки: метка группы и четыре шага — здесь же tooltip и
-    // aria-label каждого шага.
+    // The column font-size switcher: the group label and four steps — the tooltip and
+    // aria-label of each step too.
     'reader.fontScale.aria': 'Размер шрифта этой колонки',
     'reader.fontScale.small': 'Мелкий шрифт',
     'reader.fontScale.normal': 'Обычный шрифт',
     'reader.fontScale.large': 'Крупный шрифт',
     'reader.fontScale.xlarge': 'Очень крупный шрифт',
 
-    // Что читалка сообщает вслух, когда панель перерисовывается: об этом говорит скрытая строка
-    // `role="status"` (см. `index.js`), а не текст, который читает глаз.
+    // What the reader announces aloud when a panel is redrawn: a hidden `role="status"` line says
+    // it (see `index.js`), not the text an eye reads.
     'reader.announce.loaded': { other: 'получено новых заголовков: {count}' },
     'reader.announce.none': 'новых заголовков нет',
     'reader.announce.failed': { other: 'не удалось обновить лент: {count}' },
@@ -214,7 +215,7 @@ const DICTIONARIES = {
     'reader.feeds.list.aria': 'Ленты: выберите ленту, чтобы увидеть её заголовки',
     'reader.headlines.list.aria': 'Список заголовков выбранной ленты',
 
-    // Граница между колонками: её tooltip и aria-label.
+    // The boundary between columns: its tooltip and aria-label.
     'reader.column.resize': 'Потяните, чтобы изменить ширину колонки',
 
     'feeds.title': 'Настройки RSS лент',
@@ -320,7 +321,7 @@ const DICTIONARIES = {
     'settings.soundDescNone': 'без звука',
     'settings.language': 'Язык интерфейса',
 
-    // Popup автоматической загрузки: сколько заголовков она принесла.
+    // The automatic-load popup: how many headlines it brought.
     'notify.news': { other: 'Получено новых заголовков: {count}' },
 
     'errors.feedNotFound': 'Лента не найдена',
@@ -650,7 +651,7 @@ const DICTIONARIES = {
     'common.theme.dark': 'Темна тема',
     'common.theme.toggle': 'Перемкнути тему',
 
-    // Підписи перемикача екранів — одні на всі три екрани: вони самі й є tooltip та aria-label.
+    // The screen switcher's labels — one set for all three screens: they are themselves the tooltip and aria-label.
     'nav.reader': 'Читалка',
     'nav.feeds': 'Налаштування стрічок',
     'nav.global': 'Глобальні налаштування',
@@ -680,8 +681,9 @@ const DICTIONARIES = {
     'reader.status.lastFetched': 'заголовки отримано {since}',
     'reader.status.nextCheck': 'наступна перевірка {until}',
 
-    // Перше знайомство з читалкою: середня колонка порожня, доки не додано жодної стрічки, і її
-    // кнопка веде на екран стрічок. Підпис правої панелі каже те саме там, де стоїть стаття.
+    // First acquaintance with the reader: the middle column is empty until a single feed is added,
+    // and its button leads to the feeds screen. The right panel's label says the same where the
+    // article stands.
     'reader.start.title': 'Ще немає стрічок',
     'reader.start.hint': 'Додайте першу стрічку: її заголовки з’являться в цій колонці, а текст новини — в правій.',
     'reader.start.openFeeds': 'Відкрити налаштування стрічок',
@@ -697,8 +699,8 @@ const DICTIONARIES = {
     'reader.search.aria': 'Пошук заголовків',
     'reader.published': 'опубл. {since}',
 
-    // Підказка про клавіші самої читалки: кнопка «?» у її шапці та та сама клавіша `?`. Її рядки
-    // кажуть те саме, що перелічує таблиця README, — тепер там, де клавіші справді вживаються.
+    // The reader's own keyboard hint: the "?" button in its header and the `?` key itself. Its lines
+    // say what the README table lists — now beside where the keys are actually used.
     'reader.keys.toggle': 'Показати клавіші, яким відповідає читалка',
     'reader.keys.title': 'Клавіші читалки',
     'reader.keys.close': 'Закрити підказку',
@@ -876,7 +878,7 @@ const DICTIONARIES = {
     'settings.soundDescNone': 'без звуку',
     'settings.language': 'Мова інтерфейсу',
 
-    // Popup автоматичного завантаження: скільки заголовків воно принесло.
+    // The automatic-load popup: how many headlines it brought.
     'notify.news': { other: 'Отримано нових заголовків: {count}' },
 
     'errors.feedNotFound': 'Стрічку не знайдено',
@@ -2042,9 +2044,9 @@ export function normalizeLanguage(value) {
 }
 
 /**
- * Язык из localStorage: страницы расширения одного происхождения видят один и тот же localStorage,
- * поэтому читалка и экран настроек согласуют язык синхронно, до того как разрешится асинхронное
- * чтение chrome.storage.
+ * The language from localStorage: extension pages of one origin see the same localStorage, so the
+ * reader and the settings screen agree on the language synchronously, before the asynchronous read
+ * of chrome.storage resolves.
  */
 export function getLanguageCache() {
   try {
@@ -2064,8 +2066,9 @@ export function setLanguageCache(language) {
 }
 
 /**
- * Язык браузера в форме поддерживаемого кода: `ru-RU`/`en-GB` → `ru`/`en`. Первый поддерживаемый
- * из `navigator.languages`. Если браузер говорит на языке, которого в словаре нет — null.
+ * The browser language in the form of a supported code: `ru-RU`/`en-GB` → `ru`/`en`. The first
+ * supported one from `navigator.languages`. If the browser speaks a language the dictionary lacks —
+ * null.
  */
 export function detectBrowserLanguage() {
   const nav = globalThis.navigator;
@@ -2080,13 +2083,13 @@ export function detectBrowserLanguage() {
   return null;
 }
 
-/** Язык для синхронного рендера: уже выбранный, иначе кэш localStorage, иначе язык браузера. */
+/** The language for synchronous rendering: the one already chosen, else the localStorage cache, else the browser language. */
 export function currentLanguage() {
   cached = cached ?? getLanguageCache() ?? detectBrowserLanguage() ?? FALLBACK_LANGUAGE;
   return cached;
 }
 
-/** Подставить `{key}` placeholders из params в строку. */
+/** Substitute the `{key}` placeholders in a string from params. */
 function interpolate(template, params) {
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (match, name) =>
@@ -2095,9 +2098,9 @@ function interpolate(template, params) {
 }
 
 /**
- * Форма для целого числа по правилам CLDR: русскому, украинскому и польскому нужны «один»,
- * «несколько» и «много»; французское «один» накрывает и ноль («0 titre»); остальным хватает
- * «один» и «много». Дробное число (срок, выраженный в годах) существительное не согласует.
+ * The form for an integer per CLDR rules: Russian, Ukrainian and Polish need "one", "few" and
+ * "many"; French "one" covers zero too ("0 titre"); the rest make do with "one" and "many". A
+ * fractional number (a period expressed in years) does not agree a noun.
  */
 export function pluralCategory(lang, value) {
   const number = Number(value);
@@ -2115,7 +2118,7 @@ export function pluralCategory(lang, value) {
   return n === 1 ? 'one' : 'other';
 }
 
-/** Число, с которым согласует форма: первый из счётчиков, который передали записи. */
+/** The number a form agrees with: the first counter a record was given. */
 function countParam(params) {
   if (!params) return null;
   for (const name of COUNT_PARAMS) {
@@ -2125,9 +2128,9 @@ function countParam(params) {
 }
 
 /**
- * Форма числа из записи-объекта: категория языка, а недостающие категории берут `other`. Форма
- * обязана держать число сама — подставлять его нечем, если `{count}` пропал, и такая запись
- * остаётся единственной ошибкой, которую словарь может сделать молча.
+ * The number form from an object entry: the language's category, with missing categories taking
+ * `other`. The form must hold the number itself — there is nothing to substitute it with if
+ * `{count}` went missing, and such an entry stays the only mistake a dictionary can make silently.
  */
 function pluralForm(forms, lang, params, key) {
   const count = countParam(params);
@@ -2139,8 +2142,8 @@ function pluralForm(forms, lang, params, key) {
 }
 
 /**
- * Строка текущего языка: недостающий ключ добирается из словаря `FALLBACK_LANGUAGE`, а запись с
- * формами числа берёт ту из них, которая приходится числу в params.
+ * The string of the current language: a missing key is fetched from the `FALLBACK_LANGUAGE`
+ * dictionary, and an entry with number forms takes the one a number in params falls into.
  */
 export function t(key, params) {
   const lang = currentLanguage();
@@ -2150,14 +2153,14 @@ export function t(key, params) {
   return interpolate(template, params);
 }
 
-/** Ключи словаря языка: тест сверяет их с базовым словарём, чтобы новый язык не был половинчатым. */
+/** The dictionary keys of a language: a test compares them against the base dictionary so a new language is not half-done. */
 export function dictionaryKeys(lang = LANGUAGES[0]) {
   return Object.keys(DICTIONARIES[lang] ?? {});
 }
 
 /**
- * Запись словаря как есть: строка или объект форм числа. Тест сверяет по ней категории и
- * placeholders между языками.
+ * A dictionary entry as it is: a string or an object of number forms. A test compares categories
+ * and placeholders between languages through it.
  */
 export function dictionaryEntry(key, lang = LANGUAGES[0]) {
   const entry = (DICTIONARIES[lang] ?? {})[key];
@@ -2165,7 +2168,7 @@ export function dictionaryEntry(key, lang = LANGUAGES[0]) {
   return typeof entry === 'string' ? entry : { ...entry };
 }
 
-/** Единицы измерения (мин/ч/дн, «назад») для текущего языка — хелперы `util.js` берут их отсюда. */
+/** Measurement units (min/h/d, "ago") for the current language — the `util.js` helpers take them from here. */
 export function unitLabels(lang = currentLanguage()) {
   const dictionary = DICTIONARIES[lang] ?? DICTIONARIES[FALLBACK_LANGUAGE];
   return {
@@ -2186,9 +2189,9 @@ export function unitLabels(lang = currentLanguage()) {
 }
 
 /**
- * Применить словарь к странице: текст или атрибут элемента берутся из i18n-атрибутов
- * (`data-i18n`, `data-i18n-title`, `data-i18n-aria`, `data-i18n-placeholder`), а `<html lang>`
- * приводится к выбранному языку. Вызывается после загрузки языка и при каждом его изменении.
+ * Apply the dictionary to a page: an element's text or attributes come from the i18n attributes
+ * (`data-i18n`, `data-i18n-title`, `data-i18n-aria`, `data-i18n-placeholder`), and `<html lang>` is
+ * brought to the chosen language. Called after the language is loaded and on every change of it.
  */
 export function applyI18n(root = document) {
   document.documentElement.lang = LOCALES[currentLanguage()] ?? currentLanguage();
@@ -2208,8 +2211,9 @@ export function applyI18n(root = document) {
 }
 
 /**
- * Загрузить язык из настройки в кэш и вернуть его — вызывается при старте каждой страницы.
- * Сам язык выбирает `store`; здесь только переносим его в кэш для синхронного `t()`.
+ * Load the language from the setting into the cache and return it — called at the start of every
+ * page. `store` chooses the language itself; here we only move it into the cache for a synchronous
+ * `t()`.
  */
 export function adoptLanguage(language) {
   const normalized = normalizeLanguage(language) ?? FALLBACK_LANGUAGE;
