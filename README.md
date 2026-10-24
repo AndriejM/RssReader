@@ -37,8 +37,8 @@ notice and the license notice are kept with it. The software is provided without
   `chrome.offscreen.hasDocument` (Chrome 150): below 116 the reader cannot know, so it would create a
   second document, fail, and report the offscreen document as unavailable.
 - MV3 (`manifest_version: 3`) — supported by all current Chrome/Edge.
-- `node` (for `scripts/*.mjs`) — only for the unit tests and regenerating icons; the extension
-  itself does not need node.
+- `node` (for `scripts/*.mjs`) — only for the unit tests, the build of `distributive/` and
+  regenerating icons; the extension itself does not need node.
 
 ## Installation
 
@@ -60,6 +60,33 @@ notice and the license notice are kept with it. The software is provided without
 6. The feed settings screen: the **“Feed settings”** icon in the top-right corner (and directly
    `chrome-extension://<id>/src/feeds.html`). Both settings screens open in the same tab and
    return to the reader through the same row of icons.
+
+Loading the project folder works as it is. If you want the folder to load without the comments and
+the spare whitespace, build it first — see “Build” below.
+
+## Build (`scripts/build.mjs`)
+
+```bash
+node scripts/build.mjs
+```
+
+The build writes `distributive/` — the same extension, the same files under the same paths, only
+stripped of its comments and spare whitespace: `chrome://extensions` → “Load unpacked extension” →
+`distributive/`. The folder is in `.gitignore`: it is a result, not a source.
+
+Only what the extension runs on is written there: `manifest.json`, `LICENSE`, `src/`, `icons/`,
+`_locales/`. `scripts/`, `examples/` and the two READMEs stay in the repository. Every path keeps
+its name — `manifest.json` names `src/background.js`, `src/lib/storage.js` names the signal files
+under `src/media/` — so the pictures and the sounds are copied byte for byte instead of parsed.
+
+The minifiers are deliberately conservative, because Chrome refuses a service worker or an
+extension page whose parse breaks: they remove comments and indentation and join lines only where no
+automatic semicolon can change the meaning. Names are never renamed — a module's `export` names are
+read by the files that import them, and the reader's `data-*` hooks, `getElementById` calls, storage
+keys and i18n keys name strings the DOM and the dictionaries hold. Nothing is bundled and nothing is
+inlined: an extension page's CSP blocks an inline `<script>` body (see `src/theme-boot.js`), so
+every script and every sheet keeps its own file. A build that strips a file further than its own
+source is caught by `scripts/test.mjs`, which minifies the minified code a second time.
 
 ## Screen switcher
 
@@ -480,6 +507,8 @@ src/styles/                   theme.css (theme CSS variables, and for every scre
                               feeds.css, settings.css
 scripts/test.mjs              unit tests of the pure functions and, under the DOM of fake-dom.mjs,
                               the parsing of an XML feed: node scripts/test.mjs
+scripts/build.mjs             write the stripped copy of the extension to distributive/:
+                              node scripts/build.mjs
 scripts/fake-dom.mjs          a small DOM for the tests, without dependencies: a `DOMParser` for XML
                               and a plain tree of tags for HTML — only what `rss.js` and `extract.js`
                               ask of a node, not a browser
@@ -1070,7 +1099,9 @@ node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, e
                              # storage.js and the parsing of rss.js: JSON Feed as itself, RSS 2.0 /
                              # Atom / RDF under the small DOM of scripts/fake-dom.mjs), the guards
                              # over the screen markup and over what one module borrows from another,
-                             # and the popup an automatic load shows: 169 tests
+                             # the popup an automatic load shows, and the build of distributive/:
+                             # 172 tests
+node scripts/build.mjs       # write the stripped extension to distributive/ (no dependencies)
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```

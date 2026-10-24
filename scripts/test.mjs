@@ -16,7 +16,10 @@
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+import { collectSources, minifyCss, minifyHtml, minifyJs } from './build.mjs';
 import { installDom } from './fake-dom.mjs';
 import * as alarmsLib from '../src/lib/alarms.js';
 import * as encoding from '../src/lib/encoding.js';
@@ -6901,6 +6904,82 @@ test('the feeds screen reads and writes the file through the storage the worker 
     mergeBody.includes('notifyBackground()'),
     `${mergeName} merges feeds without telling the worker the table changed`,
   );
+});
+
+/* --------------------- the build that fills distributive/ --------------------- */
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+function shippedFiles() {
+  return collectSources().map((file) => path.relative(repoRoot, file).split(path.sep).join('/'));
+}
+
+test('the build ships every file the extension is made of and none of the repository', () => {
+  const shipped = shippedFiles();
+  for (const needed of [
+    'manifest.json',
+    'LICENSE',
+    'src/index.html',
+    'src/index.js',
+    'src/background.js',
+    'src/styles/reader.css',
+    'src/media/ceres.mp3',
+    'icons/icon16.png',
+    '_locales/ru/messages.json',
+  ]) {
+    assert.ok(shipped.includes(needed), `the build leaves ${needed} out of the folder Chrome loads`);
+  }
+  for (const file of shipped) {
+    assert.ok(
+      !file.startsWith('scripts/') && !file.startsWith('examples/') && !file.startsWith('README'),
+      `${file} is not part of the extension, yet the build ships it`,
+    );
+  }
+});
+
+test('the build ships every file the manifest names and every signal the storage offers', () => {
+  const shipped = shippedFiles();
+
+  const manifest = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+  const named = [];
+  const walk = (node) => {
+    if (typeof node === 'string') {
+      if (/\.(js|html|png)$/.test(node)) named.push(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (node && typeof node === 'object') Object.values(node).forEach(walk);
+  };
+  walk(manifest);
+  assert.ok(named.length > 0, 'the manifest names no file of the extension');
+  for (const file of named) {
+    assert.ok(shipped.includes(file), `the manifest names ${file}, which the build does not ship`);
+  }
+
+  const storage = fs.readFileSync(new URL('../src/lib/storage.js', import.meta.url), 'utf8');
+  const sounds = storage.match(/src\/media\/[a-z0-9_]+\.mp3/g) ?? [];
+  assert.ok(sounds.length > 0, 'the storage names no signal file');
+  for (const file of new Set(sounds)) {
+    assert.ok(shipped.includes(file), `the storage offers ${file}, which the build does not ship`);
+  }
+});
+
+test('the stripped code has nothing left to strip', () => {
+  for (const file of collectSources()) {
+    const minifier = { '.js': minifyJs, '.mjs': minifyJs, '.css': minifyCss, '.html': minifyHtml }[path.extname(file).toLowerCase()];
+    if (!minifier) continue;
+
+    const source = fs.readFileSync(file, 'utf8');
+    const once = minifier(source);
+    assert.equal(
+      minifier(once),
+      once,
+      `${path.relative(repoRoot, file)} can be stripped a second time, so the first pass broke it`,
+    );
+  }
 });
 
 /* ---------------------------- runner ---------------------------- */
