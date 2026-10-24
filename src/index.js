@@ -20,7 +20,7 @@ applyI18n();
 const els = {
   totalCount: document.getElementById('total-count'),
   theme: document.getElementById('btn-theme'),
-  load: document.getElementById('btn-load'),
+  reload: document.getElementById('btn-load'),
   clear: document.getElementById('btn-clear'),
 
   feedList: document.getElementById('feed-list'),
@@ -48,7 +48,7 @@ const els = {
   contentArticle: document.getElementById('content-article'),
   contentBody: document.getElementById('content-body'),
   /* Плейсхолдер правой панели и сама статья — два соседа, а не одно место: панель говорит то одно,
-   * то другое, живой регион при этом не пересоздаётся (см. `showPlaceholder`). */
+   * то другое, живой регион при этом не пересоздаётся (см. `sayEmpty`). */
   contentEmpty: document.getElementById('content-empty'),
   articleBody: document.getElementById('article-body'),
 
@@ -165,7 +165,7 @@ function matchesQuery(item) {
  * сверху). «Все ленты» — это `state.items`, которые `renderAll()` уже отсортировал по дате.
  * Поиск сузает этот список, но не меняет его порядок.
  */
-function itemsOfSelectedFeed() {
+function visibleItems() {
   if (!state.feedId) return [];
   return state.items.filter(inSelection).filter(matchesQuery);
 }
@@ -174,7 +174,7 @@ function itemsOfSelectedFeed() {
  * Чем закончилась загрузка: сколько заголовков пришло и сколько лент отказалось. Ответ за одну ленту
  * и за все — одной формы: `added` в ответе или в каждой строке `results`, `failed` — их число.
  */
-function refreshOutcome(response) {
+function outcomeOf(response) {
   if (!response?.ok) return t('reader.announce.error', { error: describeError(response?.error) });
 
   const results = response.results ?? [response];
@@ -204,7 +204,7 @@ function refreshFailureText(failure) {
 function reportRefreshFailure(key, error) {
   state.refreshError = { key, error: error ?? null };
   if (openHeadline()) renderFeedStatus();
-  else showPlaceholder(refreshFailureText(state.refreshError), { alert: true });
+  else sayEmpty(refreshFailureText(state.refreshError), { alert: true });
 }
 
 function renderTotal() {
@@ -233,7 +233,7 @@ function debounce(fn, wait) {
  * не говорит ничего: так перезагрузка от `chrome.storage.onChanged` не пересказывает вслух то, о чём
  * уже сказал щелчок мыши или клавиша.
  */
-function announce(message) {
+function say(message) {
   if (!message) return;
   /* Одни и те же слова подряд — не то изменение, о котором экран сообщит: строка сначала пустеет,
    * а наполняется следующим тиком, поэтому «получено 5» звучит и когда ленту обновили дважды. */
@@ -274,7 +274,7 @@ function renderAllFeedsRow() {
   body.append(title, meta);
 
   button.append(box, body);
-  button.addEventListener('click', () => selectFeed(ALL_FEEDS_ID));
+  button.addEventListener('click', () => chooseFeed(ALL_FEEDS_ID));
   li.append(button);
   els.feedList.append(li);
 }
@@ -319,7 +319,7 @@ function feedHealthTitle(feed) {
   return parts.join('\n');
 }
 
-function renderFeeds() {
+function paintFeeds() {
   els.feedList.replaceChildren();
   els.feedsEmpty.hidden = state.feeds.length > 0;
 
@@ -371,7 +371,7 @@ function renderFeeds() {
     if (health) button.title = health;
 
     button.append(body);
-    button.addEventListener('click', () => selectFeed(feed.id));
+    button.addEventListener('click', () => chooseFeed(feed.id));
     li.append(button);
     els.feedList.append(li);
   }
@@ -426,7 +426,7 @@ function renderStartCard() {
   const noFeeds = state.feeds.length === 0;
   els.startCard.hidden = !noFeeds;
   els.headlineSearch.hidden = noFeeds;
-  els.load.hidden = noFeeds;
+  els.reload.hidden = noFeeds;
   els.clear.hidden = noFeeds;
   return noFeeds;
 }
@@ -446,7 +446,7 @@ function paintItemMeta(meta, item, all) {
     .join(' · ');
 }
 
-function renderHeadlines() {
+function paintHeadlines() {
   els.headlineList.replaceChildren();
 
   const all = isAllFeeds();
@@ -455,7 +455,7 @@ function renderHeadlines() {
     ? t('reader.feeds.all')
     : feed?.name ?? t('reader.headlines.title');
 
-  const items = itemsOfSelectedFeed();
+  const items = visibleItems();
   const searching = queryActive();
   const noFeeds = renderStartCard();
   els.headlinesCount.textContent = items.length ? `${items.length}` : '';
@@ -475,8 +475,8 @@ function renderHeadlines() {
 
   // The load/clear buttons sit in this head and act on this very selection, so their tooltip names
   // exactly what they now cover: a single feed, or every feed when «Все ленты» is picked.
-  els.load.title = t(all ? 'reader.refreshAll.tooltip' : 'reader.refresh.tooltip');
-  els.load.setAttribute('aria-label', t(all ? 'reader.refreshAll.aria' : 'reader.refresh.aria'));
+  els.reload.title = t(all ? 'reader.refreshAll.tooltip' : 'reader.refresh.tooltip');
+  els.reload.setAttribute('aria-label', t(all ? 'reader.refreshAll.aria' : 'reader.refresh.aria'));
   els.clear.title = t(all ? 'reader.clearAll.tooltip' : 'reader.clearFeed.tooltip');
   els.clear.setAttribute('aria-label', t(all ? 'reader.clearAll.aria' : 'reader.clearFeed.aria'));
 
@@ -486,7 +486,7 @@ function renderHeadlines() {
   let rowNumber = 0;
   for (const item of items) {
     const li = document.createElement('li');
-    // `data-uid` даёт строке имя, по которому `openItem()` находит её и переносит выделение, не
+    // `data-uid` даёт строке имя, по которому `showHeadline()` находит её и переносит выделение, не
     // перестраивая весь список (см. `selectHeadline`).
     li.dataset.uid = item.uid;
     /* Средняя колонка — `listbox` (см. `index.html`), поэтому её строка — `option`, а открытая
@@ -507,7 +507,7 @@ function renderHeadlines() {
      * берёт строку целиком; курсор клавиатуры при этом стоит на самом списке (см. `index.html`). */
     const row = document.createElement('div');
     row.className = 'item-row';
-    li.addEventListener('click', () => openItem(item));
+    li.addEventListener('click', () => showHeadline(item));
     // Only «Все ленты» needs a feed to stand beside the headline, so only there does the headline
     // carry its feed's icon; a single feed's list names that feed in the panel title instead.
     if (all) row.append(feedIconImg(item.feedId));
@@ -557,21 +557,21 @@ function setActiveDescendant() {
  * Move the left column's cursor — to a feed or to «Все ленты» — and put the middle column on the
  * first headline of whatever that selection now covers.
  */
-function selectFeed(feedId) {
+function chooseFeed(feedId) {
   state.feedId = feedId;
   // Switching feeds drops whatever headline was open.
   state.uid = null;
   /* Строка под головой средней колонки говорит о загрузке того, что выбрано сейчас: отказ другой
    * ленты не должен переходить с неё на новую строку. */
   state.refreshError = null;
-  renderFeeds();
-  renderHeadlines();
+  paintFeeds();
+  paintHeadlines();
 
   // The cursor in the middle column goes to the first headline of the feed that was just
   // picked; a feed whose headlines are all gone still has to say so in the empty panel.
-  const first = itemsOfSelectedFeed()[0];
-  if (first) openItem(first);
-  else showPlaceholder(queryActive() ? t('reader.headlines.emptySearch') : t('reader.placeholder.inMiddle'));
+  const first = visibleItems()[0];
+  if (first) showHeadline(first);
+  else sayEmpty(queryActive() ? t('reader.headlines.emptySearch') : t('reader.placeholder.inMiddle'));
 
   saveSelection();
 }
@@ -582,7 +582,7 @@ function selectFeed(feedId) {
  * пересоздают, экрану сказать нельзя. `alert` значит отказ, о котором нужно сказать сразу;
  * `status` — обычное «здесь пусто», которое не перебивает чтение.
  */
-function showPlaceholder(message, { alert = false } = {}) {
+function sayEmpty(message, { alert = false } = {}) {
   state.uid = null;
   els.contentDelete.hidden = true;
   els.contentRead.hidden = true;
@@ -603,22 +603,22 @@ function showPlaceholder(message, { alert = false } = {}) {
  * говорит об этом вместо статьи.
  */
 function applyQuerySelection() {
-  const visible = itemsOfSelectedFeed();
+  const visible = visibleItems();
 
   if (visible.length === 0) {
-    showPlaceholder(queryActive() ? t('reader.headlines.emptySearch') : t('reader.placeholder.inMiddle'));
-    renderHeadlines();
+    sayEmpty(queryActive() ? t('reader.headlines.emptySearch') : t('reader.placeholder.inMiddle'));
+    paintHeadlines();
     saveSelection();
     return;
   }
 
   const current = visible.find((item) => item.uid === state.uid);
   const target = current ?? visible[0];
-  /* Поиск меняет сам набор видимых строк, поэтому колонку перестраиваем заново: `openItem()`
+  /* Поиск меняет сам набор видимых строк, поэтому колонку перестраиваем заново: `showHeadline()`
    * выделил бы нужную строку на месте, но старые — уже не подходящие под запрос — остались бы в списке. */
   state.uid = target.uid;
   saveSelection();
-  renderHeadlines();
+  paintHeadlines();
   renderArticle(target);
 }
 
@@ -687,18 +687,18 @@ function titleHeading(text, link) {
  * and `aria-activedescendant` names the row the cursor now stands on, so its name is read out and
  * the next arrow continues from the row that is now open.
  */
-function openItem(item, { followFocus = false } = {}) {
+function showHeadline(item, { followFocus = false } = {}) {
   state.uid = item.uid;
   saveSelection();
   /* Перемещение курсора (`j`/`k`) не меняет, какие заголовки показывает колонка, поэтому новую
-   * строку выделяем на месте, а не перестраиваем всю среднюю колонку: полный `renderHeadlines()` —
+   * строку выделяем на месте, а не перестраиваем всю среднюю колонку: полный `paintHeadlines()` —
    * это несколько тысяч `<li>` и столько же замыканий на каждое нажатие клавиши. Если же строки на
    * экране нет (набор видимых изменился), колонку приходится перестроить целиком — она и сама
    * называет строку активного курсора.
    * `focus()` средней колонке, а не её строке: курсор держит список, строка — только то, на что он
    * направлен (см. `setActiveDescendant`). */
   if (selectHeadline(item.uid)) setActiveDescendant();
-  else renderHeadlines();
+  else paintHeadlines();
   if (followFocus) els.headlineList.focus();
 
   renderArticle(item);
@@ -711,8 +711,8 @@ function openItem(item, { followFocus = false } = {}) {
  */
 function openTopHeadline() {
   if (state.uid) return;
-  const first = itemsOfSelectedFeed()[0];
-  if (first) openItem(first);
+  const first = visibleItems()[0];
+  if (first) showHeadline(first);
 }
 
 /**
@@ -878,7 +878,7 @@ async function toggleHeadlineRead() {
   state.read = store.readMarksFor(state.items, await store.getRead());
   paintReadRow(item.uid, state.read.has(item.uid));
   paintReadButton(item);
-  announce(t(wasRead ? 'reader.announce.unmarked' : 'reader.announce.marked'));
+  say(t(wasRead ? 'reader.announce.unmarked' : 'reader.announce.marked'));
 }
 
 /** Кнопка правой панели: она называет, в какую сторону действует сейчас, и стоит нажатой, когда метка стоит. */
@@ -949,7 +949,7 @@ async function undoDelete() {
   clearUndo();
   const restored = await store.restoreItem(removed);
   if (!restored) {
-    announce(t('reader.announce.undoFailed'));
+    say(t('reader.announce.undoFailed'));
     return;
   }
 
@@ -960,7 +960,7 @@ async function undoDelete() {
   const restoredItem = openHeadline();
   if (restoredItem) renderArticle(restoredItem);
   saveSelection();
-  announce(t('reader.announce.undone'));
+  say(t('reader.announce.undone'));
 }
 
 /**
@@ -970,7 +970,7 @@ async function deleteItem() {
   if (!state.uid) return;
 
   const all = isAllFeeds();
-  const position = itemsOfSelectedFeed().findIndex((item) => item.uid === state.uid);
+  const position = visibleItems().findIndex((item) => item.uid === state.uid);
 
   const uid = state.uid;
   const removed = state.items.find((item) => item.uid === uid) ?? null;
@@ -978,15 +978,15 @@ async function deleteItem() {
   state.uid = null;
   saveSelection();
   await renderAll();
-  announce(t('reader.announce.deleted'));
+  say(t('reader.announce.deleted'));
   if (removed) offerUndo(removed);
 
   // «Все ленты» keeps the whole list: the next headline is the one that stood below the removed
   // one, whatever feed it belongs to. The search field filters that list exactly as it filters the
   // middle column, so the cursor lands on the next headline the reader can actually see.
-  const remaining = itemsOfSelectedFeed();
+  const remaining = visibleItems();
   if (remaining.length === 0) {
-    showPlaceholder(
+    sayEmpty(
       queryActive()
         ? t('reader.headlines.emptySearch')
         : all
@@ -1000,7 +1000,7 @@ async function deleteItem() {
   // one when the removed headline was the bottom of the list. `followFocus` — because the row that
   // held the focus is gone, and the cursor of the keyboard goes to the same slot it moved to.
   const next = remaining[Math.max(0, Math.min(position, remaining.length - 1))];
-  openItem(next, { followFocus: true });
+  showHeadline(next, { followFocus: true });
 }
 
 /**
@@ -1013,7 +1013,7 @@ async function deleteItem() {
  * storage.onChanged listener repaints the panels, so no extra bookkeeping is needed.
  */
 async function clearSelectionHeadlines() {
-  const targets = itemsOfSelectedFeed();
+  const targets = visibleItems();
   if (targets.length === 0) return;
   if (!window.confirm(t('reader.confirmClear', { count: targets.length }))) return;
 
@@ -1022,7 +1022,7 @@ async function clearSelectionHeadlines() {
     if (isAllFeeds()) await store.clearAllItems();
     else await store.clearItemsForFeed(state.feedId);
     await renderAll();
-    announce(t('reader.announce.cleared', { count: targets.length }));
+    say(t('reader.announce.cleared', { count: targets.length }));
   } finally {
     els.clear.disabled = false;
   }
@@ -1032,7 +1032,7 @@ async function clearSelectionHeadlines() {
  * The load icon beside the middle panel's title: it reads the headlines of whatever the left column
  * has selected — a single feed, or (with «Все ленты») every feed of the list at once.
  */
-async function refreshSelection() {
+async function reloadSelection() {
   if (isAllFeeds()) {
     await refreshAllFeeds();
     return;
@@ -1040,14 +1040,14 @@ async function refreshSelection() {
 
   const feed = selectedFeed();
   if (!feed) {
-    showPlaceholder(t('reader.refresh.noFeed'), { alert: true });
+    sayEmpty(t('reader.refresh.noFeed'), { alert: true });
     return;
   }
 
-  const tip = els.load.title;
-  els.load.disabled = true;
-  els.load.classList.add('busy');
-  els.load.title = t('common.loading');
+  const tip = els.reload.title;
+  els.reload.disabled = true;
+  els.reload.classList.add('busy');
+  els.reload.title = t('common.loading');
   try {
     /* Строка статуса говорит о последней попытке: её прошлый отказ снимается, даже когда
      * перерисовка панелей ещё не началась. */
@@ -1056,11 +1056,11 @@ async function refreshSelection() {
     if (!response?.ok) reportRefreshFailure('reader.refresh.failed', response?.error);
     await renderAll();
     if (response?.ok) openTopHeadline();
-    announce(refreshOutcome(response));
+    say(outcomeOf(response));
   } finally {
-    els.load.disabled = false;
-    els.load.classList.remove('busy');
-    els.load.title = tip;
+    els.reload.disabled = false;
+    els.reload.classList.remove('busy');
+    els.reload.title = tip;
   }
 }
 
@@ -1072,14 +1072,14 @@ async function refreshSelection() {
 async function refreshAllFeeds() {
   if (state.feeds.length === 0) {
     // Просьба обновить то, чего ещё нет, — то же первое знакомство, что и пустая средняя колонка.
-    showPlaceholder(t('reader.start.contentHint'));
+    sayEmpty(t('reader.start.contentHint'));
     return;
   }
 
-  const tip = els.load.title;
-  els.load.disabled = true;
-  els.load.classList.add('busy');
-  els.load.title = t('common.loading');
+  const tip = els.reload.title;
+  els.reload.disabled = true;
+  els.reload.classList.add('busy');
+  els.reload.title = t('common.loading');
   try {
     state.refreshError = null;
     const response = await chrome.runtime.sendMessage({ type: MSG_REFRESH_ALL_FEEDS });
@@ -1091,11 +1091,11 @@ async function refreshAllFeeds() {
     }
     await renderAll();
     if (response?.ok) openTopHeadline();
-    announce(refreshOutcome(response));
+    say(outcomeOf(response));
   } finally {
-    els.load.disabled = false;
-    els.load.classList.remove('busy');
-    els.load.title = tip;
+    els.reload.disabled = false;
+    els.reload.classList.remove('busy');
+    els.reload.title = tip;
   }
 }
 
@@ -1125,12 +1125,12 @@ async function renderAll() {
   }
 
   renderTotal();
-  renderFeeds();
-  renderHeadlines();
+  paintFeeds();
+  paintHeadlines();
   /* Правая панель говорит либо о том, что открытый заголовок исчез, либо о первой ленте, которой
    * ещё нет: без неё там нечего показывать, и «выберите заголовок» было бы советом выбрать пустоту. */
-  if (message) showPlaceholder(message);
-  else if (state.feeds.length === 0) showPlaceholder(t('reader.start.contentHint'));
+  if (message) sayEmpty(message);
+  else if (state.feeds.length === 0) sayEmpty(t('reader.start.contentHint'));
   return message;
 }
 
@@ -1140,14 +1140,14 @@ async function renderAll() {
  */
 function redraw() {
   renderTotal();
-  renderFeeds();
-  renderHeadlines();
+  paintFeeds();
+  paintHeadlines();
 
   const item = openHeadline();
-  if (item) openItem(item);
-  else if (state.feeds.length === 0) showPlaceholder(t('reader.start.contentHint'));
+  if (item) showHeadline(item);
+  else if (state.feeds.length === 0) sayEmpty(t('reader.start.contentHint'));
   /* Отказ последней загрузки — то, что рисует сама страница: смена языка его тоже переводит. */
-  else if (state.refreshError) showPlaceholder(refreshFailureText(state.refreshError), { alert: true });
+  else if (state.refreshError) sayEmpty(refreshFailureText(state.refreshError), { alert: true });
   /* Строка отмены тоже рисуется словами словаря: смена языка на экране настроек доходит и до неё. */
   renderUndo();
 }
@@ -1192,7 +1192,7 @@ wireFontScaleChanges();
 // a drag leaves behind is remembered for the next time the reader opens.
 mountColumnResizers();
 wireColumnWidthChanges();
-els.load.addEventListener('click', () => void refreshSelection());
+els.reload.addEventListener('click', () => void reloadSelection());
 els.clear.addEventListener('click', () => void clearSelectionHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
 els.contentRead.addEventListener('click', () => void toggleHeadlineRead());
@@ -1237,7 +1237,7 @@ els.headlineList.addEventListener('focus', () => {
 /*
  * Возраст, названный один раз, через минуту уже неправда: «5 мин назад» строки списка и подсказка
  * строки ленты рисуются один раз, при перестроении колонки. Перестраивать колонку ради этого —
- * значит выбросить место читателя в списке и его курсор (см. `openItem`), поэтому тик перечёркивает
+ * значит выбросить место читателя в списке и его курсор (см. `showHeadline`), поэтому тик перечёркивает
  * сами метки: строка списка находит свой заголовок по `data-uid`, строка ленты — свою ленту по
  * `data-feed-id`, панель статьи — заголовок, открытый сейчас.
  */
@@ -1307,7 +1307,7 @@ function isTypingTarget(target) {
  * eye scrolls the list.
  */
 function moveHeadline(delta) {
-  const visible = itemsOfSelectedFeed();
+  const visible = visibleItems();
   if (visible.length === 0) return;
 
   const index = visible.findIndex((item) => item.uid === state.uid);
@@ -1319,13 +1319,13 @@ function moveHeadline(delta) {
         : visible.length - 1
       : Math.max(0, Math.min(visible.length - 1, index + delta));
 
-  openItem(visible[next], { followFocus: true });
+  showHeadline(visible[next], { followFocus: true });
   els.headlineList.querySelector('.list-item.selected')?.scrollIntoView({ block: 'nearest' });
 }
 
 /** The keyboard's stand-in for a click on the article title: the original in a new tab. */
 function openOriginal() {
-  const item = itemsOfSelectedFeed().find((candidate) => candidate.uid === state.uid);
+  const item = visibleItems().find((candidate) => candidate.uid === state.uid);
   if (!item?.link) return;
   window.open(item.link, '_blank', 'noopener,noreferrer');
 }
@@ -1451,7 +1451,7 @@ document.addEventListener('keydown', (event) => {
         return;
       case 'r':
         event.preventDefault();
-        void refreshSelection();
+        void reloadSelection();
         return;
       case '?':
         event.preventDefault();
@@ -1489,9 +1489,9 @@ async function init() {
 
   // renderAll() has already dropped a feed or a headline that no longer exists. With nothing
   // left selected the cursor goes to the top of the left column: «Все ленты», taken through
-  // selectFeed() to the newest headline of all of them.
+  // chooseFeed() to the newest headline of all of them.
   if (!isAllFeeds() && !selectedFeed() && state.feeds.length > 0) {
-    selectFeed(ALL_FEEDS_ID);
+    chooseFeed(ALL_FEEDS_ID);
     return;
   }
 
@@ -1500,15 +1500,15 @@ async function init() {
     (state.uid
       ? state.items.find((candidate) => candidate.uid === state.uid && inSelection(candidate))
       : null) ??
-    itemsOfSelectedFeed()[0] ??
+    visibleItems()[0] ??
     null;
 
   if (item) {
-    openItem(item);
+    showHeadline(item);
   } else if (state.feedId && !lostHeadline) {
     // Nothing to open at all: the selection stands, its panel says so — or it says that the search
     // left no headline behind, because `restoreSelection()` has put back whatever was typed.
-    showPlaceholder(queryActive() ? t('reader.headlines.emptySearch') : t('reader.placeholder.inMiddle'));
+    sayEmpty(queryActive() ? t('reader.headlines.emptySearch') : t('reader.placeholder.inMiddle'));
   }
 }
 

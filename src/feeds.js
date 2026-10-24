@@ -5,7 +5,7 @@ import { discoverFeedIcon } from './lib/favicon.js';
 import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_FEED } from './lib/messages.js';
 import { mountNav } from './lib/nav.js';
-import * as store from './lib/storage.js';
+import * as storage from './lib/storage.js';
 import { wireThemeButton } from './lib/theme.js';
 import { formatSince, formatUntil, humanDuration, newId, normalizeFeed } from './lib/util.js';
 
@@ -282,9 +282,9 @@ async function saveRow(rowRecord) {
 
   /* Первый ряд пустой таблицы: читалка ещё не показывала ни одной своей ленты. Спрашивать о этом
    * нужно до записи — после неё таблица уже не пуста, и отличить первый ряд от второго нельзя. */
-  const firstFeed = (await store.getFeeds()).length === 0 && !(await store.getFirstFeedDone());
+  const firstFeed = (await storage.getFeeds()).length === 0 && !(await storage.getFirstFeedDone());
 
-  await store.upsertFeed(feed);
+  await storage.upsertFeed(feed);
 
   /*
    * Reading the site icon is a request of its own, kept out of the save's way: the feed is saved and
@@ -310,8 +310,8 @@ async function saveRow(rowRecord) {
    * остаётся неснятой, чтобы подтверждение вышло один раз — при первом удачном добавлении.
    */
   if (firstFeed && loaded?.ok && !loaded.busy) {
-    await store.setFirstFeedDone();
-    setTransferStatus(t('feeds.status.firstFeed'), 'ok');
+    await storage.setFirstFeedDone();
+    sayTransfer(t('feeds.status.firstFeed'), 'ok');
   }
 }
 
@@ -330,10 +330,10 @@ async function attachFeedIcon(feedId, newLink, previousFeed) {
   try {
     iconUrl = await discoverFeedIcon(newLink);
     if (iconUrl) {
-      if (iconUrl !== previousIcon) await store.upsertFeed({ id: feedId, icon: iconUrl });
+      if (iconUrl !== previousIcon) await storage.upsertFeed({ id: feedId, icon: iconUrl });
       return;
     }
-    if (previousIcon && !sameLink) await store.upsertFeed({ id: feedId, icon: null });
+    if (previousIcon && !sameLink) await storage.upsertFeed({ id: feedId, icon: null });
   } catch (error) {
     console.warn(`could not store the icon for feed ${feedId}:`, error?.message ?? error);
   }
@@ -343,7 +343,7 @@ async function removeRow(rowRecord) {
   if (!rowRecord.draft) {
     const name = rowRecord.feed.name || rowRecord.feed.rss_link;
     if (!window.confirm(t('feeds.confirmDelete', { name }))) return;
-    await store.deleteFeed(rowRecord.feed.id);
+    await storage.deleteFeed(rowRecord.feed.id);
   }
   state.drafts.delete(rowRecord.feed);
   await notifyBackground();
@@ -393,7 +393,7 @@ async function refreshRow(rowRecord) {
   } finally {
     /* Загрузка оставила в хранилище свежий диагноз ленты; перечитаем его, чтобы постоянная строка
      * под рядом показала ту попытку, что только что случилась, а не ту, что была при открытии. */
-    const fresh = await store.getFeed(rowRecord.feed.id);
+    const fresh = await storage.getFeed(rowRecord.feed.id);
     if (rowRecord.health && fresh) {
       /* Тот же диагноз записывает и сам ряд: без этого следующий тик (`refreshHealthLines`)
        * перечеркнул бы строку по ленте, какой та была до этой загрузки. */
@@ -419,7 +419,7 @@ async function notifyBackground() {
 }
 
 async function render() {
-  state.feeds = await store.getFeeds();
+  state.feeds = await storage.getFeeds();
 
   els.rows.replaceChildren();
   const rows = [
@@ -439,7 +439,7 @@ async function render() {
 }
 
 els.add.addEventListener('click', () => {
-  state.drafts.add(store.emptyFeed());
+  state.drafts.add(storage.emptyFeed());
   void render();
 });
 
@@ -447,7 +447,7 @@ els.add.addEventListener('click', () => {
  * Отчёт о переносе всей таблицы. Он не относится ни к одной строке, поэтому берёт себе строку под
  * таблицей, а не чужую заметку ряда.
  */
-function setTransferStatus(message, kind = '') {
+function sayTransfer(message, kind = '') {
   els.transfer.textContent = message;
   els.transfer.className = kind ? `transfer-status muted ${kind}` : 'transfer-status muted';
   els.transfer.hidden = false;
@@ -456,30 +456,30 @@ function setTransferStatus(message, kind = '') {
 
 /**
  * Выписать таблицу лент в файл: то, что пользователь задал сам, без местных идентификаторов и без
- * диагноза чтения (см. `store.buildFeedsExport`). Адрес живёт ровно столько, сколько нужно,
+ * диагноза чтения (см. `storage.buildFeedsExport`). Адрес живёт ровно столько, сколько нужно,
  * чтобы загрузка забрала файл.
  */
 async function exportFeeds() {
-  const feeds = await store.getFeeds();
+  const feeds = await storage.getFeeds();
 
   if (feeds.length === 0) {
-    setTransferStatus(t('feeds.export.empty'), 'error');
+    sayTransfer(t('feeds.export.empty'), 'error');
     return;
   }
 
-  const payload = JSON.stringify(store.buildFeedsExport(feeds), null, 2);
+  const payload = JSON.stringify(storage.buildFeedsExport(feeds), null, 2);
   const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
 
   const link = document.createElement('a');
   link.href = url;
-  link.download = store.FEED_EXPORT_FILE_NAME;
+  link.download = storage.FEED_EXPORT_FILE_NAME;
   link.hidden = true;
   document.body.append(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-  setTransferStatus(t('feeds.export.done', { count: feeds.length }), 'ok');
+  sayTransfer(t('feeds.export.done', { count: feeds.length }), 'ok');
 }
 
 /**
@@ -487,31 +487,31 @@ async function exportFeeds() {
  * прошли ту же проверку, что и строка таблицы, не спасаются «на глаз»: они просто не добавляются,
  * и их количество называется отдельно — пользователь видит, что в файле была кривая строка.
  */
-async function importFeeds(file) {
+async function readFeedsFile(file) {
   let text;
   try {
     text = await file.text();
   } catch (error) {
     console.warn('could not read the chosen file:', error?.message ?? error);
-    setTransferStatus(t('feeds.import.error.json'), 'error');
+    sayTransfer(t('feeds.import.error.json'), 'error');
     return;
   }
 
-  const { feeds, skipped, code } = store.parseFeedsExport(text);
+  const { feeds, skipped, code } = storage.parseFeedsExport(text);
   if (code) {
-    setTransferStatus(t(`feeds.import.error.${code}`), 'error');
+    sayTransfer(t(`feeds.import.error.${code}`), 'error');
     return;
   }
 
-  const { added, existing } = await store.mergeFeeds(feeds);
+  const { added, existing } = await storage.mergeFeeds(feeds);
 
   const parts = [];
   if (added > 0) parts.push(t('feeds.import.added', { count: added }));
   if (existing > 0) parts.push(t('feeds.import.existing', { count: existing }));
   if (skipped > 0) parts.push(t('feeds.import.invalid', { count: skipped }));
 
-  if (parts.length === 0) setTransferStatus(t('feeds.import.none'), 'error');
-  else setTransferStatus(parts.join(' · '), added > 0 ? 'ok' : '');
+  if (parts.length === 0) sayTransfer(t('feeds.import.none'), 'error');
+  else sayTransfer(parts.join(' · '), added > 0 ? 'ok' : '');
 
   /* Лента без будильника сама не читается: worker строит их по хранилищу, поэтому о новом ряду
    * нужно сказать ему, а не ждать ближайшей проверки. */
@@ -527,7 +527,7 @@ els.importFile.addEventListener('change', () => {
   const file = els.importFile.files?.[0] ?? null;
   // Поле отвечает на тот же файл вторично как на новое значение только когда оно пустое.
   els.importFile.value = '';
-  if (file) void importFeeds(file);
+  if (file) void readFeedsFile(file);
 });
 
 // The screen switcher shared by all three screens: it takes over this tab, so the reader the nav
@@ -551,7 +551,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // The stored language wins; on first run there is none and the browser language is used.
-adoptLanguage(await store.getLanguage());
+adoptLanguage(await storage.getLanguage());
 applyI18n();
 
 await render();

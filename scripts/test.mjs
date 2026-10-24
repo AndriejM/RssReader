@@ -2,24 +2,30 @@
 //
 //   node scripts/test.mjs
 //
-// Only the chrome-free logic is covered (src/lib/util.js, src/lib/storage.js, src/lib/i18n.js, the
-// decoding rules of src/lib/encoding.js, the JSON Feed parsing of src/lib/rss.js), plus the guards
-// that read the pages themselves. The chrome.*-dependent code and the XML parsing are exercised in
-// the browser.
+// The chrome-free logic is covered directly (src/lib/util.js, src/lib/storage.js, src/lib/i18n.js, the
+// decoding rules of src/lib/encoding.js, the JSON Feed parsing of src/lib/rss.js). The worker and the
+// offscreen document are run under one fake `chrome` (see "the worker and the document, running"), so
+// their lifecycle — an alarm, a message from a page, a popup a user clicks — is tested by what the
+// reader ends up storing and showing rather than by reading their source. An extension page cannot
+// run in Node either, so where a test has to look in one it looks at the contract between its pieces
+// — a markup id and the name the page maps it to, a message constant, a function found by what it
+// does — and not at the local names themselves. Markup, CSS and the dictionaries are still kept in
+// step by reading the files. Parsing an XML feed needs a real DOMParser and is exercised in the
+// browser.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import * as alarmsLib from '../src/lib/alarms.js';
 import * as encoding from '../src/lib/encoding.js';
-import { PREVIEW_ALLOWED_TAGS, previewImageSize } from '../src/lib/extract.js';
+import * as extract from '../src/lib/extract.js';
 import * as favicon from '../src/lib/favicon.js';
 import * as i18n from '../src/lib/i18n.js';
 import { readerKeys } from '../src/lib/keys.js';
 import { SCREENS } from '../src/lib/nav.js';
 import * as notify from '../src/lib/notify.js';
 import { IDLE_CLOSE_MS } from '../src/lib/offscreen.js';
-import { MSG_FETCH_FEED, MSG_PLAY_SOUND } from '../src/lib/messages.js';
+import { MSG_COUNT, MSG_FEEDS_CHANGED, MSG_FETCH_FEED, MSG_PLAY_SOUND, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from '../src/lib/messages.js';
 import * as offscreenLib from '../src/lib/offscreen.js';
 import * as rss from '../src/lib/rss.js';
 import * as store from '../src/lib/storage.js';
@@ -646,17 +652,17 @@ test('makeItem keeps the text of a headline whose description carries a data: pi
 
 test('previewImageSize never lets a stored picture ask for more than the box of the reader', () => {
   // A headline an older build stored with the sizes its feed declared.
-  assert.equal(previewImageSize('640', PREVIEW_IMAGE_WIDTH), PREVIEW_IMAGE_WIDTH);
-  assert.equal(previewImageSize(480, PREVIEW_IMAGE_HEIGHT), PREVIEW_IMAGE_HEIGHT);
+  assert.equal(extract.previewImageSize('640', PREVIEW_IMAGE_WIDTH), PREVIEW_IMAGE_WIDTH);
+  assert.equal(extract.previewImageSize(480, PREVIEW_IMAGE_HEIGHT), PREVIEW_IMAGE_HEIGHT);
   // A picture the storage box already fits is kept as it is; a part of a pixel is a whole pixel.
-  assert.equal(previewImageSize(120, PREVIEW_IMAGE_WIDTH), 120);
-  assert.equal(previewImageSize('119.6', PREVIEW_IMAGE_WIDTH), 120);
+  assert.equal(extract.previewImageSize(120, PREVIEW_IMAGE_WIDTH), 120);
+  assert.equal(extract.previewImageSize('119.6', PREVIEW_IMAGE_WIDTH), 120);
   // Not a size at all: no attribute rather than a box of zero or a negative one.
-  assert.equal(previewImageSize('0', PREVIEW_IMAGE_WIDTH), null);
-  assert.equal(previewImageSize(-40, PREVIEW_IMAGE_HEIGHT), null);
-  assert.equal(previewImageSize('abc', PREVIEW_IMAGE_WIDTH), null);
-  assert.equal(previewImageSize('', PREVIEW_IMAGE_HEIGHT), null);
-  assert.equal(previewImageSize(undefined, PREVIEW_IMAGE_WIDTH), null);
+  assert.equal(extract.previewImageSize('0', PREVIEW_IMAGE_WIDTH), null);
+  assert.equal(extract.previewImageSize(-40, PREVIEW_IMAGE_HEIGHT), null);
+  assert.equal(extract.previewImageSize('abc', PREVIEW_IMAGE_WIDTH), null);
+  assert.equal(extract.previewImageSize('', PREVIEW_IMAGE_HEIGHT), null);
+  assert.equal(extract.previewImageSize(undefined, PREVIEW_IMAGE_WIDTH), null);
 });
 
 /**
@@ -681,7 +687,7 @@ test('a preview picture is drawn in the box of the reader and names no reader to
    * rule of `reader.css` takes is drawn the way the feed's own stylesheet would have drawn it — a list
    * without its indent, a quotation without its line, a picture without its box. */
   for (const tag of ['p', 'ul', 'ol', 'li', 'a', 'blockquote', 'code', 'hr', 'img']) {
-    assert.ok(PREVIEW_ALLOWED_TAGS.has(tag), `reader.css gives a preview <${tag}> a shape the sanitizer never rebuilds`);
+    assert.ok(extract.PREVIEW_ALLOWED_TAGS.has(tag), `reader.css gives a preview <${tag}> a shape the sanitizer never rebuilds`);
     assert.ok(
       new RegExp('\\.preview ' + tag + '[\\s,{]').test(css),
       `a stored preview can carry <${tag}>, which reader.css gives no rule of its own`,
@@ -2609,20 +2615,17 @@ test('every reader border is a handle that can be grabbed, placed and clamped', 
 });
 
 /**
- * A page and the worker are edited apart as easily as a page and its sprite: a message a page sends
- * that no worker answers hangs that page's `await` forever, and a name the worker answers that no
- * exported constant spells is a typo the next page is free to make. Both are read here.
+ * A page and the reader are edited apart as easily as a page and its sprite: a message a page sends
+ * that no half of the reader answers hangs that page's `await` forever. A page cannot run in Node, so
+ * the name it sends is still compared with what `lib/messages.js` exports — but whether the reader
+ * answers it is no longer read off the worker's text (a renamed listener argument is not a broken
+ * reader). Every name the module exports is put to the running pair, and the pair answers.
  */
-test('every message a page sends is one the worker answers', () => {
+test('every message a page sends is one the reader answers', async () => {
   const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
   const exported = new Set(
     [...read('src/lib/messages.js').matchAll(/export const (MSG_\w+)/g)].map((match) => match[1]),
-  );
-  const answered = new Set(
-    ['src/background.js', 'src/offscreen.js']
-      .flatMap((file) => [...read(file).matchAll(/message\?\.type === (MSG_\w+)/g)])
-      .map((match) => match[1]),
   );
 
   for (const file of [
@@ -2634,61 +2637,177 @@ test('every message a page sends is one the worker answers', () => {
   ]) {
     for (const [, name] of read(file).matchAll(/type:\s*(MSG_\w+)/g)) {
       assert.ok(exported.has(name), `${file} sends ${name}, which lib/messages.js does not export`);
-      assert.ok(answered.has(name), `${name} is sent by ${file}, which no worker answers`);
     }
+  }
+
+  /* What each name has to carry to be answerable at all, and the value the reader answers it under.
+   * A name added to `lib/messages.js` without a question here is a name this test has never put to
+   * the reader. */
+  const asks = {
+    MSG_REFRESH_FEED: [MSG_REFRESH_FEED, { feedId: 'running' }],
+    MSG_REFRESH_ALL_FEEDS: [MSG_REFRESH_ALL_FEEDS, {}],
+    MSG_FEEDS_CHANGED: [MSG_FEEDS_CHANGED, {}],
+    MSG_COUNT: [MSG_COUNT, {}],
+    MSG_PLAY_SOUND: [MSG_PLAY_SOUND, { src: 'src/media/ceres.mp3' }],
+    MSG_FETCH_FEED: [MSG_FETCH_FEED, { url: 'https://example.com/feed.json' }],
+  };
+
+  const reader = runningReader({ storage: { feeds: [runningFeed()] }, server: feedServer() });
+
+  try {
+    for (const name of exported) {
+      assert.ok(name in asks, `${name} is exported by lib/messages.js but never asked here`);
+
+      const [type, payload] = asks[name];
+      const asked = { type, ...payload };
+      const answer = (await reader.ask(asked)) ?? (await reader.askDocument(asked));
+
+      assert.notEqual(
+        answer,
+        null,
+        `${name} is a name neither half of the reader answers: the page that sends it waits forever`,
+      );
+      assert.equal(
+        answer.ok,
+        true,
+        `${name} was answered with a failure: ${JSON.stringify(answer.error ?? answer)}`,
+      );
+    }
+  } finally {
+    reader.forget();
   }
 });
 
 /**
+ * The bodies of the top-level functions of a page script, keyed by whatever each one is called.
+ * A page cannot run in Node, so where a test has to look inside one it looks at these bodies: the
+ * function a click runs, the one that writes a table, are *found* here instead of being assumed.
+ */
+function functionsOf(source) {
+  const marks = [...source.matchAll(/^(?:async )?function (\w+)\(/gm)];
+  return new Map(marks.map((match, i) => [
+    match[1],
+    source.slice(match.index, i + 1 < marks.length ? marks[i + 1].index : source.length),
+  ]));
+}
+
+/**
+ * The name a page script gives an element its markup declares, looked up through the markup id: the
+ * word the page happens to keep it under is the page's own business, the id is the markup's promise.
+ */
+function nameOfId(source, id) {
+  return [...source.matchAll(/(\w+):\s*document\.getElementById\('([^']+)'\)/g)]
+    .find((match) => match[2] === id)?.[1] ?? null;
+}
+
+/** Does this body call something whose only argument is exactly this name? */
+function callOn(body, argument) {
+  return [...body.matchAll(/(\w+)\((\w+)\)/g)].some((match) => match[2] === argument);
+}
+
+/** `.name` — whatever the page calls the element its markup declares by this id. */
+function elementOf(source, id) {
+  const key = nameOfId(source, id);
+  return key ? `.${key}` : null;
+}
+
+/** The name a page gives the storage module it borrows. */
+function storeAlias(source) {
+  return source.match(/import \* as (\w+) from '\.\/lib\/storage\.js'/)?.[1] ?? null;
+}
+
+/** The function a screen speaks through: the one that writes the live line its markup declares. */
+function announcerOf(source, id) {
+  const line = elementOf(source, id);
+  if (!line) return null;
+  return [...functionsOf(source)].find(([, body]) => body.includes(`${line}.textContent`))?.[0] ?? null;
+}
+
+/**
+ * The function a screen falls back to when it has nothing to show: the one that puts its placeholder
+ * in place. A page may reach the element it declares through a local alias (`const p = els.slot`),
+ * so this follows both the direct `.slot.x` reads and the alias they copy it to, and asks for the
+ * placeholder to be shown and written — not merely named, which is what hiding it for an article does.
+ */
+function placeholderOf(source, id) {
+  const name = nameOfId(source, id);
+  if (!name) return null;
+  return [...functionsOf(source)].find(([, body]) => {
+    const touched = new Set([
+      ...[...body.matchAll(/els\.([A-Za-z0-9_]+)/g)].map((match) => match[1]),
+      ...[...body.matchAll(/\b([A-Za-z0-9_]+)\s*=\s*els\.[A-Za-z0-9_]+/g)].map((match) => match[1]),
+    ]);
+    if (!touched.has(name)) return false;
+    const named = (property) =>
+      [...body.matchAll(new RegExp(`\\b([A-Za-z0-9_]+)\\.${property}\\s*=`, 'g'))]
+        .some((match) => touched.has(match[1]));
+    return named('hidden') || named('textContent');
+  })?.[0] ?? null;
+}
+
+/**
  * The reader header reads the whole list at once, and picking a feed in the left column puts the
  * middle column on that feed's first headline. `index.js` is the only place either is wired, so the
- * markup id, the message a click carries, the silence of a manual read and the cursor itself are
- * checked against each other here.
+ * pieces are compared with each other here: the markup id and the name the page maps it to, the
+ * function a click runs and the function the `r` key runs, the message the read carries.
  */
 test('the header reads every feed and a picked feed opens on its first headline', () => {
   const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
   const html = read('src/index.html');
   const page = read('src/index.js');
-  const worker = read('src/background.js');
+  const fns = functionsOf(page);
 
   assert.ok(html.includes('id="btn-load"'), 'the middle column head has no button that reads feeds');
-  assert.ok(
-    page.includes("document.getElementById('btn-load')"),
-    'the page does not know the button the markup declares',
-  );
-  assert.ok(
-    page.includes('els.load.addEventListener'),
-    'that button is looked up but wired to nothing',
-  );
-  assert.ok(
-    page.includes('{ type: MSG_REFRESH_ALL_FEEDS }'),
-    'a click on it sends the worker no message',
-  );
-
-  /* One selection has one button that reads it: the head of the feeds panel keeps no second copy of
-   * the same read, and the `r` key goes through the very function that button calls. */
   assert.ok(!html.includes('id="btn-refresh"'), 'the feeds panel head keeps a second button for the same read');
-  assert.equal(page.split('async function refreshSelection()').length - 1, 1,
-    'the page keeps a second copy of the read the load icon runs');
-  assert.match(
-    page,
-    /case 'r':\s*\r?\n\s*event\.preventDefault\(\);\s*\r?\n\s*void refreshSelection\(\);/,
-    'the r key does not read the same selection the button reads',
+
+  /* The page knows that button by one name — whatever the markup id is mapped to — and that name is
+   * the one the wiring has to answer. */
+  const button = page.match(/(\w+):\s*document\.getElementById\('btn-load'\)/)?.[1] ?? null;
+  assert.ok(button, 'the page does not know the button the markup declares');
+
+  const wiring = new RegExp(`\\.${button}\\.addEventListener\\('click'[^\\n]*`).exec(page);
+  assert.ok(wiring, `the ${button} button is looked up but wired to nothing`);
+  const clickRuns = wiring[0].match(/\b(\w+)\(\)/)?.[1] ?? null;
+  assert.ok(clickRuns, `a click on the ${button} button runs no function of the page`);
+
+  /* One whole-list read, sent to the worker from exactly one place, reached by that click. */
+  const whole = [...fns].filter(([, body]) => /sendMessage\(\s*\{\s*type:\s*MSG_REFRESH_ALL_FEEDS\b/.test(body));
+  assert.equal(whole.length, 1, 'the page keeps a second copy of the whole-list read');
+
+  const [readEveryFeed] = whole.map(([name]) => name);
+  assert.ok(
+    clickRuns === readEveryFeed ||
+      (fns.get(clickRuns) ?? '').includes(`${readEveryFeed}(`),
+    `the button runs ${clickRuns}, which never asks the worker to read every feed`,
   );
 
-  /* A read the user asked for by hand stays silent, whatever its scope: only an alarm-driven read
-   * plays the sound, so the handler must not repeat what the alarm branch does. */
-  const handlerStart = worker.indexOf('message?.type === MSG_REFRESH_ALL_FEEDS');
-  assert.ok(handlerStart > 0, 'the worker answers no MSG_REFRESH_ALL_FEEDS');
-  const handler = worker.slice(handlerStart, worker.indexOf('MSG_FEEDS_CHANGED', handlerStart));
-  assert.ok(handler.length > 0 && handler.includes('notify: false'), 'a manual read of every feed is silent');
-  assert.ok(!handler.includes('notify: true'), 'a manual read is not treated as an alarm');
+  /* A read the user asked for by hand stays silent, whatever its scope — shown on the running worker
+   * («the load signal sounds only on an automatic read that brought headlines»). The `r` key reads
+   * the same selection the button reads. */
+  const presses = [...page.matchAll(/^\s*case 'r':/gm)];
+  assert.equal(presses.length, 1, 'the page answers the r key more than once');
+  const starts = [...page.matchAll(/^\s*(?:case |default:)/gm)].map((match) => match.index);
+  const keyBody = page.slice(presses[0].index, starts.find((i) => i > presses[0].index) ?? page.length);
+  assert.match(keyBody, /preventDefault\(\)/, 'the r key is read as typing in a field');
+  assert.ok(
+    keyBody.includes(`${clickRuns}()`),
+    `the r key does not read the selection the ${button} button reads`,
+  );
 
-  const select = page.slice(page.indexOf('function selectFeed'), page.indexOf('function showPlaceholder'));
-  assert.ok(select.length > 0, 'selectFeed is gone, so nothing follows a click on a feed row');
-  assert.ok(select.includes('itemsOfSelectedFeed()[0]'), 'a picked feed is not taken to its first headline');
-  assert.ok(select.includes('openItem(first)'), 'the middle column is left with a placeholder');
+  /* Picking a feed moves the cursor of the middle column to the first headline of that feed; a feed
+   * whose headlines are all gone still has to say so. */
+  const picked = chooserOf(page);
+  assert.equal(picked.length, 1, 'a picked feed is not taken to its first headline');
 });
+
+/** The functions of a page that answer a click on a feed row: they name a selection and open its
+ * first headline. */
+function chooserOf(page) {
+  return [...functionsOf(page)].filter(([, body]) => {
+    const first = body.match(/const (\w+) = (?:[\w.]+\(\)|[\w.]+)\[0\];/);
+    return Boolean(first) && body.includes('state.feedId =') && callOn(body, first[1]);
+  });
+}
 
 /**
  * The first row of the left column is not a feed but all of them at once: it has a name of its own,
@@ -2700,10 +2819,13 @@ test('the left column leads with all feeds, whose headlines are the whole stored
   const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
   const page = read('src/index.js');
   const css = read('src/styles/reader.css');
+  const fns = functionsOf(page);
 
-  const sentinel = page.match(/const ALL_FEEDS_ID = '([^']+)';/);
+  /* The sentinel is whatever const the page compares its own selection against. */
+  const sentinel = [...page.matchAll(/const (\w+) = '([^']+)';/g)].find((match) =>
+    page.includes(`state.feedId === ${match[1]}`) || page.includes(`state.feedId !== ${match[1]}`));
   assert.ok(sentinel, 'the reader names no selection that stands for every feed');
-  const allId = sentinel[1];
+  const [, sentinelName, allId] = sentinel;
   /* A stored feed id is a UUID, or `id-<base36>-<base36>` when the generator is missing
    * (`lib/util.js` -> `newId`): a sentinel built that way could be mistaken for a real feed. */
   assert.ok(
@@ -2711,27 +2833,43 @@ test('the left column leads with all feeds, whose headlines are the whole stored
     `the sentinel ${allId} is a name a generated feed id could also carry`,
   );
 
-  const row = page.slice(page.indexOf('function renderAllFeedsRow'), page.indexOf('function renderFeeds'));
-  assert.ok(row.length > 0, 'the left column builds no row above its feeds');
-  assert.ok(row.includes("t('reader.feeds.all')"), 'that row is drawn without a caption');
-  assert.ok(row.includes('selectFeed(ALL_FEEDS_ID)'), 'a click on that row selects nothing');
+  /* Picking a feed is one function's work; the row of every feeds hands it its sentinel. */
+  const choosers = chooserOf(page).map(([name]) => name);
+  assert.equal(choosers.length, 1, 'a click on a feed row is the work of more than one function');
+  const [chooser] = choosers;
 
-  const list = page.slice(page.indexOf('function renderFeeds'), page.indexOf('function renderHeadlines'));
+  const rows = [...fns].filter(([, body]) =>
+    body.includes("t('reader.feeds.all')") && body.includes(`${chooser}(${sentinelName}`));
+  assert.equal(rows.length, 1, 'the left column builds its row above the feeds in more than one place');
+  const [rowName] = rows[0];
+
+  const drawn = [...fns].filter(([, body]) => body.includes(`${rowName}(`) && /for \(const \w+ of state\.feeds\)/.test(body));
+  assert.equal(drawn.length, 1, 'the row above the feeds is drawn by nobody, or by more than one column');
+  const [, drawBody] = drawn[0];
   assert.ok(
-    list.includes('renderAllFeedsRow()') &&
-      list.indexOf('renderAllFeedsRow()') < list.indexOf('for (const feed of state.feeds)'),
+    drawBody.indexOf(`${rowName}(`) < drawBody.search(/for \(const \w+ of state\.feeds\)/),
     'the row is drawn among the feeds instead of over them',
   );
 
   /* The middle column follows the selection: the all-selection is the stored list itself, which
    * `renderAll()` has already put newest first. */
-  const picked = page.slice(page.indexOf('function inSelection'), page.indexOf('function renderTotal'));
-  assert.ok(picked.includes('isAllFeeds()'), 'the all-selection picks no headlines of every feed');
-  assert.ok(picked.includes('state.items.filter(inSelection)'), 'the all-selection is not the sorted storage');
+  const [isAll] = [...fns]
+    .filter(([, body]) => body.includes(`state.feedId === ${sentinelName}`))
+    .map(([name]) => name);
+  assert.ok(isAll, 'nothing tells the all-selection apart from a feed');
 
-  const init = page.slice(page.indexOf('async function init'));
-  assert.ok(init.includes('selectFeed(ALL_FEEDS_ID)'), 'the reader does not open on the all-feeds row');
-  assert.ok(!init.includes('selectFeed(state.feeds[0].id)'), 'the reader still opens on its first feed');
+  const taken = [...fns].filter(([, body]) => /state\.items\.filter\((\w+)\)/.test(body));
+  assert.ok(taken.length >= 1, 'the middle column takes its headlines from elsewhere than the stored list');
+  const filtered = taken.map(([, body]) => body.match(/state\.items\.filter\((\w+)\)/)[1]);
+  assert.ok(
+    filtered.some((name) => (fns.get(name) ?? '').includes(`${isAll}(`)),
+    'the all-selection is not the stored list of every feed',
+  );
+
+  /* The reader opens on that row, not on whichever feed happens to be first. */
+  const openings = [...fns].filter(([, body]) => body.includes(`${chooser}(${sentinelName}`));
+  assert.equal(openings.length, 2, 'the all-feeds row is chosen by only some of the ways the reader opens');
+  assert.ok(!page.includes(`${chooser}(state.feeds[0].id)`), 'the reader still opens on its first feed');
 
   assert.ok(css.includes('.list-all-feeds'), 'the row is drawn exactly like a feed row');
 
@@ -3054,7 +3192,7 @@ test('the middle column filters its headlines, and the reader answers to the key
   );
   /* The search belongs to the reading position, so it travels with it back from a settings screen. */
   assert.ok(page.includes('query: state.query'), 'the search is not kept with the selection');
-  assert.ok(page.includes('els.headlineSearch.value = state.query'), 'the field is left empty of what it filtered by');
+  assert.ok(page.includes(`${elementOf(page, 'headline-search')}.value = state.query`), 'the field is left empty of what it filtered by');
 
   assert.ok(dictionary.includes("querySelectorAll('[data-i18n-placeholder]')"), 'a placeholder no dictionary re-applies stays in one language');
   assert.ok(css.includes('.panel-search'), 'the search field the markup declares is not styled');
@@ -3114,17 +3252,20 @@ test('the reader explains its keys inside the reader', () => {
     page.includes("document.getElementById('btn-keys')"),
     'the page does not know the button the markup declares',
   );
-  assert.ok(page.includes('els.keysButton.addEventListener'), 'the button of the key list answers to no click');
+  assert.ok(page.includes(`${elementOf(page, 'btn-keys')}.addEventListener`), 'the button of the key list answers to no click');
 
   /* A window that holds the keyboard: `showModal`, the neighbours hidden while it stands, and the
    * same `?` that opened it closing it again. */
-  assert.ok(page.includes('els.keysHelp.showModal()'), 'the key list is no modal, so Esc and the tab order are its own problem');
+  assert.ok(page.includes(`${elementOf(page, 'keys-help')}.showModal()`), 'the key list is no modal, so Esc and the tab order are its own problem');
   assert.ok(page.includes("addEventListener('close'"), 'nothing puts back what opening the list took from the rest of the screen');
   assert.ok(page.includes("els.header.setAttribute('aria-hidden', 'true')"), 'a tab can walk out of the list into the screen behind it');
   assert.ok(page.includes("els.header.removeAttribute('aria-hidden')"), 'the screen behind the list stays voiceless once the list is gone');
-  assert.ok(page.includes('els.keysHelp.addEventListener'), 'a click beside the list closes nothing');
+  assert.ok(page.includes(`${elementOf(page, 'keys-help')}.addEventListener`), 'a click beside the list closes nothing');
   assert.ok(page.includes("case '?':"), 'no key opens the list the reader carries');
-  assert.ok(page.includes('if (els.keysHelp.open)'), 'the keys of the reader keep working through the list that explains them');
+  assert.ok(
+    page.includes(`${elementOf(page, 'keys-help')}.open) return;`),
+    'the keys of the reader keep working through the list that explains them',
+  );
 
   /* Every key the page really answers to stands in the table, and the table adds none it does not answer to. */
   const handled = new Set([
@@ -3252,15 +3393,15 @@ test('the reader shows the read mark, its toggle and the way back from a delete'
   /* The toggle of the article panel: declared, wired, and announced the way a toggle is announced. */
   assert.ok(html.includes('id="content-read"'), 'the reader declares no button that marks a headline read');
   assert.ok(page.includes("document.getElementById('content-read')"), 'the page does not know the button the markup declares');
-  assert.ok(page.includes('els.contentRead.addEventListener'), 'the read toggle answers to no click');
+  assert.ok(page.includes(`${elementOf(page, 'content-read')}.addEventListener`), 'the read toggle answers to no click');
   assert.ok(page.includes("els.contentRead.setAttribute('aria-pressed', String(isRead))"), 'the toggle never says which way it stands');
   assert.ok(page.includes("els.contentRead.hidden = true"), 'a placeholder leaves the toggle standing over no headline');
   assert.ok(/els\.contentRead\.title = t\(`reader\.content\.\$\{key\}\.tooltip`\)/.test(page), 'the toggle explains nothing about what a mark does to the feeds');
 
   /* Marking is a storage act, not a flag of the page: both directions go through the read list. */
   assert.ok(page.includes("await store.unmarkRead([item])"), 'taking the mark off asks the storage for nothing');
-  assert.ok(page.includes('await store.markRead([item])'), 'putting the mark on never reaches the read list');
-  assert.ok(page.includes('store.readMarksFor(state.items, read)'), 'the middle column draws no mark the storage really holds');
+  assert.ok(page.includes(`await ${storeAlias(page)}.markRead([item])`), 'putting the mark on never reaches the read list');
+  assert.ok(page.includes(`${storeAlias(page)}.readMarksFor(state.items, read)`), 'the middle column draws no mark the storage really holds');
 
   /* The glyph on the row, and the row itself going quiet under it. */
   assert.ok(page.includes('title.append(readFlag())'), 'a read headline carries no mark in the middle column');
@@ -3276,12 +3417,12 @@ test('the reader shows the read mark, its toggle and the way back from a delete'
   assert.ok(html.includes('id="undo-line"'), 'the reader declares no line that offers an undo');
   assert.ok(html.includes('id="btn-undo"'), 'an undo is offered to a mouse by nothing');
   assert.ok(page.includes("document.getElementById('btn-undo')"), 'the page does not know the undo button the markup declares');
-  assert.ok(page.includes('els.undoButton.addEventListener'), 'the undo button answers to no click');
+  assert.ok(page.includes(`${elementOf(page, 'btn-undo')}.addEventListener`), 'the undo button answers to no click');
   assert.ok(page.includes('offerUndo(removed)'), 'a delete offers no way back');
   assert.ok(page.includes('setTimeout(clearUndo, UNDO_MS)'), 'the window of an undo is never closed, or never timed at all');
-  assert.ok(page.includes('await store.restoreItem('), 'the undo asks the storage for nothing');
+  assert.ok(page.includes(`await ${storeAlias(page)}.restoreItem(`), 'the undo asks the storage for nothing');
   assert.ok(page.includes('if (restoredItem) renderArticle(restoredItem);'), 'an undo that put the headline back leaves the right panel showing the article of another headline');
-  assert.ok(page.includes("announce(t('reader.announce.undoFailed'))"), 'an undo that could not happen is not announced');
+  assert.ok(page.includes(`${announcerOf(page, 'reader-announce')}(t('reader.announce.undoFailed'))`), 'an undo that could not happen is not announced');
   assert.ok(page.includes("case 'u':"), 'no key takes a delete back');
   assert.ok(page.includes("if (state.undo && event.key === 'Escape'"), 'nothing outside the button takes a delete back');
   assert.ok(page.includes('!isTypingTarget(event.target)'), 'the undo window takes Esc from a field that is being typed in');
@@ -3349,8 +3490,8 @@ test('the reader pulls the full text of an open headline from its page', () => {
   assert.ok(html.includes('<symbol id="icon-article"'), 'the reader asks for a full-text glyph its sprite never defines');
   assert.ok(html.includes('data-i18n-title="reader.content.article.tooltip"'), 'the full-text button is named by nothing a language translates');
   assert.ok(page.includes("document.getElementById('content-article')"), 'the page does not know the full-text button the markup declares');
-  assert.ok(page.includes('els.contentArticle.addEventListener'), 'the full-text button answers to no click');
-  assert.ok(page.includes('els.contentArticle.hidden = true'), 'a placeholder leaves the full-text button standing over no headline');
+  assert.ok(page.includes(`${elementOf(page, 'content-article')}.addEventListener`), 'the full-text button answers to no click');
+  assert.ok(page.includes(`${elementOf(page, 'content-article')}.hidden = true`), 'a placeholder leaves the full-text button standing over no headline');
 
   /* The key stands in the switch and in the reader's own key list, both ways. */
   assert.ok(page.includes("case 'f':"), 'no key asks the reader to pull the full text');
@@ -3493,11 +3634,21 @@ test('a failed load keeps the open headline and names itself in the status line'
     assert.ok(page.includes(`document.getElementById('${id}')`), 'the page does not know the element the markup declares');
   }
 
+  const placeholder = placeholderOf(page, 'content-empty');
+  const reportsFailure = [...functionsOf(page)]
+    .filter(([, body]) => body.includes('state.refreshError = {'))
+    .map(([name]) => name);
+  assert.equal(reportsFailure.length, 1, 'a failed load is kept by more than one path of the reader');
+  const [failure] = reportsFailure;
+  const [failureText] = [...functionsOf(page)]
+    .filter(([, body]) => /return t\(\w+\.key,/.test(body))
+    .map(([name]) => name);
+
   /* A failed load is never painted over the open article. */
   for (const key of ['reader.refresh.failed', 'reader.refreshAll.failed']) {
-    assert.equal(page.split(`showPlaceholder(t('${key}'`).length - 1, 0,
+    assert.equal(page.split(`${placeholder}(t('${key}'`).length - 1, 0,
       `the failure ${key} is shown in place of the headline the reader was showing`);
-    assert.equal(page.split(`reportRefreshFailure('${key}'`).length - 1, key === 'reader.refresh.failed' ? 2 : 1,
+    assert.equal(page.split(`${failure}('${key}'`).length - 1, key === 'reader.refresh.failed' ? 2 : 1,
       `the failure ${key} is named by no path that loads the feeds`);
   }
   assert.ok(page.includes('if (openHeadline()) renderFeedStatus();'), 'a failure with an open article repaints the article');
@@ -3506,7 +3657,7 @@ test('a failed load keeps the open headline and names itself in the status line'
    * change — and reaches the screen through the line under the head of the middle column. */
   assert.ok(page.includes('refreshError: null'), 'the reader keeps no failed load of its own');
   assert.equal(page.split('state.refreshError = null;').length - 1, 3, 'a new load or another selection does not forget the failure of the last one');
-  assert.ok(page.includes('state.refreshError ? [refreshFailureText(state.refreshError)] : []'), 'the status line does not carry the failure of the load');
+  assert.ok(page.includes(`state.refreshError ? [${failureText}(state.refreshError)] : []`), 'the status line does not carry the failure of the load');
   assert.ok(page.includes("els.feedStatus.classList.toggle('error'"), 'the status line does not say that what it carries is a failure');
 
   /* Only a load that answered moves the reader to the top of the list. */
@@ -3514,10 +3665,10 @@ test('a failed load keeps the open headline and names itself in the status line'
 
   /* With no article to keep, the same words are spoken by the live region of the right panel. */
   assert.ok(page.includes("p.setAttribute('role', alert ? 'alert' : 'status')"), 'a failure of a load is not announced to a screen reader');
-  assert.ok(page.includes("showPlaceholder(t('reader.refresh.noFeed'), { alert: true })"), 'the reader shows an empty selection as no alert');
-  assert.ok(page.includes("else if (state.refreshError) showPlaceholder(refreshFailureText(state.refreshError), { alert: true });"), 'a language change leaves the failure of a load standing in the language of the last one');
-  assert.ok(page.includes('els.articleBody.replaceChildren()'), 'a placeholder leaves the article of the last headline on the screen');
-  assert.ok(page.includes('els.contentEmpty.hidden = true'), 'a headline leaves the words of the placeholder under itself');
+  assert.ok(page.includes(`${placeholderOf(page, 'content-empty')}(t('reader.refresh.noFeed'), { alert: true })`), 'the reader shows an empty selection as no alert');
+  assert.ok(page.includes(`else if (state.refreshError) ${placeholder}(${failureText}(state.refreshError), { alert: true });`), 'a language change leaves the failure of a load standing in the language of the last one');
+  assert.ok(page.includes(`${elementOf(page, 'article-body')}.replaceChildren()`), 'a placeholder leaves the article of the last headline on the screen');
+  assert.ok(page.includes(`${elementOf(page, 'content-empty')}.hidden = true`), 'a headline leaves the words of the placeholder under itself');
 
   assert.ok(css.includes('.panel-status.error'), 'a failure in the status line is not shown as a failure');
   assert.ok(css.includes('.empty.error'), 'a failure in the right panel is not shown as a failure');
@@ -3544,6 +3695,7 @@ test('the reader greets a first run that has no feeds', () => {
   const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
   const html = read('src/index.html');
   const page = read('src/index.js');
+  const fns = functionsOf(page);
   const feedsJs = read('src/feeds.js');
   const storageJs = read('src/lib/storage.js');
   const css = read('src/styles/reader.css');
@@ -3561,22 +3713,27 @@ test('the reader greets a first run that has no feeds', () => {
   );
 
   /* One function decides that there is nothing to list, and the columns ask it instead of guessing. */
-  assert.ok(page.includes('function renderStartCard()'), 'nothing decides when the card stands in for the list');
-  assert.ok(page.includes('const noFeeds = renderStartCard();'), 'the middle column is drawn without asking whether feeds exist');
-  assert.ok(
-    page.includes('els.headlinesEmpty.hidden = items.length > 0 || noFeeds;'),
-    'the empty-list line keeps speaking over the card of a first run',
-  );
+  const decided = [...page.matchAll(/const (\w+) = (\w+)\(\);/g)].find((match) =>
+    page.includes(`|| ${match[1]};`) && fns.has(match[2]));
+  assert.ok(decided, 'nothing decides when the card stands in for the list');
+  const [, noFeeds, decidesIt] = decided;
+  assert.ok((fns.get(decidesIt) ?? '').includes(`.${nameOfId(page, 'start-card')}.hidden =`),
+    `the ${decidesIt} function does not put the card of a first run in place of the list`);
+
+  const emptyLine = page.split(/\r?\n/).find((line) =>
+    line.includes(`.${nameOfId(page, 'headlines-empty')}.hidden =`));
+  assert.ok(emptyLine?.trimEnd().endsWith(`|| ${noFeeds};`),
+    'the empty-list line keeps speaking over the card of a first run');
 
   /* A search field and two icons that act on an empty selection would only look usable. */
-  for (const control of ['headlineSearch', 'load', 'clear']) {
-    assert.ok(
-      page.includes(`els.${control}.hidden = noFeeds;`),
-      `the ${control} control of an empty reader is left standing as if it had something to do`,
-    );
+  for (const id of ['headline-search', 'btn-load', 'btn-clear']) {
+    const control = nameOfId(page, id);
+    assert.ok(control && page.includes(`.${control}.hidden = ${noFeeds};`),
+      `the ${id} control of an empty reader is left standing as if it had something to do`);
   }
-  assert.ok(
-    page.includes('if (els.headlineSearch.hidden) break;'),
+  const searchGuard = page.split(/\r?\n/).find((line) =>
+    line.includes(`.${nameOfId(page, 'headline-search')}.hidden) break;`));
+  assert.ok(searchGuard?.trimStart().startsWith('if ('),
     'the `/` key takes the focus to a field an empty reader has hidden',
   );
 
@@ -3592,10 +3749,9 @@ test('the reader greets a first run that has no feeds', () => {
     page.includes("import { SETTINGS_PAGE, pageUrl } from './lib/tabs.js';"),
     'the reader does not know where the feeds screen lives',
   );
-  assert.ok(
-    page.includes('els.openFeeds.addEventListener'),
-    'the card the markup declares has no answer to its own button',
-  );
+  const openFeeds = nameOfId(page, 'btn-open-feeds');
+  assert.ok(openFeeds && page.includes(`.${openFeeds}.addEventListener`),
+    'the card the markup declares has no answer to its own button');
   assert.ok(
     page.includes('window.location.assign(pageUrl(SETTINGS_PAGE))'),
     'the card of a first run leads nowhere',
@@ -3603,7 +3759,7 @@ test('the reader greets a first run that has no feeds', () => {
 
   /* The right panel says the same as the middle one instead of asking for a headline no feed has. */
   assert.equal(
-    page.split("showPlaceholder(t('reader.start.contentHint'))").length - 1,
+    page.split(`${placeholderOf(page, 'content-empty')}(t('reader.start.contentHint'))`).length - 1,
     3,
     'the right panel is told about the first run by only some of the ways it is repainted',
   );
@@ -3616,12 +3772,17 @@ test('the reader greets a first run that has no feeds', () => {
       `storage.js does not offer ${name}`,
     );
   }
+  const storeAs = feedsJs.match(/import \* as (\w+) from '\.\/lib\/storage\.js'/)?.[1] ?? null;
   assert.ok(
-    feedsJs.includes('(await store.getFeeds()).length === 0 && !(await store.getFirstFeedDone())'),
+    storeAs && feedsJs.includes(`(await ${storeAs}.getFeeds()).length === 0 && !(await ${storeAs}.getFirstFeedDone())`),
     'the first row of an empty table is not told apart from the rows after it',
   );
+  /* The word about the whole table is spoken through the transfer line the markup declares, whatever
+   * the page calls the function that writes it. */
+  const transferFn = [...functionsOf(feedsJs)].find(([, body]) =>
+    body.includes(`${elementOf(feedsJs, 'transfer-status')}.textContent`))?.[0] ?? null;
   assert.ok(
-    feedsJs.includes("setTransferStatus(t('feeds.status.firstFeed'), 'ok')"),
+    transferFn && feedsJs.includes(`${transferFn}(t('feeds.status.firstFeed'), 'ok')`),
     'a first feed leaves no word about the table it just entered',
   );
   assert.ok(
@@ -3629,7 +3790,8 @@ test('the reader greets a first run that has no feeds', () => {
     'the confirmation promises headlines a feed that failed never brought',
   );
   assert.ok(
-    feedsJs.indexOf('await store.setFirstFeedDone();') < feedsJs.indexOf("setTransferStatus(t('feeds.status.firstFeed')"),
+    feedsJs.indexOf(`await ${storeAs}.setFirstFeedDone();`) <
+      feedsJs.indexOf(`${transferFn}(t('feeds.status.firstFeed')`),
     'the mark is left unwritten, so the same word comes back on every save',
   );
 
@@ -3688,19 +3850,24 @@ test('the reader announces its outcomes and keeps a keyboard cursor visible', ()
     page.includes("document.getElementById('reader-announce')"),
     'the page does not know the line the markup declares',
   );
-  assert.ok(page.includes('function announce('), 'nobody writes to the line the markup declares');
-  assert.ok(page.includes('function refreshOutcome('), 'noone gathers what a load ended with');
-  assert.equal(
-    page.split('announce(refreshOutcome(response));').length - 1,
-    2,
-    'a load is announced by only some of the buttons that can start one',
-  );
+  const fns = functionsOf(page);
+  const announceLine = nameOfId(page, 'reader-announce');
+  const announcers = [...fns].filter(([, body]) => body.includes(`.${announceLine}.textContent`));
+  assert.equal(announcers.length, 1, 'nobody writes to the line the markup declares');
+  const [announceName] = announcers[0];
+
+  const outcomes = [...page.matchAll(/(\w+)\((\w+)\(response\)\);/g)];
+  assert.equal(outcomes.length, 2, 'a load is announced by only some of the buttons that can start one');
+  for (const [, said, gathered] of outcomes) {
+    assert.equal(said, announceName, 'a load is announced to a line other than the one the markup declares');
+    assert.ok(fns.has(gathered), 'noone gathers what a load ended with');
+  }
   assert.ok(
-    page.includes("announce(t('reader.announce.deleted')"),
+    page.includes(`${announceName}(t('reader.announce.deleted')`),
     'a deleted headline is said to nobody who cannot see the panels',
   );
   assert.ok(
-    page.includes("announce(t('reader.announce.cleared'"),
+    page.includes(`${announceName}(t('reader.announce.cleared'`),
     'a cleared column is said to nobody who cannot see the panels',
   );
 
@@ -3732,21 +3899,15 @@ test('the reader announces its outcomes and keeps a keyboard cursor visible', ()
     'the reader spreads its Tab over the rows of a column instead of one cursor',
   );
 
-  assert.ok(page.includes("li.setAttribute('role', 'option')"), 'a headline row is no option of that listbox');
+  const rowPainters = [...fns].filter(([, body]) => body.includes(".setAttribute('role', 'option')"));
+  assert.equal(rowPainters.length, 1, 'the rows of the middle column are built in more than one place');
+  const [, rowBody] = rowPainters[0];
+  assert.ok(rowBody.includes(".setAttribute('aria-selected'"),
+    'the open headline is not named among the options it belongs to');
+  assert.ok(!rowBody.includes("createElement('button')"),
+    'a button inside an option makes the same list a pile of tab stops');
   assert.ok(
-    page.includes("li.setAttribute('aria-selected'"),
-    'the open headline is not named among the options it belongs to',
-  );
-  const headlines = page.slice(
-    page.indexOf('function renderHeadlines'),
-    page.indexOf('function setActiveDescendant'),
-  );
-  assert.ok(
-    !headlines.includes("createElement('button')"),
-    'a button inside an option makes the same list a pile of tab stops',
-  );
-  assert.ok(
-    page.includes("els.headlineList.setAttribute('aria-activedescendant'"),
+    page.includes(`.${nameOfId(page, 'headline-list')}.setAttribute('aria-activedescendant'`),
     'the middle column never names the row its keyboard cursor stands on',
   );
   assert.equal(
@@ -3756,16 +3917,18 @@ test('the reader announces its outcomes and keeps a keyboard cursor visible', ()
   );
 
   /* A cursor the keyboard moves is a cursor an eye can find. */
+  const moves = [...fns].filter(([, body]) => /\(\w+\[\w+\], \{ \w+: true \}\)/.test(body));
+  assert.equal(moves.length, 1, 'the keyboard moves the cursor of more than one column');
+  const moved = moves[0][1].match(/(\w+)\((\w+)\[\w+\], \{ (\w+): true \}\)/);
+  assert.ok(moved, 'the arrows leave the focus where it already stood');
+  const [, openName, , focusOption] = moved;
+  assert.ok(fns.has(openName), 'the arrows open no headline of that list');
   assert.ok(
-    page.includes('{ followFocus = false }'),
+    (fns.get(openName) ?? '').includes(`{ ${focusOption} = false }`),
     'opening a headline with the keyboard is no different from opening it with a mouse',
   );
   assert.ok(
-    page.includes('openItem(visible[next], { followFocus: true })'),
-    'the arrows leave the focus where it already stood',
-  );
-  assert.ok(
-    page.includes('els.headlineList.focus()'),
+    (fns.get(openName) ?? '').includes(`.${nameOfId(page, 'headline-list')}.focus()`),
     'the column whose cursor the keyboard moves never takes the focus that cursor stands in',
   );
   assert.ok(
@@ -3835,32 +3998,38 @@ test('the feeds and settings screens say what their buttons did', () => {
       page.includes(`document.getElementById('${screen}-announce')`),
       `the ${screen} page does not know the line its own markup declares`,
     );
-    assert.ok(page.includes('function announce('), `nothing writes to the live line of the ${screen} screen`);
+    assert.ok(announcerOf(page, `${screen}-announce`), `nothing writes to the live line of the ${screen} screen`);
   }
 
-  /* Both screens speak from the place that already writes the words an eye sees. */
-  const feedsStatus = feedsJs.slice(
-    feedsJs.indexOf('function setStatus('),
-    feedsJs.indexOf('function showFieldErrors('),
-  );
-  assert.ok(feedsStatus.includes('announce(message);'), 'a feed row answers to an eye only');
+  /* Both screens speak from the place that already writes the words an eye sees: whatever a function
+   * puts where an eye reads it, it hands the same words to the live line of its own markup. */
+  const speakers = (source, id) => {
+    const says = announcerOf(source, id);
+    if (!says) return [];
+    /* A speaker is a screen action that writes where an eye reads it and hands the same words to the
+     * live line. The live line's own writer is not such an action — it is the line they all speak in. */
+    return [...functionsOf(source)].filter(
+      ([name, body]) => name !== says && body.includes(`${says}(`) && body.includes('.textContent ='),
+    );
+  };
 
-  const transfer = feedsJs.slice(
-    feedsJs.indexOf('function setTransferStatus('),
-    feedsJs.indexOf('async function exportFeeds('),
+  assert.equal(
+    speakers(feedsJs, 'feeds-announce').length,
+    2,
+    'a feed row or a transfer of the whole table is said to nobody who cannot see it',
   );
-  assert.ok(transfer.includes('announce(message);'), 'a transfer of the whole table is said to nobody who cannot see it');
 
-  const settingsStatus = settingsJs.slice(
-    settingsJs.indexOf('function setStatus('),
-    settingsJs.indexOf('function describeTtl('),
-  );
+  const settingsSpeakers = speakers(settingsJs, 'settings-announce');
+  assert.equal(settingsSpeakers.length, 1, 'the settings screen says nothing out loud about what «Записать» wrote');
   assert.ok(
-    settingsStatus.includes("if (kind === 'ok' || kind === 'error') announce(message);"),
-    'the settings screen says nothing out loud about what «Записать» wrote',
+    settingsSpeakers[0]?.[1].includes("if (kind === 'ok' || kind === 'error')"),
+    'a word of the settings screen is said out loud whatever kind it was',
   );
+
+  const settingsWriter = [...functionsOf(settingsJs)].find(([, body]) =>
+    body.includes(`${elementOf(settingsJs, 'read-status')}.textContent`))?.[0] ?? null;
   assert.ok(
-    settingsJs.includes("setStatus(t('settings.status.pending'), 'pending')"),
+    settingsWriter && settingsJs.includes(`${settingsWriter}(t('settings.status.pending'), 'pending')`),
     'the settings screen no longer marks an unwritten field',
   );
 
@@ -3988,7 +4157,8 @@ test('every name a file borrows from another is one that module really exports',
       const available = exported.get(new URL(spec, url).href);
       assert.ok(available, `${file} borrows ${spec}, which is not a module of this extension`);
 
-      for (const used of source.matchAll(new RegExp(`\\b${alias}\\.(\\w+)`, 'g'))) {
+      /* The import line itself names the module it borrows: it is not a use of a name in it. */
+      for (const used of source.replace(match[0], '').matchAll(new RegExp(`[^\\w.]${alias}\\.(\\w+)`, 'g'))) {
         assert.ok(
           available.has(used[1]),
           `${file} reads ${alias}.${used[1]}, which ${spec} does not export`,
@@ -4087,27 +4257,481 @@ test('the schedule the reader names is the one Chrome really runs', async () => 
   }
 });
 
+/* ---------------- the worker and the document, running ---------------- */
+
 /**
- * The worker writes that schedule from the alarm it is answering, not from a formula it guesses:
- * the next check of a feed is the next period of the alarm that just ran, so the reader can name it
- * the moment the headlines come in.
+ * The two halves that need Chrome are not read as text here: they are imported once, given one fake
+ * `chrome`, and asked to work. A listener they register is a plain function a test can call the way
+ * Chrome calls it, so an alarm walks the whole route — the row of the feed, the worker, the offscreen
+ * document, the request, the answer, back to the row — and the test reads what the row says.
+ *
+ * Both halves read `chrome` from the global at the moment they are *called*, which is what lets one
+ * import serve every scenario: the scenario swaps the global, the listeners stay where the pair put
+ * them. That is why the pair is imported once, here, and never again.
  */
-test('an automatic read records the next alarm of its own alarm', () => {
-  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
-  const alarm = worker.match(/chrome\.alarms\.onAlarm\.addListener\([\s\S]*?\n\}\);/);
-  assert.ok(alarm, 'the worker answers its alarms');
-  assert.match(
-    alarm[0],
-    /nextAlarmAt: alarmDueAt\(alarm, Date\.now\(\), alarmPeriodMinutes\(feed\.delay_timeout\)\)/,
-    'the read does not say when it will happen next',
+
+/** Every listener the pair registered while it was imported, tagged with the half that put it up. */
+const readerListeners = [];
+let readerOwner = null;
+
+function readerEvents(event) {
+  return {
+    addListener(fn) {
+      readerListeners.push({ event, owner: readerOwner, fn });
+    },
+  };
+}
+
+/** The listeners of one half, as the functions Chrome would be handed. */
+function readerCalls(event, owner) {
+  return readerListeners
+    .filter((listener) => listener.event === event && (owner === undefined || listener.owner === owner))
+    .map((listener) => listener.fn);
+}
+
+/**
+ * The `chrome` of one scenario: the storage of a profile, its alarms, the offscreen document that
+ * answers the worker, the popups and the tabs the reader shows — and, when a test wants the reader to
+ * fail at its own shelf, the writes it refuses.
+ */
+function readerChrome({ storage = {}, refuse = null, hasDocument = false } = {}) {
+  const memory = structuredClone(storage);
+  const alarms = new Map();
+  const popups = new Map();
+  const state = {
+    requests: [],
+    badge: [],
+    sounds: [],
+    tabs: [],
+    tabUpdates: [],
+    /* Every message the worker sent to the document, and every popup it asked the system to show: a
+     * test asks here whether the worker signalled a load it was not asked to signal. */
+    sends: [],
+    notifications: [],
+    popups,
+    document: { open: hasDocument, created: 0, closed: 0 },
+  };
+
+  /* A request that is still on its way between the two contexts, counted so a scenario can wait for
+   * the reads it started instead of guessing how many waits they take. */
+  const hops = new Set();
+
+  const api = {
+    runtime: {
+      getURL: (path) => `chrome-extension://test/${path}`,
+      getContexts: async () => (state.document.open ? [{ contextType: 'OFFSCREEN_DOCUMENT' }] : []),
+      lastError: null,
+      onInstalled: readerEvents('runtime.onInstalled'),
+      onStartup: readerEvents('runtime.onStartup'),
+      onMessage: readerEvents('runtime.onMessage'),
+      sendMessage(message, reply) {
+        /* A message from the worker reaches the *other* context: the worker does not answer itself. */
+        state.sends.push({ ...message });
+        const answers = [];
+        const waits = [];
+
+        for (const listener of readerCalls('runtime.onMessage', 'document')) {
+          const hop = { settled: false, answer: null };
+          const wait = new Promise((done) => { hop.answer = done; });
+          const answer = (payload) => {
+            answers.push(payload);
+            if (hop.settled) return;
+            hop.settled = true;
+            hops.delete(hop);
+            hop.answer(payload);
+          };
+
+          const keepsChannel = listener(message, { id: 'reader-document' }, answer);
+          /* The document answers when its own work is done; until then this hop is outstanding, and a
+           * scenario that ends early has to answer it itself. */
+          if (keepsChannel === true && !hop.settled) {
+            hops.add(hop);
+            waits.push(wait);
+          }
+        }
+
+        Promise.all(waits).then(() => {
+          api.runtime.lastError = answers.length > 0 ? null : { message: 'Receiving end does not exist.' };
+          reply(answers.length > 0 ? answers[0] : undefined);
+          api.runtime.lastError = null;
+        });
+      },
+      /**
+       * The document has answered. Chrome gives a reply to a context that answers the message, so
+       * this is where a scenario hands the answer over to the requests it has left on the way.
+       */
+      answerDocument(payload) {
+        for (const hop of [...hops]) {
+          if (hop.settled) continue;
+          hop.settled = true;
+          hops.delete(hop);
+          hop.answer(payload);
+        }
+      },
+    },
+    action: {
+      onClicked: readerEvents('action.onClicked'),
+      async setBadgeText(details) { state.badge.push(details.text); },
+      async setBadgeBackgroundColor() {},
+    },
+    storage: {
+      local: {
+        async get(key) {
+          return key in memory ? { [key]: structuredClone(memory[key]) } : {};
+        },
+        async set(patch) {
+          for (const [key, value] of Object.entries(patch)) {
+            if (refuse?.(key)) throw new Error(`the shelf of the reader would not take ${key}`);
+            memory[key] = structuredClone(value);
+          }
+        },
+      },
+      onChanged: readerEvents('storage.onChanged'),
+    },
+    alarms: {
+      onAlarm: readerEvents('alarms.onAlarm'),
+      async getAll() { return [...alarms.values()]; },
+      async create(name, info) {
+        alarms.set(name, { name, ...info, scheduledTime: Date.now() + info.periodInMinutes * MINUTE });
+        return true;
+      },
+      async clear(name) { return alarms.delete(name); },
+    },
+    notifications: {
+      onClicked: readerEvents('notifications.onClicked'),
+      onClosed: readerEvents('notifications.onClosed'),
+      async create(id, options) {
+        popups.set(id, { id });
+        state.notifications.push({ id, options });
+        return true;
+      },
+      async clear(id) { return popups.delete(id); },
+      async getAll() { return Object.fromEntries(popups); },
+    },
+    offscreen: {
+      async hasDocument() { return state.document.open; },
+      async createDocument(options) {
+        state.document.open = true;
+        state.document.created += 1;
+        state.createOptions = options;
+        return undefined;
+      },
+      async closeDocument() {
+        state.document.open = false;
+        state.document.closed += 1;
+        return undefined;
+      },
+    },
+    tabs: {
+      async query() { return [...state.tabs]; },
+      async create(options) {
+        const tab = { id: state.tabs.length + 1, windowId: 1, ...options };
+        state.tabs.push(tab);
+        return tab;
+      },
+      async update(id, patch) {
+        state.tabUpdates.push({ id, ...patch });
+        return { id, ...patch };
+      },
+    },
+    windows: { async update(id, patch) { return { id, ...patch }; } },
+  };
+
+  return { api, state, hops };
+}
+
+/**
+ * Import the pair under a `chrome` that answers everything their first lines ask for: the worker
+ * bootstraps, wires the popup listeners and asks which popups are still live, so the warm-up has to
+ * answer all three. The imports cannot be static: a module read before a scenario installed its
+ * `chrome` would fail on the first `chrome.*` of its top level.
+ */
+async function importReaderPair() {
+  const warm = readerChrome({ storage: {} });
+  globalThis.chrome = warm.api;
+
+  readerOwner = 'worker';
+  await import('../src/background.js');
+  readerOwner = 'document';
+  await import('../src/offscreen.js');
+  readerOwner = null;
+
+  /* The wake of the worker is not awaited by the worker itself; let it finish before its Chrome goes. */
+  await new Promise((done) => setTimeout(done, 0));
+  delete globalThis.chrome;
+}
+
+/**
+ * The `Audio` of the scenarios: the offscreen document keeps one player for one signal file, so a
+ * fake that stood per scenario would be reused out of its own scenario. It names its scenario's
+ * record of the signal only when the signal is actually played.
+ */
+let soundSink = null;
+
+class TestAudio {
+  constructor(src) {
+    this.src = src;
+    this.dataset = {};
+    this.volume = 1;
+    this.currentTime = 0;
+    this.paused = true;
+  }
+
+  addEventListener() {}
+  pause() { this.paused = true; }
+  async play() {
+    this.paused = false;
+    soundSink?.push({ src: this.src, volume: this.volume });
+  }
+}
+
+/**
+ * One scenario of the running pair: a profile of storage, a feed server, and every request the
+ * document made recorded as it left.
+ * @param {{ storage?: object, server?: Function, refuse?: Function, hasDocument?: boolean }} scenario
+ */
+function runningReader(scenario = {}) {
+  const { api, state, hops } = readerChrome(scenario);
+  globalThis.chrome = api;
+
+  const realFetch = globalThis.fetch;
+  const realAudio = globalThis.Audio;
+  const realSink = soundSink;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const server = scenario.server ?? (() => feedResponse({ status: 500 }));
+  soundSink = state.sounds;
+  globalThis.Audio = TestAudio;
+
+  /* A scenario ends long before the waits it started run: the offscreen document arms an idle close
+   * and a popup takes its own time off the screen, and by the time either is due this scenario's
+   * `chrome` is gone. So every timer a scenario starts is tracked — with the wait it stands for, so a
+   * test can read the limit a request was given — and cancelled when the scenario ends.
+   */
+  const timers = new Map();
+  const waits = [];
+  globalThis.setTimeout = (fn, delay, ...rest) => {
+    const wait = { ms: delay, cancelled: false, fired: false };
+    const handle = realSetTimeout(() => {
+      timers.delete(handle);
+      wait.fired = true;
+      fn(...rest);
+    }, delay);
+    wait.handle = handle;
+    wait.fire = () => fn(...rest);
+    wait.cancel = () => {
+      wait.cancelled = true;
+      realClearTimeout(handle);
+    };
+    timers.set(handle, wait);
+    waits.push(wait);
+    return handle;
+  };
+  globalThis.clearTimeout = (handle) => {
+    const wait = timers.get(handle);
+    if (wait) wait.cancelled = true;
+    timers.delete(handle);
+    realClearTimeout(handle);
+  };
+
+  globalThis.fetch = async (url, init) => {
+    /* The signal of a request is recorded as it left: a test that wants to know whether a read can
+     * be interrupted at all reads it here rather than counting `AbortController`s in the source.
+     */
+    const request = { url: String(url), headers: { ...(init?.headers ?? {}) }, signal: init?.signal ?? null };
+    state.requests.push(request);
+    return server(request);
+  };
+
+  /**
+   * Ask one half of the pair a message the way the other half does, and take its answer. The answer
+   * can be a long way off: the read it reports hops through the offscreen document, so this waits for
+   * the reply itself and not for a fixed number of waits.
+   */
+  function askHalf(owner, message) {
+    return new Promise((resolve) => {
+      let answered = false;
+      let openHandlers = 0;
+      const from = owner === 'worker' ? 'reader-page' : 'reader-worker';
+
+      for (const handler of readerCalls('runtime.onMessage', owner)) {
+        const keepsChannel = handler(message, { id: from }, (payload) => {
+          if (answered) return;
+          answered = true;
+          resolve(payload);
+        });
+        if (keepsChannel === true) openHandlers += 1;
+        if (answered) return;
+      }
+
+      /* No listener kept the channel open and none answered: Chrome sends no reply at all. */
+      if (!answered && openHandlers === 0) resolve(null);
+    });
+  }
+
+  return {
+    ...state,
+    chrome: api,
+    /**
+     * Let the waits a scenario started come due: the real ones run on the real clock, and every
+     * request still on its way between the two contexts is answered. A test that drives a wait by
+     * hand — the idle close of the document — does this instead of waiting out its 20 s.
+     */
+    settle: async () => {
+      while (hops.size > 0) {
+        api.runtime.answerDocument({ ok: true });
+        await new Promise((done) => realSetTimeout(done, 0));
+      }
+      await new Promise((done) => realSetTimeout(done, 0));
+    },
+    /**
+     * One turn of the real clock: enough for a listener this scenario called to reach the wait it is
+     * standing in. Unlike `settle`, this answers nothing — a read can stay in flight across it.
+     */
+    tick: () => new Promise((done) => realSetTimeout(done, 0)),
+    /**
+     * Wait for a fact the running pair is expected to bring about, on the real clock, and say whether
+     * it ever appeared. A test that needs a read to have *reached* its request asks here instead of
+     * guessing how many turns that takes.
+     */
+    async waitUntil(fact, tries = 25) {
+      for (let attempt = 0; attempt < tries; attempt += 1) {
+        if (fact()) return true;
+        await new Promise((done) => realSetTimeout(done, 0));
+      }
+      return fact();
+    },
+    /** Ask one half of the pair the way the other half does. */
+    askHalf,
+    /** Ask the worker a message the way a page does. */
+    ask: (message) => askHalf('worker', message),
+    /** Ask the offscreen document a message the way the worker does. */
+    askDocument: (message) => askHalf('document', message),
+    /** Every wait this scenario has armed and has not taken back, with the delay it stands for. */
+    armedWaits: () => waits.filter((wait) => !wait.cancelled && !wait.fired),
+    /** Call the worker the way Chrome does when one of its alarms goes off. */
+    alarm: (alarm) => Promise.all(readerCalls('alarms.onAlarm', 'worker').map((fn) => fn(alarm))),
+    forget() {
+      /* A read this scenario abandoned still holds its feed and its document: a later scenario would
+       * find the feed locked and the document counted open. Chrome takes both back when the worker
+       * stops, so a scenario does the same before it goes. */
+      api.runtime.answerDocument({ ok: true });
+      for (const [handle, wait] of timers) {
+        wait.cancelled = true;
+        realClearTimeout(handle);
+      }
+      timers.clear();
+      soundSink = realSink;
+      if (realAudio) globalThis.Audio = realAudio;
+      else delete globalThis.Audio;
+      if (realFetch) globalThis.fetch = realFetch;
+      else delete globalThis.fetch;
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+      delete globalThis.chrome;
+    },
+  };
+}
+
+const readerPair = await importReaderPair();
+
+/** The feed of a scenario: a row of the kind the feeds screen writes. */
+function runningFeed(over = {}) {
+  return {
+    id: 'running',
+    name: 'Running',
+    rss_link: 'https://example.com/feed.json',
+    delay_timeout: 30,
+    /* The sample headlines are days old: a `clean_timeout` of a day would have the shelf refuse them
+     * as expired before the read ever got to them. */
+    clean_timeout: 30 * 24 * 60,
+    ...over,
+  };
+}
+
+/** The same feed answer, served the way a site serves it: a JSON Feed and the type it is under. */
+function feedServer({ etag = '', lastModified = '', body = JSON_FEED } = {}) {
+  const headers = { 'content-type': 'application/feed+json' };
+  if (etag) headers.etag = etag;
+  if (lastModified) headers['last-modified'] = lastModified;
+  return () => feedResponse({ headers, body });
+}
+
+/**
+ * A headline the shelf of the reader already holds for the feed of a scenario: `link` and the id the
+ * feed states for it, so a test can put one headline of `feedServer()` on the shelf before the read.
+ */
+function storedFeedHeadline(link, id) {
+  return storedHeadline({ link, sourceId: id, sourceIdType: 'json:id' });
+}
+
+/**
+ * Every headline `feedServer()` serves, already on the shelf: the read of this feed can bring nothing
+ * the reader does not have.
+ */
+function storedFeedHeadlines() {
+  const feed = JSON.parse(JSON_FEED);
+  return feed.items.map((item) =>
+    storedFeedHeadline(
+      new URL(item.url ?? item.id, feed.feed_url).href,
+      String(item.id),
+    ),
   );
+}
 
-  const ingest = worker.match(/async function ingestFeed\([\s\S]*?\n  return result;\r?\n\}/);
-  assert.match(ingest[0], /readFeedOnce\(feed, \{ nextAlarmAt \}\)/, 'the schedule stops on the way to the diagnosis');
+/** A headline the shelf of the reader already holds for the feed of a scenario. */
+function storedHeadline(over = {}) {
+  return store.makeItem({
+    feed: runningFeed(),
+    title: 'Already on the shelf',
+    link: 'https://example.com/already-here',
+    description: '',
+    pubDate: '',
+    sourceId: 'already-here',
+    sourceIdType: 'guid',
+    time: Date.now(),
+    ...over,
+  });
+}
 
-  const read = worker.match(/async function readFeedOnce\([\s\S]*?\n  return result;\r?\n\}/);
-  for (const health of read[0].matchAll(/reportFeedHealth\(feed\.id, \{[^}]*\}\)/g)) {
-    assert.match(health[0], /nextAlarmAt/, `the diagnosis written here names no next check: ${health[0]}`);
+/**
+ * The worker writes the next check of a feed from the alarm it is answering, not from a formula it
+ * guesses: the next read is the next period of the alarm that just went off, so the reader can name
+ * it the moment the headlines come in.
+ */
+test('an automatic read records the next alarm of its own alarm', async () => {
+  const reader = runningReader({ storage: { feeds: [runningFeed()] }, server: feedServer() });
+
+  try {
+    assert.ok(readerPair !== null, 'the worker and the document were not imported');
+    assert.ok(
+      readerCalls('alarms.onAlarm', 'worker').length === 1,
+      'the worker registers no answer to its alarms',
+    );
+
+    const alarm = {
+      name: `${util.ALARM_PREFIX}running`,
+      periodInMinutes: 30,
+      scheduledTime: Date.now() - MINUTE,
+    };
+    await reader.alarm(alarm);
+
+    const feed = (await store.getFeeds()).find((candidate) => candidate.id === 'running');
+    assert.equal(
+      feed.nextAlarmAt,
+      alarm.scheduledTime + 30 * MINUTE,
+      'the read did not name the next period of the alarm it was answering',
+    );
+    assert.equal(reader.requests.length, 1, 'the read of an alarm that went off made no request');
+    assert.equal(reader.requests[0].url, 'https://example.com/feed.json', 'a different feed was asked for');
+
+    const items = await store.itemsForFeed('running');
+    assert.ok(items.length > 0, 'the headlines of a feed that answered were not stored');
+    assert.equal(feed.fetchFailureCount, 0, 'a read that came through left a failure behind');
+    assert.equal(feed.lastErrorCode, undefined, 'a read that came through left a diagnosis behind');
+    assert.ok(feed.lastCheckedAt > 0, 'the row of the feed does not say when it was read');
+  } finally {
+    reader.forget();
   }
 });
 
@@ -4161,61 +4785,73 @@ test('sourceIdentity names a headline by the id the feed states', () => {
   );
 });
 
-test('the id a feed states makes the whole trip: parse — record — next poll', () => {
-  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-  const rssJs = read('src/lib/rss.js');
-  const worker = read('src/background.js');
+/** The JSON Feed of the headlines a test names, written the way a site writes one. */
+function statedFeed(items) {
+  return JSON.stringify({
+    version: 'https://www.jsonfeed.org/version/1.1/',
+    title: 'Stated ids',
+    home_page_url: 'https://example.com/',
+    feed_url: 'https://example.com/feed.json',
+    items,
+  });
+}
 
-  const entryLoop = rssJs.match(/for \(const node of [\s\S]*?return \{ feedTitle, entries \}/);
-  assert.ok(entryLoop, 'the loop that turns a feed node into an entry');
-  const loop = entryLoop[0];
+/**
+ * What a feed calls its news travels the whole way through the running reader: the offscreen document
+ * reads the id and the date off the item, the worker writes them into the record it stores, and the
+ * next poll recognises the news by that id — so a site that moves its addresses does not refill the
+ * reader with news the reader already has.
+ *
+ * (That a long feed is cut at its *newest* headlines, and that two items one feed calls the same news
+ * are one headline, are shown on the parser itself.)
+ */
+test('the id a feed states makes the whole trip: parse — record — next poll', async () => {
+  const alarm = {
+    name: `${util.ALARM_PREFIX}running`,
+    periodInMinutes: 30,
+    scheduledTime: Date.now() - MINUTE,
+  };
+  const fresh = new Date(Date.now() - 2 * HOUR).toISOString();
+  const older = new Date(Date.now() - 5 * HOUR).toISOString();
 
-  assert.ok(
-    /newestFirst\(nodes, entryDate\)\.slice\(0, MAX_ENTRIES\)/.test(loop),
-    'the cut is made after the nodes are ordered by their date, so a feed that lists its news oldest '
-      + 'first loses its oldest news and not the fresh ones `storage.capPerFeed` would have kept',
-  );
-  assert.ok(
-    /pubDate: entryDate\(node\)/.test(loop),
-    'the date the loop ordered the nodes by is the date the entry carries on to the record',
-  );
-  assert.ok(/entryIdentity\(node\)/.test(loop), 'the guid and the Atom <id> are read off the node');
-  assert.ok(
-    /identity\.guidIsLink \? identity\.guid : ''/.test(loop),
-    'only a guid that says it is an address may stand in for a missing link',
-  );
-  assert.ok(
-    /sourceIdentity\(\{ \.\.\.identity/.test(loop),
-    'the pure rule decides what those fields mean',
-  );
-  assert.ok(
-    /const key = `\$\{sourceIdType\}:\$\{sourceId\}`;\s*\n\s*if \(seen\.has\(key\)\)/.test(loop),
-    'two nodes the feed calls the same news are one entry',
-  );
-  assert.ok(
-    /sourceId,\s*\n\s*sourceIdType,/.test(loop),
-    'the entry carries the identity to the record that stores it',
-  );
+  let served = statedFeed([
+    { id: 'news-77', url: 'https://old.example/a/77', title: 'Stated by its own id', date_published: fresh },
+    { id: 'news-78', url: 'https://old.example/a/78', title: 'The older news', date_published: older },
+  ]);
 
-  assert.ok(
-    /sourceId: entry\.sourceId,\s*\n\s*sourceIdType: entry\.sourceIdType,/.test(worker),
-    'the worker hands the identity to `store.makeItem`, where `uid` is built on it',
-  );
+  const reader = runningReader({
+    storage: { feeds: [runningFeed()] },
+    server: () => feedServer({ body: served })(),
+  });
 
-  const storageJs = read('src/lib/storage.js');
-  assert.ok(
-    /const shelf = identityIndex\(items, SHELF_KEYS\)/.test(storageJs),
-    'a stored headline is recognised by its identity, not only by the uid of the address it had',
-  );
-  assert.ok(
-    /const match = indexOf\(candidate, shelf, SHELF_KEYS\)/.test(storageJs),
-    'and by the address it had when the storage has nothing but that address to say: a feed that '
-      + 'started stating a `<guid>` describes the headlines it already shipped',
-  );
-  assert.ok(
-    /readIdentity\(record\)/.test(storageJs),
-    'a read marker is matched the same way a candidate is',
-  );
+  try {
+    await reader.alarm(alarm);
+
+    const first = await store.itemsForFeed('running');
+    assert.equal(first.length, 2, 'the reader stored no headlines of this feed');
+    assert.equal(first[0].title, 'Stated by its own id', 'the shelf is not ordered by the date the feed stated');
+    assert.deepEqual(
+      { sourceId: first[0].sourceId, sourceIdType: first[0].sourceIdType },
+      { sourceId: 'news-77', sourceIdType: 'json:id' },
+      'the id the feed states did not reach the record the reader stores',
+    );
+    assert.equal(first[0].uid, 'running|news-77', 'the record is not keyed by the id the feed states');
+    assert.equal(first[0].pubDate, fresh, 'the date the parser ordered the items by is not the date the record carries');
+
+    /* The next poll of the same site, after it moved every address it states these ids stand for. */
+    served = statedFeed([
+      { id: 'news-77', url: 'https://new.example/story/77', title: 'Stated by its own id', date_published: fresh },
+      { id: 'news-78', url: 'https://new.example/story/78', title: 'The older news', date_published: older },
+    ]);
+
+    const poll = await reader.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+    assert.equal(poll?.seen, 2, 'the second read did not see the headlines the feed shipped');
+    assert.equal(poll?.added, 0, 'a feed that moved its addresses brought news the reader already had');
+    assert.equal((await store.itemsForFeed('running')).length, 2, 'the reader doubled its own headlines');
+    assert.equal(reader.requests.length, 2, 'the two polls asked the feed another number of times');
+  } finally {
+    reader.forget();
+  }
 });
 
 /* ------------------------- conditional GET ------------------------- */
@@ -4430,137 +5066,449 @@ test('a feed remembers the answers it was given, and forgets them with the addre
 });
 
 /**
- * A validator is worth nothing if it never reaches the request that is made in another part of the
- * extension. This guard follows the keys over that route: the worker hands them to the offscreen
- * document, the document hands them to `fetchFeed`, and what comes back is written to storage.
+ * A validator is worth nothing if it never reaches the request the extension makes in another of its
+ * parts. The route runs for real here: the keys the row of the feed holds go to the worker, the
+ * worker hands them to the offscreen document, the document puts them on the request, and what the
+ * answer sends back lands on the row again.
  */
-test('the validators make the whole trip: storage — worker — offscreen document — request', () => {
-  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
-  const offscreen = fs.readFileSync(new URL('../src/offscreen.js', import.meta.url), 'utf8');
+test('the validators of a feed make the whole trip: the row — the worker — the document — the request', async () => {
+  const held = 'Mon, 07 Oct 2024 09:30:00 GMT';
+  const cameInAt = Date.now() - 2 * HOUR;
+  const reader = runningReader({
+    storage: {
+      feeds: [runningFeed({ etag: '"held"', lastModified: held, lastFetchedAt: cameInAt })],
+      items: [storedHeadline()],
+    },
+    server: ({ headers }) =>
+      headers['If-None-Match']
+        ? feedResponse({
+            status: 304,
+            headers: { etag: '"next"', 'last-modified': 'Tue, 08 Oct 2024 10:00:00 GMT' },
+          })
+        : feedServer()(),
+  });
 
-  const readCall = worker.match(/async function readFeed\(feed, validators = \{\}\)[\s\S]*?\n}/);
-  assert.ok(readCall, 'the worker reads a feed through the offscreen document');
-  assert.match(readCall[0], /url: feed\.rss_link/);
-  assert.match(readCall[0], /etag: validators\.etag/, 'the stored key is handed to the document');
-  assert.match(readCall[0], /lastModified: validators\.lastModified/);
+  try {
+    await reader.alarm({
+      name: `${util.ALARM_PREFIX}running`,
+      periodInMinutes: 30,
+      scheduledTime: Date.now() - MINUTE,
+    });
 
-  const fetchMessage = offscreen.match(/message\?\.type === MSG_FETCH_FEED[\s\S]*?\n  \}/);
-  assert.ok(fetchMessage, 'the document answers the read request');
-  assert.match(
-    fetchMessage[0],
-    /fetchFeed\(message\.url,\s*\{[^}]*etag: message\.etag[^}]*lastModified: message\.lastModified/s,
-    'the document does not drop the keys on its way to the request',
-  );
+    assert.equal(reader.requests.length, 1, 'the read of this alarm made no request of its own');
+    assert.equal(
+      reader.requests[0].headers['If-None-Match'],
+      '"held"',
+      'the key the row holds never reached the request the document made',
+    );
+    assert.equal(
+      reader.requests[0].headers['If-Modified-Since'],
+      held,
+      'the date the row holds never reached the request the document made',
+    );
 
-  const ingest = worker.match(/async function readFeedOnce\([\s\S]*?\n  \} catch \(error\)/);
-  assert.ok(ingest, 'the worker writes one feed read to storage');
-  assert.match(
-    ingest[0],
-    /store\.rememberFeedValidators\(feed\.id,\s*\{[^}]*etag: fetched\.etag[^}]*lastModified: fetched\.lastModified/s,
-    'what the answer gave back is written back to storage',
-  );
+    const row = (await store.getFeeds()).find((candidate) => candidate.id === 'running');
+    assert.equal(row.etag, '"next"', 'the key the answer sent back was not written to the row');
+    assert.equal(row.lastModified, 'Tue, 08 Oct 2024 10:00:00 GMT', 'nor was the date it sent back');
 
-  /* A 304 only makes sense while the reader still holds what the keys describe: with the feed's
-   * headlines purged by `clean_timeout`, asking politely would leave the reader empty. */
-  assert.match(
-    ingest[0],
-    /held\.some\(\(item\) => item\.feedId === feed\.id\)\s*\?\s*\{ etag: feed\.etag, lastModified: feed\.lastModified \}\s*:\s*\{\}/,
-    'a feed whose headlines are gone is asked for plainly, not with keys that answer 304',
-  );
+    assert.equal(await store.countItems(), 1, 'a 304 wrote headlines of its own');
+    assert.equal(
+      row.lastFetchedAt,
+      cameInAt,
+      'a 304 sends no headlines, so the age the new key describes is not made newer',
+    );
+    assert.ok(row.lastOkAt > 0, 'a 304 is an answer, but the row does not say the feed answered');
+  } finally {
+    reader.forget();
+  }
+});
 
-  const unchanged = ingest[0].match(/if \(fetched\.notModified\) \{[\s\S]*?\n\s+\} else \{/);
-  assert.ok(unchanged, 'a 304 has its own branch apart from a feed that came through');
-  assert.ok(!/addItems|makeItem/.test(unchanged[0]), 'a 304 writes no headlines');
+/**
+ * A 304 only makes sense while the reader still holds what the keys describe: after `clean_timeout`
+ * purged the headlines of a feed, asking politely answers an empty body and leaves the reader empty
+ * until somebody edits the site.
+ */
+test('a feed whose headlines are gone is asked for plainly, not with the keys that answer 304', async () => {
+  const reader = runningReader({
+    storage: {
+      feeds: [runningFeed({ etag: '"held"', lastModified: 'Mon, 07 Oct 2024 09:30:00 GMT' })],
+      items: [],
+    },
+    server: feedServer({ etag: '"next"', lastModified: 'Tue, 08 Oct 2024 10:00:00 GMT' }),
+  });
 
-  const feedsScreen = fs.readFileSync(new URL('../src/feeds.js', import.meta.url), 'utf8');
-  assert.match(
-    feedsScreen,
-    /response\.notModified/,
-    'the feed screen says «unchanged» rather than «0 headlines read»',
-  );
+  try {
+    await reader.alarm({
+      name: `${util.ALARM_PREFIX}running`,
+      periodInMinutes: 30,
+      scheduledTime: Date.now() - MINUTE,
+    });
 
-  const shelf = ingest[0].match(
-    /try \{\r?\n      await store\.rememberFeedValidators\([\s\S]*?\n    \} catch \(shelfError\) \{([\s\S]*?)\r?\n    \}/,
-  );
-  assert.ok(shelf, 'the headlines the feed just sent are written in a scope of their own');
-  assert.match(
-    shelf[1],
-    /reportFeedHealth\(feed\.id, \{ ok: true[^}]*nextAlarmAt[^}]*\}\)/,
-    'a shelf that failed is recorded as the feed having answered',
-  );
-  assert.match(shelf[1], /throw storageFailure\(feed, shelfError\)/, "the fault is named as the reader's own");
+    assert.equal(reader.requests.length, 1, 'the read of this alarm made no request of its own');
+    assert.equal(
+      reader.requests[0].headers['If-None-Match'],
+      undefined,
+      'the reader asked with a key that would have answered an empty body',
+    );
+    assert.equal(
+      reader.requests[0].headers['If-Modified-Since'],
+      undefined,
+      'the reader asked with a date that would have answered an empty body',
+    );
+
+    assert.ok((await store.countItems()) > 0, 'a feed whose headlines were gone was not read again');
+    const row = (await store.getFeeds()).find((candidate) => candidate.id === 'running');
+    assert.equal(row.etag, '"next"', 'the whole answer did not leave its keys on the row');
+  } finally {
+    reader.forget();
+  }
+});
+
+/**
+ * «не изменилось» and «0 headlines» are two words for two different answers, and the feeds screen can
+ * only tell them apart if the worker's answer says which one it was. Both reads run here on the same
+ * feed: one server answers an empty 304, the other sends the whole feed again and every headline of it
+ * is already on the shelf — the same `added: 0`, a different read.
+ */
+test('the feeds screen tells an unchanged feed from a feed that brought nothing', async () => {
+  const unchanged = runningReader({
+    storage: {
+      feeds: [runningFeed({ etag: '"held"', lastFetchedAt: Date.now() - HOUR })],
+      items: storedFeedHeadlines(),
+    },
+    server: () => feedResponse({ status: 304, headers: { etag: '"next"' } }),
+  });
+
+  try {
+    const answer = await unchanged.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+
+    assert.equal(answer?.ok, true, 'the worker answered nothing to a feed that only confirmed itself');
+    assert.equal(
+      answer.notModified,
+      true,
+      'a 304 reaches the page as a read of nothing, so the page cannot know it was a 304',
+    );
+    assert.equal(answer.added, 0);
+    assert.equal(answer.seen, 0, 'a 304 sends no body, so nothing was parsed');
+    assert.equal(
+      unchanged.requests[0].headers['If-None-Match'],
+      '"held"',
+      'the read was not asked with the key the row holds',
+    );
+  } finally {
+    unchanged.forget();
+  }
+
+  /* The same feed, asked plainly: it brought its headlines and every one of them was already here. */
+  const repeated = runningReader({
+    storage: { feeds: [runningFeed()], items: storedFeedHeadlines() },
+    server: feedServer(),
+  });
+
+  try {
+    const answer = await repeated.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+
+    assert.equal(answer?.ok, true, 'the worker answered nothing to a feed that sent its headlines');
+    assert.equal(
+      answer.notModified,
+      false,
+      'a read that parsed a body is not a 304, whatever its count says',
+    );
+    assert.equal(answer.added, 0, 'a headline the shelf holds is counted as new');
+    assert.equal(answer.seen, JSON.parse(JSON_FEED).items.length, 'the headlines of the body were not parsed');
+  } finally {
+    repeated.forget();
+  }
+
+  /* The word for the first of them is the reader's own, translated by every language it speaks. */
+  const feedsJs = fs.readFileSync(new URL('../src/feeds.js', import.meta.url), 'utf8');
   assert.ok(
-    !/reportFeedHealth\(feed\.id, \{ ok: false/.test(shelf[1]),
-    'a healthy feed is not diagnosed because the reader could not write',
+    feedsJs.includes("t('feeds.resultUnchanged')"),
+    'the feeds screen says something other than the dictionary key for a feed that only confirmed itself',
   );
+  for (const lang of i18n.LANGUAGES) {
+    assert.ok(
+      i18n.dictionaryKeys(lang).includes('feeds.resultUnchanged'),
+      `${lang} has no feeds.resultUnchanged, which an unchanged feed asks to show`,
+    );
+  }
 });
 
 /**
  * Two failures can end a read, and only one of them belongs to the feed: a dead address, a 500, a
- * body that is not a feed diagnoses the feed and pauses it; a helper page the reader could not open
- * diagnoses nothing, because the feed never had the chance to refuse. The worker cannot be imported
- * here, so the guard reads the shape of the catch, which is where the two are told apart.
+ * body that is not a feed diagnoses the feed and pauses it; a shelf the reader could not write to
+ * diagnoses nothing, because the feed never had the chance to refuse. Here the shelf of the reader is
+ * what fails, and the row of the feed shows which of the two it was.
  */
-test('a read that the reader itself could not finish leaves the feed healthy', () => {
-  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+test('a read that the reader itself could not finish leaves the feed healthy', async () => {
+  const reader = runningReader({
+    storage: { feeds: [runningFeed()] },
+    server: feedServer(),
+    refuse: (key) => key === store.ITEMS_KEY,
+  });
 
-  const read = worker.match(/async function readFeedOnce\([\s\S]*?\n  return result;\r?\n\}/);
-  assert.ok(read, 'the worker reads one feed at a time');
+  try {
+    await reader.alarm({
+      name: `${util.ALARM_PREFIX}running`,
+      periodInMinutes: 30,
+      scheduledTime: Date.now() - MINUTE,
+    });
+    await reader.settle();
 
-  const diagnosis = read[0].match(/\r?\n  \} catch \(error\) \{([\s\S]*?)\r?\n  \}/);
-  assert.ok(diagnosis, 'one catch closes the read of a feed');
+    assert.equal(reader.requests.length, 1, 'the feed was not even asked');
 
-  assert.match(
-    diagnosis[1],
-    /if \(!\(error instanceof FeedError\)\) \{[\s\S]*?reportFeedHealth\(feed\.id, \{ ok: true[^}]*nextAlarmAt[^}]*\}\);[\s\S]*?throw error;/,
-    'a failure of the reader is not written as a refusal of the feed',
-  );
-  const ownFault = diagnosis[1].match(/if \(!\(error instanceof FeedError\)\) \{([\s\S]*?)\r?\n    \}/);
-  assert.ok(ownFault, 'the catch tells a failure of the reader from a refusal of the feed');
-  assert.ok(
-    !/forgetValidators/.test(ownFault[1]),
-    'the keys the feed gave are not thrown away over a failure of the reader',
-  );
-  assert.match(
-    diagnosis[1],
-    /forgetValidators\(feed, error\);[\s\S]*?reportFeedHealth\(feed\.id, \{ ok: false, error, time: startedAt, nextAlarmAt \}\)/,
-    'a feed that refused keeps its diagnosis, its streak and its pause',
-  );
+    const row = (await store.getFeeds()).find((candidate) => candidate.id === 'running');
+    assert.ok(row.lastCheckedAt > 0, 'the read the reader could not finish left no mark on the feed');
+    assert.equal(row.fetchFailureCount, 0, 'the reader counted its own shelf as a refusal of the feed');
+    assert.equal(row.nextRetryAt, undefined, 'a healthy feed was put in a pause because the reader could not write');
+    assert.equal(row.lastErrorCode, undefined, 'the failure of the reader was written as an answer of the feed');
+    assert.ok(row.lastOkAt > 0, 'the row does not say the feed answered');
+    assert.equal(await store.countItems(), 0, 'the shelf that refused nevertheless kept the headlines');
 
-  assert.match(
-    worker,
-    /code: 'storageUnavailable'/,
-    'the fault of the shelf carries a key every language can translate',
-  );
+    assert.equal(feedPauseRemaining(row), 0, 'the next alarm of this feed is not held off by a fault of the reader');
+
+    /* The fault of the shelf is named by a key of its own, so the page can say it is the reader that
+     * failed — the same read asked by hand answers with it. */
+    const answer = await reader.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+    assert.equal(answer.ok, false, 'a read by hand invented an answer for a shelf that refuses');
+    assert.equal(answer.error.code, 'storageUnavailable', 'the fault of the shelf carries no key a language can translate');
+  } finally {
+    reader.forget();
+  }
+});
+
+test('an automatic read waits out the pause of a failing feed, a read by hand does not', async () => {
+  const reader = runningReader({
+    storage: {
+      feeds: [runningFeed({
+        fetchFailureCount: 2,
+        nextRetryAt: Date.now() + 10 * MINUTE,
+        lastErrorCode: 'feedStatus',
+      })],
+    },
+    server: feedServer(),
+  });
+
+  try {
+    await reader.alarm({
+      name: `${util.ALARM_PREFIX}running`,
+      periodInMinutes: 30,
+      scheduledTime: Date.now(),
+    });
+
+    assert.equal(reader.requests.length, 0, 'a feed in its pause was asked anyway');
+
+    /* A read by hand is an explicit order: the pause of a feed does not refuse it. */
+    const answer = await reader.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+    assert.equal(answer?.ok, true, 'the worker refused a read the user asked for by hand');
+    assert.equal(reader.requests.length, 1, 'the read by hand asked no feed');
+
+    const row = (await store.getFeeds()).find((candidate) => candidate.id === 'running');
+    assert.equal(row.fetchFailureCount, 0, 'a read that came through left the streak of failures standing');
+    assert.equal(row.nextRetryAt, undefined, 'a feed that answered is not kept in its pause');
+  } finally {
+    reader.forget();
+  }
+
+  /* Reading the whole list is a read by hand too: it asks a feed that is in its pause as well. */
+  const batch = runningReader({
+    storage: { feeds: [runningFeed({ fetchFailureCount: 2, nextRetryAt: Date.now() + 10 * MINUTE, lastErrorCode: 'feedStatus' })] },
+    server: feedServer(),
+  });
+
+  try {
+    const answer = await batch.ask({ type: MSG_REFRESH_ALL_FEEDS });
+    assert.equal(answer?.ok, true, 'the worker answered nothing to a read of the whole list');
+    assert.ok(
+      answer.results.some((result) => result.feedId === 'running' && result.ok),
+      'a batch read left the feed that was in its pause unread',
+    );
+    assert.equal(batch.requests.length, 1, 'the batch asked no feed');
+  } finally {
+    batch.forget();
+  }
 });
 
 /* --------------------- fetch timeouts & feed pause --------------------- */
 
-test('every request the reader waits for is waited for only so long', () => {
-  const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+/**
+ * A site that takes a request and then says nothing at all is the whole reason a limit exists. This
+ * puts a read in front of such a site — or in front of one that answers, when a test wants to know
+ * what a read does with a wait it no longer needs — and reports what the read did while it waited:
+ * the request it sent, with the signal that could interrupt it, and every wait it armed, recorded
+ * rather than left to run so a test can pull one down by hand instead of sitting out the reader's
+ * limit.
+ *
+ * Whether a request can be interrupted at all, whether the wait put on it is the reader's own limit,
+ * and whether that wait is taken back once the answer arrived are told here by what the read ends up
+ * doing. None of it is readable from the source: a controller nobody aborts looks in the text exactly
+ * like one somebody aborts.
+ */
+function watchedRead({ server = null } = {}) {
+  const realFetch = globalThis.fetch;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const requests = [];
+  const waits = [];
+  const started = [];
 
-  for (const file of ['src/lib/rss.js', 'src/lib/extract.js', 'src/lib/favicon.js']) {
-    const source = read(file);
-    const count = (re) => [...source.matchAll(re)].length;
-    const requests = count(/await fetch\(/g);
+  globalThis.fetch = (url, init) => {
+    const signal = init?.signal ?? null;
+    const request = { url: String(url), signal };
+    requests.push(request);
 
-    assert.ok(requests > 0, `${file} makes no request, so nothing here was checked`);
+    if (server) return Promise.resolve(server(request));
+
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error('the reader had already stopped waiting'));
+        return;
+      }
+      signal?.addEventListener('abort', () => reject(new Error('the reader stopped waiting for the site')));
+      /* A request no signal could interrupt must not hang the suite either: it gives up by itself. */
+      if (!signal) realSetTimeout(() => reject(new Error('a request no signal could interrupt')), 200);
+    });
+  };
+
+  globalThis.setTimeout = (fn, ms) => {
+    const wait = { ms, cancelled: false, fire: () => fn() };
+    waits.push(wait);
+    return wait;
+  };
+  globalThis.clearTimeout = (wait) => {
+    if (wait) wait.cancelled = true;
+  };
+
+  return {
+    requests,
+    /** One turn of the real clock: enough for a read started here to reach the request it makes. */
+    turn: () => new Promise((done) => realSetTimeout(done, 0)),
+    /** The waits that are still armed: nothing has pulled them down, nothing has taken them back. */
+    armed: () => waits.filter((wait) => !wait.cancelled),
+    /** Start a read under this watch. A failure comes back as `{error}` instead of being thrown. */
+    start(read) {
+      const outcome = Promise.resolve().then(read).then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
+      started.push(outcome);
+      return outcome;
+    },
+    /**
+     * Pull every wait still armed down by hand and report what each read this watch started ended as.
+     * `hung` says the reader had no way at all to stop its own request. The watch's fakes go back
+     * whichever way the reads end.
+     */
+    async finish(ms = 200) {
+      for (const wait of waits) {
+        if (!wait.cancelled) wait.fire();
+      }
+      const patience = new Promise((done) => realSetTimeout(() => done('hung'), ms));
+      const settled = await Promise.race([Promise.all(started), patience]);
+
+      globalThis.fetch = realFetch;
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+      return settled;
+    },
+  };
+}
+
+test('every request the reader waits for is waited for only so long', async () => {
+  /* The three sites the reader waits for: the read that reaches them, the limit it arms, and — for
+   * the two that diagnose what stopped them — the key that failure carries. */
+  const sites = [
+    {
+      what: 'a feed',
+      read: (watch) => watch.start(() => rss.fetchFeed('https://example.com/feed.json')),
+      limit: FEED_FETCH_TIMEOUT_MS,
+      code: 'feedTimeout',
+    },
+    {
+      what: 'the page of a headline',
+      read: (watch) => watch.start(() => extract.fetchArticle('https://example.com/article')),
+      limit: ARTICLE_FETCH_TIMEOUT_MS,
+      code: 'articleTimeout',
+    },
+    {
+      what: 'the page an icon is looked for on',
+      /* `discoverFeedIcon` reports no failure for a page it cannot read; only its fallback shows that
+       * it stopped waiting at all. The feed address is a site root, so the icon read is one request. */
+      read: (watch) => watch.start(() => favicon.discoverFeedIcon('https://example.com/')),
+      limit: ARTICLE_FETCH_TIMEOUT_MS,
+      code: null,
+    },
+  ];
+
+  for (const site of sites) {
+    const watch = watchedRead();
+    site.read(watch);
+    await watch.turn();
+
+    /* The read has left; its answer has not come. */
+    assert.equal(watch.requests.length, 1, `${site.what}: the read made no request, so nothing was waited for`);
     assert.equal(
-      count(/new AbortController\(/g),
-      requests,
-      `${file} starts a request nobody can interrupt`,
+      typeof watch.requests[0].signal?.addEventListener,
+      'function',
+      `${site.what}: the request carries no signal, so nothing can interrupt it`,
     );
     assert.equal(
-      count(/signal: controller\.signal/g),
-      requests,
-      `${file} sends a request its controller does not cover`,
+      watch.armed().length,
+      1,
+      `${site.what}: nothing stands ready to stop this request`,
     );
     assert.equal(
-      count(/clearTimeout\(timer\)/g),
-      requests,
-      `${file} starts a timer it never cancels — one per request, not one per response`,
+      watch.armed()[0].ms,
+      site.limit,
+      `${site.what} is not waited for as long as the reader says it is`,
     );
+    assert.equal(
+      watch.requests[0].signal.aborted,
+      false,
+      `${site.what} was stopped before its wait came due`,
+    );
+
+    const [ended] = await watch.finish();
+
+    assert.notEqual(
+      ended,
+      'hung',
+      `${site.what} keeps waiting on a site that never answers: its wait was armed but never pulled`,
+    );
+    assert.equal(
+      watch.requests[0].signal.aborted,
+      true,
+      `${site.what}: pulling the wait down did not interrupt the request it stands for`,
+    );
+
+    if (site.code) {
+      assert.equal(ended.value, undefined, `${site.what} invented an answer for a site that sent none`);
+      assert.equal(
+        ended.error?.code,
+        site.code,
+        `${site.what} failed without the key a language translates it with`,
+      );
+    } else {
+      assert.equal(
+        ended.value,
+        'https://example.com/favicon.ico',
+        `${site.what} was not read, and the icon of its site is not the fallback the reader offers`,
+      );
+    }
   }
+
+  /* A wait that is still armed after its answer arrived would interrupt the next request put on it. */
+  const answered = watchedRead({
+    server: () => feedResponse({
+      headers: { 'content-type': 'application/feed+json' },
+      body: JSON_FEED,
+    }),
+  });
+  const read = answered.start(() => rss.fetchFeed('https://example.com/feed.json'));
+
+  const [cameBack] = await answered.finish();
+  assert.equal(cameBack.value?.entries.length, JSON.parse(JSON_FEED).items.length, 'the feed that answered was not read');
+  assert.equal(answered.armed().length, 0, 'a read that answered left its wait armed for the next request');
 
   assert.ok(
     FEED_FETCH_TIMEOUT_MS >= 10_000 && FEED_FETCH_TIMEOUT_MS <= 20_000,
@@ -4570,32 +5518,6 @@ test('every request the reader waits for is waited for only so long', () => {
     ARTICLE_FETCH_TIMEOUT_MS >= 10_000 && ARTICLE_FETCH_TIMEOUT_MS <= 15_000,
     'a page — an icon, an article — is waited for between 10 and 15 seconds',
   );
-});
-
-test('an automatic read waits out the pause of a failing feed, a read by hand does not', () => {
-  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
-
-  const alarm = worker.match(/chrome\.alarms\.onAlarm\.addListener\([\s\S]*?\n\}\);/);
-  assert.ok(alarm, 'the worker answers no alarm');
-  assert.match(
-    alarm[0],
-    /const paused = feedPauseRemaining\(feed\)/,
-    'an automatic read does not ask how much of the pause is left',
-  );
-  assert.ok(
-    alarm[0].indexOf('feedPauseRemaining(feed)') < alarm[0].indexOf('ingestFeed(feed'),
-    'the pause is asked about before the feed is read, not after',
-  );
-
-  /* A read by hand is an explicit order: a feed in its pause is read all the same. */
-  for (const name of ['MSG_REFRESH_FEED', 'MSG_REFRESH_ALL_FEEDS']) {
-    const handler = worker.match(new RegExp(`message\\?\\.type === ${name}[\\s\\S]*?\\n  \\}`));
-    assert.ok(handler, `the worker answers ${name}`);
-    assert.ok(
-      !/feedPauseRemaining|nextRetryAt/.test(handler[0]),
-      `${name} refuses a read the user asked for by hand`,
-    );
-  }
 });
 
 /* --------------- one feed is read once (in-flight lock) --------------- */
@@ -4668,77 +5590,246 @@ test('a deleted feed takes its hold with it', async () => {
 });
 
 /**
- * The lock only works if the worker actually uses it: an alarm and a read by hand are two
- * independent paths to the same address, and the fast guard against them lives in the worker itself.
+ * The lock only works if the worker really uses it: an alarm and a read by hand are two independent
+ * paths to the same address. Both are run here against one running worker — a second request takes the
+ * answer of the read in progress instead of asking the address again, a feed another context holds is
+ * not asked at all (not by a page, not by its own alarm), and a read that failed gives its feed back.
  */
-test('one feed is read once, whoever asked for the read', () => {
-  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+test('one feed is read once, whoever asked for the read', async () => {
+  const alarm = {
+    name: `${util.ALARM_PREFIX}running`,
+    periodInMinutes: 30,
+    scheduledTime: Date.now() - MINUTE,
+  };
 
-  const ingest = worker.match(/async function ingestFeed\([\s\S]*?\r?\n  return result;\r?\n\}/);
-  assert.ok(ingest, 'the worker reads one feed and writes its headlines');
-  assert.match(
-    ingest[0],
-    /const held = await holdFeedRead\(feed\.id\)/,
-    'the read asks for the feed before it asks the address',
-  );
-  assert.match(ingest[0], /await held\.read/, 'a second request joins the read in progress instead of fetching again');
-  const join = ingest[0].match(/if \(held\?\.read\)[\s\S]*?\r?\n  \}/);
-  assert.ok(join, 'a request can join a read of its own worker');
-  assert.match(join[0], /return result;/, 'the joined request answers with the real numbers of that read');
-  assert.ok(!join[0].includes('busy'), 'a joined read is not a placeholder answer');
-  assert.match(ingest[0], /return lockedFeedResult\(\)/, 'a read from another context is skipped, not fetched again');
-  assert.match(
-    ingest[0],
-    /}\s*finally\s*\{\s*await releaseFeedRead\(feed\.id\);\s*\}/,
-    'the feed is given back even when its read failed',
-  );
+  /* A read held at its request: the feed answers only when this test lets it, so the request that
+   * follows is surely made while the first is still in flight. */
+  let releaseRead = null;
+  const gate = new Promise((done) => { releaseRead = done; });
+  const joining = runningReader({
+    storage: { feeds: [runningFeed()] },
+    server: async () => {
+      await gate;
+      return feedServer()();
+    },
+  });
 
-  const hold = worker.match(/async function holdFeedRead\([\s\S]*?\r?\n  return null;\r?\n\}/);
-  assert.ok(hold, 'the worker has a guard against reading one feed twice');
-  assert.ok(
-    hold[0].indexOf('readingFeedIds.get(feedId)') < hold[0].indexOf('store.tryLockFeed(feedId)'),
-    'the local guard answers before the storage is asked — two requests cannot race over the ticket',
-  );
-  assert.match(hold[0], /store\.tryLockFeed\(feedId\)/, 'the hold survives a worker that falls asleep');
-  const localHit = hold[0].slice(hold[0].indexOf('const running'), hold[0].indexOf('await store.tryLockFeed'));
-  assert.ok(
-    !/await/.test(localHit),
-    'a feed this worker is already reading is refused without waiting for the storage',
-  );
+  try {
+    const reading = joining.alarm(alarm);
+    assert.ok(
+      await joining.waitUntil(() => joining.requests.length === 1),
+      'the automatic read never got as far as its request',
+    );
 
-  const alarm = worker.match(/chrome\.alarms\.onAlarm\.addListener\([\s\S]*?\n\}\);/);
-  assert.ok(alarm, 'the worker answers no alarm');
-  assert.match(alarm[0], /if \(result\.busy\) return;/, 'the alarm of a feed being read already stands down');
+    const asked = joining.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+    await joining.tick();
 
-  for (const name of ['MSG_REFRESH_FEED', 'MSG_REFRESH_ALL_FEEDS']) {
-    const handler = worker.match(new RegExp(`message\\?\\.type === ${name}[\\s\\S]*?\n  \}`));
-    assert.ok(handler, `the worker answers ${name}`);
-    assert.match(handler[0], /ingestFeed\(feed/, `${name} reads the feed through the same guard`);
+    assert.equal(
+      joining.requests.length, 1,
+      'the second request asked the address again while the read it joined was still going',
+    );
+
+    releaseRead();
+    await reading;
+    const answer = await asked;
+
+    assert.equal(answer?.ok, true, 'the request that joined the read was never answered');
+    assert.equal(
+      answer?.busy, undefined,
+      'a request of the very worker doing the read was told the feed is busy',
+    );
+    assert.equal(answer?.added, 3, 'the joined request did not take the headlines of the read it joined');
+    assert.equal(answer?.seen, 3, 'the joined request reported no numbers of its own');
+    assert.equal(joining.requests.length, 1, 'two requests of one feed read it twice');
+  } finally {
+    joining.forget();
+  }
+
+  /* A live ticket in the storage stands for a read this worker did not start — another window, a
+   * worker that woke again. Such a feed is left alone: no request, no parsing, and `busy` says why
+   * the answer carries no headlines. */
+  const held = runningReader({ storage: { feeds: [runningFeed()] }, server: feedServer() });
+  try {
+    assert.equal(await store.tryLockFeed('running'), true, 'nobody should hold the feed before this test holds it');
+
+    const asked = await held.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+    assert.equal(asked?.busy, true, 'a read of a feed another context holds does not say so');
+    assert.deepEqual(
+      { added: asked?.added, skipped: asked?.skipped, seen: asked?.seen },
+      { added: 0, skipped: 0, seen: 0 },
+      'a feed that is being read is reported empty, not counted by the read that holds it',
+    );
+    assert.equal(held.requests.length, 0, 'the reader asked the address of a feed it was told is held');
+    assert.equal(held.sends.length, 0, 'the reader still asked its document to parse a held feed');
+
+    /* The same feed's own alarm: standing down is the answer, not a second read. */
+    await held.alarm(alarm);
+    assert.equal(held.requests.length, 0, 'the alarm of a feed being read asked the address anyway');
+    assert.equal(held.sounds.length, 0, 'a skipped read signalled a load it never made');
+    assert.equal(held.notifications.length, 0, 'a skipped read interrupted with a popup');
+
+    /* The batch read goes by the same rule: it reports the held feed rather than reading it. */
+    const batch = await held.ask({ type: MSG_REFRESH_ALL_FEEDS });
+    assert.deepEqual(
+      batch?.results,
+      [{ feedId: 'running', ok: true, added: 0, skipped: 0, seen: 0, notModified: false, busy: true }],
+      'a read of every feed took the feed another context holds',
+    );
+    assert.equal(held.requests.length, 0, 'the read of every feed asked a held feed anyway');
+  } finally {
+    held.forget();
+  }
+
+  /* A read that failed held its feed only while it was going: the feed is readable right after it. */
+  let asks = 0;
+  const failing = runningReader({
+    storage: { feeds: [runningFeed()] },
+    server: () => {
+      asks += 1;
+      return asks === 1 ? feedResponse({ status: 500 }) : feedServer()();
+    },
+  });
+  try {
+    const first = await failing.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+    assert.equal(first?.ok, false, 'a feed that answered a failure reported no failure');
+    assert.equal(first?.busy, undefined, 'the read that failed left its feed held');
+
+    const second = await failing.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+    assert.equal(second?.ok, true, 'the feed of a read that failed is not readable again');
+    assert.equal(second?.added, 3, 'the read that followed a failure brought no headlines');
+    assert.equal(failing.requests.length, 2, 'a failed read asked the address more than once');
+  } finally {
+    failing.forget();
   }
 });
 
 /**
  * The signal of a load belongs to an automatic read that really brought headlines, and its numbers
- * are the ones the shelf reported: a read that kept nothing cannot sound.
+ * are the ones the shelf reported — a read that kept nothing cannot sound, and a read the user asked
+ * for by hand is silent whatever it brought.
  */
-test('the load signal sounds only on an automatic read that brought headlines', () => {
-  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
+test('the load signal sounds only on an automatic read that brought headlines', async () => {
+  const alarm = {
+    name: `${util.ALARM_PREFIX}running`,
+    periodInMinutes: 30,
+    scheduledTime: Date.now() - MINUTE,
+  };
 
-  const ingest = worker.match(/async function ingestFeed\([\s\S]*?\r?\n  return result;\r?\n\}/);
-  assert.ok(ingest, 'the worker writes the headlines of its read');
-  assert.match(
-    ingest[0],
-    /if \(result\.added > 0 && notify\) \{[\s\S]*?await playSound\(\);/,
-    'the signal is gated by both the headlines the storage kept and the automatic read that asked for it',
-  );
+  /* An automatic read that brought headlines: the signal and the popup belong to it, and the popup
+   * only where the user asked for one on the settings screen. */
+  const automatic = runningReader({
+    storage: { feeds: [runningFeed()], settings: { [store.SHOW_MESSAGE_KEY]: true } },
+    server: feedServer(),
+  });
+  try {
+    await automatic.alarm(alarm);
 
-  const read = worker.match(/async function readFeedOnce\([\s\S]*?\n  return result;\r?\n\}/);
-  assert.ok(read, 'the worker reads a feed once');
-  assert.match(
-    read[0],
-    /const \{ added, skipped \} = await store\.addItems\(candidates\)/,
-    'the numbers are those of the headlines the shelf took, not of the ones its own feed shipped',
-  );
+    assert.equal(automatic.requests.length, 1, 'the alarm read the feed did not ask it');
+    assert.equal(automatic.sounds.length, 1, 'an automatic read that brought headlines played no signal');
+    assert.equal(automatic.sends.filter((send) => send.type === MSG_PLAY_SOUND).length, 1,
+      'the signal was never asked of the document that is allowed to play it');
+    assert.equal(automatic.notifications.length, 1, 'the load that brought headlines showed no popup');
+    assert.ok(automatic.popups.size > 0, 'the popup of the load is not on the screen');
+  } finally {
+    automatic.forget();
+  }
+
+  /* The same feed, the same headlines, read by hand: the user is standing in front of the reader. */
+  const byHand = runningReader({
+    storage: { feeds: [runningFeed()], settings: { [store.SHOW_MESSAGE_KEY]: true } },
+    server: feedServer(),
+  });
+  try {
+    const answer = await byHand.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+
+    assert.equal(answer?.ok, true, 'the read by hand did not read the feed');
+    assert.equal(byHand.requests.length, 1, 'a read by hand asked no feed');
+    assert.equal(byHand.sounds.length, 0, 'a read the user asked for by hand played its signal anyway');
+    assert.equal(byHand.notifications.length, 0, 'a read the user asked for by hand interrupted with a popup');
+  } finally {
+    byHand.forget();
+  }
+
+  /* An automatic read of a feed whose headlines are already on the shelf brought nothing, so it
+   * cannot sound: the signal would promise headlines the list does not have. */
+  const unchanged = runningReader({
+    storage: {
+      feeds: [runningFeed()],
+      items: storedFeedHeadlines(),
+      settings: { [store.SHOW_MESSAGE_KEY]: true },
+    },
+    server: feedServer(),
+  });
+  try {
+    await unchanged.alarm({ ...alarm, scheduledTime: Date.now() });
+
+    assert.equal(unchanged.requests.length, 1, 'the automatic read of this feed made no request');
+    assert.equal(unchanged.sounds.length, 0, 'a load that brought no headlines played its signal');
+    assert.equal(unchanged.notifications.length, 0, 'a load that brought no headlines showed a popup');
+    assert.equal((await store.itemsForFeed('running')).length, 3, 'a load that brought nothing rewrote the shelf');
+  } finally {
+    unchanged.forget();
+  }
+
+  /* The numbers a load reports — and the signal it earns — are those of the headlines the shelf
+   * really took, not of the ones its feed happened to ship: one of the three is already there, so
+   * the read brings two, and two is enough to sound. */
+  const partly = runningReader({
+    storage: {
+      feeds: [runningFeed()],
+      items: [storedFeedHeadline('https://multfilmy.example/news/1042', '1042')],
+      settings: { [store.SHOW_MESSAGE_KEY]: true },
+    },
+    server: feedServer(),
+  });
+  try {
+    await partly.alarm({ ...alarm, scheduledTime: Date.now() });
+
+    const held = await store.itemsForFeed('running');
+    assert.equal(held.length, 3, 'the two headlines the shelf did not have did not reach it');
+    assert.equal(partly.sounds.length, 1, 'a load that brought two new headlines stayed silent');
+    assert.equal(partly.notifications.length, 1, 'a load that brought two new headlines showed no popup');
+  } finally {
+    partly.forget();
+  }
+
+  /* A read of the whole list, asked by hand: it reads the feed and stays silent for it, exactly as
+   * the read of one feed does. */
+  const batch = runningReader({
+    storage: { feeds: [runningFeed()], settings: { [store.SHOW_MESSAGE_KEY]: true } },
+    server: feedServer(),
+  });
+  try {
+    const answer = await batch.ask({ type: MSG_REFRESH_ALL_FEEDS });
+
+    assert.equal(answer?.failed, 0, 'the read of every feed failed on the one feed there is');
+    assert.equal(answer?.results[0]?.added, 3, 'the read of every feed brought no headlines');
+    assert.equal(batch.requests.length, 1, 'the read of every feed asked the one feed another number of times');
+    assert.equal(batch.sounds.length, 0, 'a read of every feed, asked by hand, played its signal');
+    assert.equal(batch.notifications.length, 0, 'a read of every feed, asked by hand, interrupted with a popup');
+  } finally {
+    batch.forget();
+  }
+
+  /* A headline the user deleted is held off the shelf by its mark: the read counts it, does not add
+   * it, and the two that did arrive are what the signal speaks of. */
+  const marked = runningReader({
+    storage: {
+      feeds: [runningFeed()],
+      read: [store.makeReadRecord(storedFeedHeadline('https://multfilmy.example/news/1042', '1042'))],
+    },
+    server: feedServer(),
+  });
+  try {
+    const answer = await marked.ask({ type: MSG_REFRESH_FEED, feedId: 'running' });
+
+    assert.equal(answer?.seen, 3, 'the read does not say how many headlines the feed shipped');
+    assert.equal(answer?.added, 2, 'the read counts a headline the reader has already seen as news');
+    assert.equal(answer?.skipped, 1, 'the headline the user deleted is not counted as news');
+    assert.equal(marked.sounds.length, 0, 'a read the user asked for by hand played its signal anyway');
+  } finally {
+    marked.forget();
+  }
 });
 
 /* ------------------------- the popup that brings the reader ------------------------- */
@@ -4752,8 +5843,9 @@ test('a popup a user clicks opens the reader, and a batch keeps only its newest 
   const opened = [];
   const created = [];
   const popups = new Map();
-  const clicks = [];
-  const closures = [];
+  /* Anything the reader tries to wire *again* on this stub: the answers were wired once, when the
+   * pair was imported, and this test uses those listeners. */
+  const rewired = [];
 
   globalThis.chrome = {
     runtime: { getURL: (path) => `chrome-extension://test/${path}` },
@@ -4771,8 +5863,8 @@ test('a popup a user clicks opens the reader, and a batch keeps only its newest 
       async getAll() {
         return Object.fromEntries(popups);
       },
-      onClicked: { addListener: (fn) => clicks.push(fn) },
-      onClosed: { addListener: (fn) => closures.push(fn) },
+      onClicked: { addListener: (fn) => rewired.push(fn) },
+      onClosed: { addListener: (fn) => rewired.push(fn) },
     },
     tabs: {
       async query() {
@@ -4795,8 +5887,9 @@ test('a popup a user clicks opens the reader, and a batch keeps only its newest 
   const settle = () => new Promise((resolve) => realSetTimeout(resolve, 0));
 
   try {
-    notify.wireNotificationClicks();
-    assert.equal(clicks.length, 1, 'the click on a popup is listened to exactly once');
+    const clicks = readerCalls('notifications.onClicked', 'worker');
+    const closures = readerCalls('notifications.onClosed', 'worker');
+    assert.equal(clicks.length, 1, 'the worker listens to a click on a popup exactly once');
     assert.equal(closures.length, 1, 'a popup that disappeared on its own is forgotten');
 
     const ids = [];
@@ -4847,7 +5940,7 @@ test('a popup a user clicks opens the reader, and a batch keeps only its newest 
     assert.ok(!popups.has(ids[4]), 'the popup the listener was clicked on is taken off the screen');
 
     notify.wireNotificationClicks();
-    assert.equal(clicks.length, 1, 'the same worker does not answer one click twice');
+    assert.equal(rewired.length, 0, 'the same worker answers one click twice');
   } finally {
     globalThis.setTimeout = realSetTimeout;
     delete globalThis.chrome;
@@ -4907,20 +6000,58 @@ test('popups left over from an earlier worker drop the oldest until only the new
 });
 
 /**
- * Both halves of the popup answer need the worker to actually wire them at startup: a listener defined
- * in the library but never raised there is a popup that still leads nowhere.
+ * A popup is worth showing only when the worker really raised the listeners that answer a click on it.
+ * The ones used here are what `src/background.js` registered while it was imported — the worker is never
+ * asked to wire anything again — and they are driven by a real automatic load through a real popup of
+ * the running reader, as far as the tab the reader opens.
  */
-test('the worker wires the popup click at startup', () => {
-  const worker = fs.readFileSync(new URL('../src/background.js', import.meta.url), 'utf8');
-  const page = fs.readFileSync(new URL('../src/lib/notify.js', import.meta.url), 'utf8');
+test('the worker wires the popup click at startup', async () => {
+  const clicks = readerCalls('notifications.onClicked', 'worker');
+  const closures = readerCalls('notifications.onClosed', 'worker');
 
-  assert.ok(
-    /(^|\r?\n)wireNotificationClicks\(\);/.test(worker),
-    'the worker never raises the listener that answers a click',
-  );
-  assert.match(worker, /import \{[^}]*notifyIngest[^}]*wireNotificationClicks[^}]*\} from '\.\/lib\/notify\.js';/);
-  assert.match(page, /onClicked\.addListener/);
-  assert.match(page, /onClosed\.addListener/);
+  assert.equal(clicks.length, 1, 'nothing answers a click on the popup the reader shows');
+  assert.equal(closures.length, 1, 'nothing notices a popup that came off the screen on its own');
+
+  const reader = runningReader({
+    storage: {
+      feeds: [runningFeed()],
+      settings: { [store.SHOW_MESSAGE_KEY]: true, [store.LANGUAGE_KEY]: 'en' },
+    },
+    server: feedServer(),
+  });
+
+  try {
+    await reader.alarm({
+      name: `${util.ALARM_PREFIX}running`,
+      periodInMinutes: 30,
+      scheduledTime: Date.now() - MINUTE,
+    });
+
+    const [popup] = reader.notifications;
+    assert.ok(popup, 'the automatic load showed no popup to click');
+    assert.ok(reader.popups.has(popup.id), 'the popup the worker asked for is not on the screen');
+
+    /* Chrome does not wait for the answer to a click, so its work is followed from the outside. */
+    clicks[0](popup.id);
+    const readerPage = reader.chrome.runtime.getURL(READER_PAGE);
+
+    assert.ok(
+      await reader.waitUntil(() => reader.tabs.some((tab) => tab.url === readerPage)),
+      'clicking the popup never brought the reader up',
+    );
+    assert.equal(reader.popups.size, 0, 'the popup a user clicked is still on the screen');
+
+    /* The reader the first click opened is the one the next click finds: one entry in the tab strip. */
+    clicks[0](popup.id);
+    assert.ok(
+      await reader.waitUntil(() => reader.tabUpdates.length === 1),
+      'a second click did not find the reader tab that was already open',
+    );
+    assert.equal(reader.tabs.length, 1, 'a second click stacked a second copy of the reader');
+    assert.equal(reader.tabUpdates[0].active, true, 'the reader tab that was open was not brought forward');
+  } finally {
+    reader.forget();
+  }
 });
 
 /* --------------------- the document the worker closes behind it --------------------- */
@@ -5170,16 +6301,42 @@ test('every age the screens write is redrawn while they sit open', () => {
     /setInterval\(\(\) => \{\s*if \(!document\.hidden\) refreshAgedLabels\(\);/,
     'the minute tick still repaints the status line alone',
   );
+  /* The tick paints the ages through the very functions the columns built them with. Which name each
+   * of them gives its arguments is its own business; that both of them reach the same function the
+   * same way is what keeps the two drawings from drifting apart. */
+  const callsOf = (name, source) =>
+    [...source.matchAll(new RegExp(`(?<![\w.])(?<!function )${name}\(([^)]*)\)`, 'g'))]
+      .map((match) => match[1].split(',').map((part) => part.trim()).filter(Boolean));
+
+  const metaCalls = callsOf('paintItemMeta', page);
   assert.ok(
-    page.includes('paintItemMeta(meta, item, all);'),
+    metaCalls.length >= 2,
+    'only the tick paints the meta line of a headline, so the middle column draws it another way',
+  );
+  assert.equal(
+    new Set(metaCalls.map((call) => call.length)).size,
+    1,
     'the middle column draws its meta line one way and the tick another way',
   );
 
-  /* The tick reaches a row through the name the row already carries, so nothing is rebuilt to learn
+  /* The tick reaches a row through the mark the row already carries, so nothing is rebuilt to learn
    * what a row stands for. */
-  assert.ok(page.includes("els.headlineList.querySelectorAll('.list-item[data-uid]')"), 'a row of the middle column carries no name the tick could find its headline by');
-  assert.ok(page.includes('button.dataset.feedId = feed.id;'), 'a row of the left column carries no name the tick could find its feed by');
-  assert.ok(tick[0].includes('button.dataset.feedId'), 'the tick does not use the name the left column wrote');
+  assert.ok(
+    /\.querySelectorAll\('\.list-item\[data-uid\]'\)/.test(page),
+    'a row of the middle column carries no name the tick could find its headline by',
+  );
+  assert.ok(
+    tick[0].includes("'.list-item[data-uid]'"),
+    'the tick does not look for the rows the middle column marked',
+  );
+  assert.ok(
+    /\.dataset\.feedId = /.test(page),
+    'a row of the left column carries no name the tick could find its feed by',
+  );
+  assert.ok(
+    /\.dataset\.feedId\b/.test(tick[0]),
+    'the tick does not use the name the left column wrote',
+  );
 
   /* The feed table writes the same age under every row, and had no tick at all. */
   assert.match(
@@ -5197,11 +6354,14 @@ test('every age the screens write is redrawn while they sit open', () => {
   const redraw = feedsScreen.match(/function refreshHealthLines\(\)[\s\S]*?\n\}/);
   assert.ok(redraw, 'nothing redraws the diagnosis lines of the feed table');
   assert.ok(
-    redraw[0].includes('feedHealthLine(record.feed, now, labels)'),
+    /feedHealthLine\(\w+\.feed,\s*\w+,\s*\w+\)/.test(redraw[0]),
     'the redraw of a diagnosis line takes its numbers from somewhere other than the row it stands under',
   );
+
+  const load = feedsScreen.match(/async function refreshRow\([\s\S]*?\n\}/);
+  assert.ok(load, 'the feeds screen has no load of a single feed');
   assert.ok(
-    feedsScreen.includes('rowRecord.feed = fresh;'),
+    /\.feed = (?!this)/.test(load[0]),
     'a row keeps the diagnosis of the load it just did, so its next redraw would undo it',
   );
 });
@@ -5361,22 +6521,34 @@ test('the feeds screen reads and writes the file through the storage the worker 
   const feedsJs = fs.readFileSync(new URL('../src/feeds.js', import.meta.url), 'utf8');
   const storageJs = fs.readFileSync(new URL('../src/lib/storage.js', import.meta.url), 'utf8');
 
+  /* The name the screen happens to give the storage module is its own business; what it takes out of
+   * it is the contract the worker reads the same table through. */
+  const storeAs = feedsJs.match(/import \* as (\w+) from '\.\/lib\/storage\.js'/)?.[1] ?? null;
+  assert.ok(storeAs, 'feeds.js does not import the storage module the worker reads');
+
   for (const name of ['buildFeedsExport', 'parseFeedsExport', 'mergeFeeds', 'FEED_EXPORT_FILE_NAME']) {
     assert.ok(
       new RegExp(`export (async function|const|function) ${name}\\b`).test(storageJs),
       `storage.js does not offer ${name}`,
     );
-    assert.ok(feedsJs.includes(`store.${name}`), `feeds.js does not use store.${name}`);
+    assert.ok(
+      feedsJs.includes(`${storeAs}.${name}`),
+      `feeds.js does not use ${name} from the storage the worker reads`,
+    );
   }
 
   assert.match(storageJs, /export const FEED_EXPORT_VERSION\b/);
 
-  /* A feed is read by nobody until the worker gives it an alarm, so an import has to tell the worker
-   * the table changed — the same call a saved row makes. */
-  const start = feedsJs.indexOf('async function importFeeds');
-  const importBody = feedsJs.slice(start, feedsJs.indexOf('els.export.addEventListener', start));
-  assert.ok(importBody.length > 0, 'the feeds screen has no import of its own');
-  assert.match(importBody, /notifyBackground\(\)/);
+  /* A feed is read by nobody until the worker gives it an alarm, so the function that merges the file
+   * has to tell the worker the table changed — the same call a saved row makes, whatever it is called. */
+  const merged = [...functionsOf(feedsJs)].filter(([, body]) => body.includes(`${storeAs}.mergeFeeds(`));
+  assert.equal(merged.length, 1, 'the file of feeds is merged in more than one place');
+  const [mergeName, mergeBody] = merged[0] ?? [];
+  assert.ok(mergeBody, 'the feeds screen has no import of its own');
+  assert.ok(
+    mergeBody.includes('notifyBackground()'),
+    `${mergeName} merges feeds without telling the worker the table changed`,
+  );
 });
 
 /* ---------------------------- runner ---------------------------- */
