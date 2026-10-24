@@ -10,6 +10,9 @@ const DEFAULT_SOUND_FILE = 'src/media/ceres.mp3';
 
 let alertAudio = null;
 
+/** Проигрывание, которое ещё не дошло до звука: его `play()` висит, пока файл грузится. */
+let playback = null;
+
 /**
  * Один переиспользуемый плеер: файл загружается в памяти offscreen-документа один раз и при
  * каждом сигнале начинается сначала. Значит, не тратится декодирование и не копятся слои звука.
@@ -24,8 +27,20 @@ function getAlertAudio(src) {
     console.warn('could not load the sound file:', src);
     if (alertAudio === player) alertAudio = null;
   });
+  /* Смена файла на экране настроек: проигрывание старого игрока больше не описывает звук, который
+   * читалка хочет услышать, поэтому новый сигнал не должен к нему присоединяться. */
+  playback = null;
   alertAudio = player;
   return alertAudio;
+}
+
+/**
+ * Отказ, который Chrome даёт `pause()`, не давшему начатому `play()` дойти до звука: «The play()
+ * request was interrupted by a call to pause()». Такой обрыв — не сбой, а следующий сигнал,
+ * пришедший, пока предыдущий ещё грузился (ленты перечитываются одна за другой).
+ */
+function wasInterrupted(error) {
+  return error?.name === 'NotSupportedError' && /interrupted/i.test(String(error?.message ?? ''));
 }
 
 /**
@@ -40,12 +55,38 @@ async function playSoundFile(src = DEFAULT_SOUND_FILE, volume = 1) {
   const fraction = Number(volume);
   player.volume = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 1;
 
-  // Повторный сигнал обрывает предыдущее проигрывание и стартует с начала файла.
-  player.pause();
-  player.currentTime = 0;
+  /* Сигнал, который ещё не заиграл, нечего обрывать: его `play()` и так начнёт файл с нуля, а
+   * `pause()` поверх него лишь отвергает то проигрывание — Chrome поднимает отказ «The play()
+   * request was interrupted by a call to pause()» в консоль, и он попадает в ошибки расширения.
+   * Поэтому новый сигнал догоняет такое проигрывание, а не обрывает его. */
+  const pending = playback;
+
+  if (pending === null) {
+    // Прежде играющий звук уже дошёл до проигрывания: его прерывают и начинают файл сначала.
+    player.pause();
+    player.currentTime = 0;
+  }
 
   // Chrome может отказать в воспроизведении без жеста пользователя — это не должно ронять фон.
-  await player.play();
+  const started = pending ?? player.play();
+  playback = started;
+
+  function forget() {
+    if (playback === started) playback = null;
+  }
+
+  /* Отклонение принимается здесь же: обрыв `play()` — рабочее событие, а не сбой, и он не должен
+   * остаться необработанным. Заодно по нему видно, что проигрывание больше не идёт. */
+  const settled = started.then(forget, forget);
+
+  try {
+    await settled;
+  } catch (error) {
+    /* Отказ мог принести и следующий сигнал, оборвав этот: звук тогда сыграл тот сигнал, и
+     * сообщать об отказе не нужно. Настоящий отказ (файл, политика автовоспроизведения)
+     * остаётся ошибкой. */
+    if (!wasInterrupted(error)) throw error;
+  }
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

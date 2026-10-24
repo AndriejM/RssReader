@@ -872,7 +872,11 @@ background.
   `chrome.runtime.getURL(src)` — the file
   lives inside the extension, so neither `web_accessible_resources` nor the network is needed for
   it. There is one player in the offscreen document and it is reused: the file loads once, a
-  repeated signal interrupts the previous playback and starts from the beginning. The signal is
+  repeated signal interrupts the previous playback and starts from the beginning — but only once
+  the sound has actually begun. A signal whose `play()` is still loading is joined instead of
+  interrupted: cutting that `play()` off makes Chrome reject it with «The play() request was
+  interrupted by a call to pause()», which the extensions page then reports as an error of the
+  reader. The signal is
   switched and chosen on the global settings screen: the “Sound” checkbox writes its on/off flag
   to `settings.sound`, the combobox (a file from `src/media`) writes the file to
   `settings.sound_file`, and `playSound` (`src/lib/sound.js`) checks the flag first and does
