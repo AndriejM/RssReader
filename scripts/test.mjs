@@ -10,12 +10,14 @@
 // run in Node either, so where a test has to look in one it looks at the contract between its pieces
 // — a markup id and the name the page maps it to, a message constant, a function found by what it
 // does — and not at the local names themselves. Markup, CSS and the dictionaries are still kept in
-// step by reading the files. Parsing an XML feed needs a real DOMParser and is exercised in the
-// browser.
+// step by reading the files. Parsing an XML feed and rebuilding a safe preview need a DOMParser, so
+// they run under the small dependency-free DOM in scripts/fake-dom.mjs — enough to hold what these
+// two paths actually ask of a node, not a browser.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+import { installDom } from './fake-dom.mjs';
 import * as alarmsLib from '../src/lib/alarms.js';
 import * as encoding from '../src/lib/encoding.js';
 import * as extract from '../src/lib/extract.js';
@@ -1566,6 +1568,100 @@ test('a headline whose clean_timeout had already run out is not news the reader 
   }
 });
 
+/* ---------------- the sweep and the reader's «Clear all» ---------------- */
+
+/**
+ * `store.cleanup` runs on every alarm cycle and before the reader writes a headline; `clearAllItems` is what
+ * the «Clear all» button of the reader page does. Which headlines they leave on the shelf was held only in
+ * their source: that a headline of a feed the reader deleted has no `clean_timeout` left to expire from, that
+ * a shelf emptied by hand is not a shelf of news the reader has never seen, and that the sweep of headlines
+ * is also the only way a read marker ever lapses.
+ */
+test('the sweep takes back the headlines whose clean_timeout ran out, the ones whose feed is gone, and the markers that lived their term', async () => {
+  const forget = storageMemory();
+  const age = (minutes) => new Date(Date.now() - minutes * MINUTE).toUTCString();
+  const feed = { id: 'f1', name: 'Site', rss_link: 'https://a.b/rss', clean_timeout: 1440 };
+  const deletedFeed = { id: 'gone', name: 'Deleted feed', rss_link: 'https://c.d/rss' };
+
+  try {
+    await store.saveFeeds([feed]);
+    await store.addItems([
+      store.makeItem({ feed, title: 'fresh', link: 'https://a.b/news/1', pubDate: age(30) }),
+      store.makeItem({ feed, title: 'stale', link: 'https://a.b/news/2', pubDate: age(90) }),
+      store.makeItem({ feed: deletedFeed, title: 'orphan', link: 'https://c.d/news/3', pubDate: age(10) }),
+    ]);
+    await store.saveRead([
+      { link: 'https://a.b/news/a', sourceId: 'https://a.b/news/a', sourceIdType: 'link', pubDate: '', time: Date.now() - 2 * DAY },
+      { link: 'https://a.b/news/b', sourceId: 'https://a.b/news/b', sourceIdType: 'link', pubDate: '', time: Date.now() - (READ_TTL_DAYS + 3) * DAY },
+    ]);
+
+    assert.equal(await store.countItems(), 3, 'while the feed asked for a day of headlines, all three of them were news the shelf kept');
+
+    /* The expiry of a headline is derived from the `clean_timeout` its feed has *now*, so editing the feed
+     * reaches the headlines it stored long before the edit. */
+    feed.clean_timeout = 60;
+    await store.saveFeeds([feed]);
+
+    const swept = await store.cleanup();
+
+    assert.equal(swept.removed, 2, 'the headline past the `clean_timeout` of its feed, and the headline of a feed the reader deleted: it has nowhere to expire from, so it cannot stay');
+    assert.deepEqual(swept.items.map((item) => item.link), ['https://a.b/news/1'], 'the sweep answers with what the shelf holds now');
+    assert.deepEqual((await store.getItems()).map((item) => item.link), ['https://a.b/news/1'], 'and that is what it wrote down');
+
+    assert.equal(swept.readRemoved, 1, 'the sweep of the headlines is also the sweep of the read list, which is the only way a marker ever lapses');
+    assert.deepEqual((await store.getRead()).map((record) => record.link), ['https://a.b/news/a'], 'a marker that still lives its `read_ttl_days` keeps holding its news off the shelf');
+    assert.equal(swept.lockRemoved, 0, 'and the tickets of reads that never came back — none here — are aged by the same sweep');
+
+    assert.equal((await store.getFeeds()).length, 1, 'a sweep ages headlines and markers, never the feeds the reader configured');
+  } finally {
+    forget();
+  }
+});
+
+test('the «Clear all» of the reader empties the shelf and remembers every headline it took as read', async () => {
+  const forget = storageMemory();
+  const age = (minutes) => new Date(Date.now() - minutes * MINUTE).toUTCString();
+  const one = { id: 'f1', name: 'Site', rss_link: 'https://a.b/rss', clean_timeout: 60 };
+  const other = { id: 'f2', name: 'Other site', rss_link: 'https://c.d/rss', clean_timeout: 60 };
+
+  try {
+    await store.saveFeeds([one, other]);
+    await store.updateSettings({ sound_enabled: false });
+    await store.addItems([
+      store.makeItem({ feed: one, title: 'A', link: 'https://a.b/news/1', pubDate: age(10) }),
+      store.makeItem({ feed: one, title: 'B', link: 'https://a.b/news/2', pubDate: age(20) }),
+      store.makeItem({ feed: other, title: 'C', link: 'https://c.d/news/3', pubDate: age(30) }),
+    ]);
+
+    assert.equal(await store.countItems(), 3);
+
+    await store.clearAllItems();
+
+    assert.equal(await store.countItems(), 0, 'the shelf is empty, of every feed at once');
+    assert.deepEqual((await store.getFeeds()).map((feed) => feed.id), ['f1', 'f2'], 'the feeds stay configured: the reader cleared its headlines, not what it reads');
+    assert.deepEqual(await store.getSettings(), { sound_enabled: false }, 'and so do its settings');
+
+    assert.equal((await store.getRead()).length, 3, 'every headline the reader threw away is remembered as one it has had');
+
+    const kept = await store.addItems([
+      store.makeItem({ feed: one, title: 'A', link: 'https://a.b/news/1', pubDate: age(1) }),
+      store.makeItem({ feed: other, title: 'C', link: 'https://c.d/news/3', pubDate: age(1) }),
+    ]);
+    assert.deepEqual(kept, { added: 0, skipped: 2, seen: 2 }, 'so the next poll of the same feed does not hand them all back as news');
+    assert.equal(await store.countItems(), 0);
+
+    /* «Clear all» of a shelf that is already empty has nothing to remember, and inventing a marker for
+     * nothing is how the read list fills with records no headline ever matches. */
+    await store.clearAllItems();
+    assert.equal((await store.getRead()).length, 3, 'the markers are the ones the headlines made, not one more for an empty shelf');
+
+    await store.clearRead();
+    assert.deepEqual(await store.addItems([store.makeItem({ feed: one, title: 'A', link: 'https://a.b/news/1', pubDate: age(1) })]), { added: 1, skipped: 0, seen: 1 }, 'and taking the marks off is the way back: the news is offered again');
+  } finally {
+    forget();
+  }
+});
+
 test('a guid is stored short: an id of a feed is not a whole article', () => {
   const feed = { id: 'f1', name: 'X', rss_link: 'https://a.b/rss' };
   const long = 'x'.repeat(MAX_SOURCE_ID_CHARS + 400);
@@ -2108,6 +2204,262 @@ test('a failed XML parse is recognised whatever namespace the engine reports it 
   assert.ok(/localName === 'parsererror'/.test(source), 'the root the processor left behind is read directly');
   assert.ok(/anyTag\(doc, 'parsererror'\)/.test(source), 'and the tree is searched ignoring namespaces');
 });
+
+/* ---------------- an XML feed, read by a DOMParser ---------------- */
+
+/**
+ * The tests below these hold the rules of `rss.js` by handing them an element the test made itself, which
+ * is enough for what the reader stores from an `<item>`. What no hand-made element can hold is what the XML
+ * processor makes of a whole document: the namespace a `<dc:date>` ends up in when only its prefix declares
+ * one, the `parsererror` a document that is not well-formed leaves behind, the headlines a duplicated
+ * `<guid>` costs. `rss.parseXmlFeed` asks for a `DOMParser` to answer any of that, so these tests run under
+ * the small dependency-free DOM of `scripts/fake-dom.mjs` — what the offscreen document hands the parser, and
+ * no more of a browser than the assertions here need.
+ */
+function withDom(run) {
+  const uninstall = installDom();
+  try {
+    return run();
+  } finally {
+    uninstall();
+  }
+}
+
+const FEED_BASE = 'https://example.com/feed.xml';
+
+test('an RSS 2.0 document becomes the headlines the reader stores', () => withDom(() => {
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+    <rss version="2.0">
+      <channel>
+        <title>  Example  Feed  </title>
+        <item>
+          <title><![CDATA[Hello <b>world</b>]]></title>
+          <description><![CDATA[<p>First <i>news</i></p>]]></description>
+          <pubDate>Mon, 06 Oct 2025 09:00:00 GMT</pubDate>
+          <link>https://example.com/a1</link>
+          <guid isPermaLink="false">tag:example.com,2025:id-1</guid>
+        </item>
+        <item>
+          <title>Second</title>
+          <description>Plain second</description>
+          <link>/a2</link>
+        </item>
+        <item>
+          <title>The same news again</title>
+          <link>https://example.com/a1?utm=rss</link>
+          <guid isPermaLink="false">tag:example.com,2025:id-1</guid>
+        </item>
+      </channel>
+    </rss>`;
+
+  const { feedTitle, entries } = rss.parseFeed(xml, FEED_BASE);
+
+  assert.equal(feedTitle, 'Example Feed', 'the name of the feed is read out of the document, its markup and its doubled spaces gone');
+  assert.equal(entries.length, 2, 'the feed ships one news twice, under two addresses: the `<guid>` calls them one news, so the reader is shown it once');
+
+  assert.equal(entries[0].title, 'Hello world', 'the headline is read out of the CDATA of the title, markup gone');
+  assert.equal(entries[0].description, '<p>First <i>news</i></p>', 'and the description keeps its markup: a CDATA block is text of the document, not an escaped one');
+  assert.equal(entries[0].pubDate, 'Mon, 06 Oct 2025 09:00:00 GMT', 'the date of the item is the one its `<pubDate>` states');
+  assert.equal(entries[0].link, 'https://example.com/a1', 'a link that is already absolute is kept as it is');
+  assert.deepEqual(
+    { sourceId: entries[0].sourceId, sourceIdType: entries[0].sourceIdType },
+    { sourceId: 'tag:example.com,2025:id-1', sourceIdType: 'guid' },
+    'a `<guid isPermaLink="false">` is an id of the feed, not an address, and it is kept beside the link',
+  );
+
+  assert.equal(entries[1].link, 'https://example.com/a2', 'a site that writes its links short is completed against the address of the feed');
+  assert.deepEqual(
+    { sourceId: entries[1].sourceId, sourceIdType: entries[1].sourceIdType },
+    { sourceId: 'https://example.com/a2', sourceIdType: 'link' },
+    'an item that states no id is named by the address of its page',
+  );
+}));
+
+test('an Atom document keeps the namespaces its root declares', () => withDom(() => {
+  const xml = `<?xml version="1.0"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <title>Atom Feed</title>
+      <entry>
+        <title type="html">Atom &lt;b&gt;entry&lt;/b&gt;</title>
+        <id>urn:uuid:1234-5678</id>
+        <link href="https://example.com/atom1" rel="alternate"/>
+        <link href="https://example.com/feed.xml" rel="self"/>
+        <updated>2025-10-06T09:00:00Z</updated>
+        <summary>short summary</summary>
+        <content type="html">&lt;p&gt;the whole &lt;em&gt;text&lt;/em&gt;&lt;/p&gt;</content>
+      </entry>
+    </feed>`;
+
+  const { feedTitle, entries } = rss.parseFeed(xml, FEED_BASE);
+
+  assert.equal(feedTitle, 'Atom Feed', 'a feed whose tags carry no prefix is still read, because its root declared the default namespace');
+  assert.equal(entries.length, 1);
+
+  const [entry] = entries;
+  assert.equal(entry.link, 'https://example.com/atom1', 'the address of the news is the `rel="alternate"` link, not the `rel="self"` one that points back at the feed');
+  assert.equal(entry.description, '<p>the whole <em>text</em></p>', 'the whole text of `<content>` wins over the `<summary>`, and its escaped markup is markup again');
+  assert.equal(entry.title, 'Atom entry', 'a `<title type="html">` is read as the text under its markup');
+  assert.deepEqual(
+    { sourceId: entry.sourceId, sourceIdType: entry.sourceIdType },
+    { sourceId: 'urn:uuid:1234-5678', sourceIdType: 'atom:id' },
+    'the id of an Atom entry is kept even where it is no address at all',
+  );
+}));
+
+test('an RDF feed reaches the parser through its prefixed root and its Dublin Core date', () => withDom(() => {
+  const xml = `<?xml version="1.0"?>
+    <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+             xmlns:dc="http://purl.org/dc/elements/1.1/"
+             xmlns="http://purl.org/rss/1.0/">
+      <title>RDF Feed</title>
+      <item rdf:about="https://example.com/rdf1">
+        <title>RDF news</title>
+        <link>https://example.com/rdf1</link>
+        <description>RDF body</description>
+        <dc:date>2025-10-05T00:00:00Z</dc:date>
+      </item>
+    </rdf:RDF>`;
+
+  const { feedTitle, entries } = rss.parseFeed(xml, FEED_BASE);
+
+  assert.equal(feedTitle, 'RDF Feed');
+  assert.equal(entries.length, 1, 'the root of an RDF feed is `<rdf:RDF>`: the parser reads the headlines out of it whatever it calls the root');
+  assert.equal(entries[0].pubDate, '2025-10-05T00:00:00Z', 'an RDF feed dates its news with `<dc:date>`: the namespace the `dc:` prefix declares is what lets the parser find it');
+}));
+
+test('the whole text a WordPress feed ships in another namespace leads its headline', () => withDom(() => {
+  const xml = `<rss><channel>
+      <title>WP</title>
+      <item>
+        <title>WP post</title>
+        <link>https://example.com/wp</link>
+        <description>Short excerpt.</description>
+        <content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/">&lt;p&gt;The whole post.&lt;/p&gt;</content:encoded>
+      </item>
+    </channel></rss>`;
+
+  const [entry] = rss.parseFeed(xml, FEED_BASE).entries;
+
+  assert.equal(entry.description, '<p>The whole post.</p>', 'the excerpt of a site that ships its whole text in `<content:encoded>` is not what the reader shows');
+}));
+
+test('the pictures a Media RSS entry states lead its preview through the parser too', () => withDom(() => {
+  const xml = `<rss><channel>
+      <title>Media</title>
+      <item>
+        <title>With pictures</title>
+        <link>https://example.com/m</link>
+        <description>body text</description>
+        <media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://cdn.example/thumb.jpg"/>
+        <media:content xmlns:media="http://search.yahoo.com/mrss/" url="https://cdn.example/sound.mp3" type="audio/mpeg"/>
+        <media:content xmlns:media="http://search.yahoo.com/mrss/" url="https://cdn.example/full.png" type="image/png" medium="image"/>
+      </item>
+    </channel></rss>`;
+
+  const [entry] = rss.parseFeed(xml, FEED_BASE).entries;
+
+  assert.ok(
+    entry.description.startsWith('<p><img src="https://cdn.example/thumb.jpg" alt="" /><img src="https://cdn.example/full.png" alt="" /></p>'),
+    'the `<media:thumbnail>` and the image `<media:content>` both lead the text, in the order the reader shows them',
+  );
+  assert.ok(!entry.description.includes('sound.mp3'), 'the audio an entry carries has nothing to show in a preview');
+  assert.ok(entry.description.endsWith('body text'), 'and the text of the entry stays under them');
+}));
+
+test('a document the XML processor could not read is refused as a broken feed', () => withDom(() => {
+  /* One tag closed under another, which is the mistake a hand-made element cannot make: it has no
+   * processor to disagree with. Read as a feed, the answer would parse as one with no headlines, the feed
+   * would be recorded healthy and its backoff would never start. */
+  assert.throws(
+    () => rss.parseFeed('<?xml version="1.0"?>\n<rss><channel><item><title>broken</link></item></channel></rss>', FEED_BASE),
+    (error) => {
+      assert.ok(error instanceof rss.FeedError);
+      assert.equal(error.code, 'feedNotXml', 'the failure names the key every language of the reader translates');
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => rss.parseFeed('<?xml version="1.0"?><rss><channel><item><title>unclosed', FEED_BASE),
+    (error) => error.code === 'feedNotXml',
+    'the same for a document that simply stops in the middle',
+  );
+}));
+
+test('a page in place of a feed is refused by the parser, with a code of its own', () => withDom(() => {
+  /* `isFeedDocument` decides this from a root name and a headline count; here it is decided by what a
+   * site actually answers when its address is not a feed at all — the HTML page of the site, or an
+   * ordinary XML document of another kind. */
+  for (const [label, body] of [
+    ['an error page in HTML', '<!DOCTYPE html>\n<html><body><p>Not found</p></body></html>'],
+    ['a sitemap', '<?xml version="1.0"?><urlset><url><loc>https://example.com/</loc></url></urlset>'],
+  ]) {
+    assert.throws(
+      () => rss.parseFeed(body, FEED_BASE),
+      (error) => {
+        assert.ok(error instanceof rss.FeedError, `${label} is refused as a failure, not as an empty feed`);
+        assert.equal(error.code, 'feedNotFeed');
+        return true;
+      },
+    );
+  }
+
+  const empty = rss.parseFeed('<rss><channel><title>Quiet feed</title></channel></rss>', FEED_BASE);
+  assert.deepEqual(empty, { feedTitle: 'Quiet feed', entries: [] }, 'a feed that ships nothing right now is a feed: it is read healthy, with no headlines');
+}));
+
+/**
+ * What `extract.sanitizePreview` ended up with, walked out of the node it rebuilt: `scripts/fake-dom.mjs`
+ * keeps no `outerHTML`, so the tree the reader page is about to insert is shown tag by tag instead.
+ */
+function previewShape(node) {
+  if (node === null) return null;
+  if (node.nodeType === 3) return JSON.stringify(node.nodeValue);
+  const attrs = node.getAttributeNames().map((name) => `${name}="${node.getAttribute(name)}"`).join(' ');
+  const children = node.childNodes.map(previewShape).join('');
+  const lazy = node.tagName === 'img' && node.loading === 'lazy' ? '[lazy]' : '';
+  return `<${node.tagName}${attrs ? ` ${attrs}` : ''}>${children}</${node.tagName}>${lazy}`;
+}
+
+test('the HTML of a feed description is rebuilt as the safe subset the reader may insert', () => withDom(() => {
+  const { node, truncated } = extract.sanitizePreview(
+    '<p>Safe  text</p>\n    <script>alert(1)</script><style>p{}</style>\n'
+    + '<a href="javascript:alert(1)">bad link</a>'
+    + '<a href="https://ok.example/x" onclick="steal()" title="kept">good link</a>'
+    + '<img src="https://img.example/a.jpg" alt="the alt" width="640" height="90">',
+  );
+
+  assert.equal(truncated, false);
+  assert.equal(node.className, 'preview', 'the container is the one `reader.css` gives its rules to');
+  assert.equal(
+    previewShape(node),
+    '<div>'
+    + '<p>"Safe text"</p>'
+    + '<a>"bad link"</a>'
+    + '<a href="https://ok.example/x" title="kept">"good link"</a>'
+    + '<img src="https://img.example/a.jpg" alt="the alt" width="180" height="90"></img>[lazy]'
+    + '</div>',
+    'no script, no style, no handler: the address a link cannot be given is dropped instead of the link, the picture keeps the box the reader set and is asked for only when the reader is near it',
+  );
+
+  assert.equal(
+    previewShape(extract.sanitizePreview('<span>wrapped <b>bold</b></span><div>div text</div><table><tr><td>cell</td></tr></table>').node),
+    '<div>"wrapped "<b>"bold"</b>"div text""cell"</div>',
+    'a tag the reader does not allow is not thrown away with its text: its children are lifted in its place',
+  );
+
+  assert.equal(
+    previewShape(extract.sanitizePreview('<img src="relative.jpg" alt="nothing to show"><img src="//cdn.example/protocol-free.png">').node),
+    '<div><img src="//cdn.example/protocol-free.png"></img>[lazy]</div>',
+    'a picture whose address is not http(s) is dropped whole, and one the feed wrote without a protocol is kept as the address it is',
+  );
+
+  assert.deepEqual(extract.sanitizePreview('<script>x</script><img src="data:image/png;base64,AAAA">'), { node: null, truncated: false }, 'a description of nothing the reader may show is no preview at all');
+  assert.deepEqual(extract.sanitizePreview(''), { node: null, truncated: false });
+  assert.deepEqual(extract.sanitizePreview(null), { node: null, truncated: false });
+
+  assert.equal(extract.sanitizePreview('<p>cut off… ]</p>').truncated, true, 'a description the feed cut short says so, and the reader offers its link out');
+}));
 
 /* ---------------- the fields of one XML entry ---------------- */
 

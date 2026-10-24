@@ -434,16 +434,18 @@ src/offscreen.html|js         offscreen document: the extension's only context w
                               sound is played here
 src/lib/messages.js           message names between pages and the service worker
 src/lib/storage.js            feeds, headlines, read list, settings, feed read locks, automatic
-                              cleanup, and the feeds file the feed screen writes and reads
+                              cleanup, and the feeds file the feed screen writes and reads (covered
+                              by tests)
 src/lib/alarms.js             an alarm per feed + a periodic-cleanup alarm
 src/lib/offscreen.js          creating the offscreen document and exchanging messages with it
 src/lib/rss.js                loading and parsing RSS 2.0 / Atom / RDF / JSON Feed (runs inside
-                              the offscreen document)
+                              the offscreen document; its JSON Feed rules are held by the tests, its
+                              RSS 2.0 / Atom / RDF rules under the small DOM of scripts/fake-dom.mjs)
 src/lib/encoding.js           response bytes → text: find the feed's encoding (BOM, `Content-Type`,
                               the XML declaration) and decode it with it (covered by tests)
 src/lib/extract.js            article text pulled from the page when the reader loads the full text of a
                               headline (`fetchArticle` / `extractArticle`), and the safe preview of a stored
-                              `<description>` (`sanitizePreview`)
+                              `<description>` (`sanitizePreview`: held by tests under the same DOM)
 src/lib/favicon.js            read a feed's site page and find the favicon it declares: the link is
                               stored on the feed when the feed is added (the pure reading is covered
                               by tests)
@@ -475,7 +477,11 @@ _locales/                     the extension's own name and description in each o
 src/styles/                   theme.css (theme CSS variables, and for every screen the focus
                               outline, `.sr-only` and the answer to reduced motion), reader.css,
                               feeds.css, settings.css
-scripts/test.mjs              unit tests of the pure functions: node scripts/test.mjs
+scripts/test.mjs              unit tests of the pure functions and, under the DOM of fake-dom.mjs,
+                              the parsing of an XML feed: node scripts/test.mjs
+scripts/fake-dom.mjs          a small DOM for the tests, without dependencies: a `DOMParser` for XML
+                              and a plain tree of tags for HTML — only what `rss.js` and `extract.js`
+                              ask of a node, not a browser
 scripts/make_icons.mjs        regenerate the icons without dependencies
 scripts/check_icons.mjs       verify the result of make_icons.mjs
 examples/                     example_rss.xml — a sample feed; neither the reader code nor the
@@ -1044,22 +1050,33 @@ background.
 - **No third-party dependencies**: feed polling and parsing are done by `fetch` under
   `host_permissions: <all_urls>`, the manifest requires no RSS parsing library: XML is parsed
   by the built-in `DOMParser` — but exactly where it is allowed — and JSON Feed by `JSON.parse`.
+- **The tests are given a DOM, a small one**: `scripts/fake-dom.mjs` puts a `DOMParser` and a
+  `document` in the harness, so the XML branch of `rss.js` and the preview of `extract.js` are held
+  without a browser. It implements only what those two paths ask of a node — namespaced elements,
+  attributes, text, CDATA, entities, and a `parsererror` root for a document that is not
+  well-formed, the way Blink reports it — and it is not a browser: no implied `<html>`/`<body>`,
+  no auto-closing of tags, no CSS, no `querySelector`, no scripts. The tests assert only what this
+  shim answers faithfully; where a real engine would answer differently, no test leans on it.
 
 ## Validation
 
 ```bash
-node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js, parts of
-                             # storage.js and rss.js), the guards over the screen markup and over what
-                             one module borrows from another, and the popup an automatic load shows:
-                             157 tests
+node scripts/test.mjs        # unit tests of pure functions (util.js, i18n.js, encoding.js,
+                             # storage.js and the parsing of rss.js: JSON Feed as itself, RSS 2.0 /
+                             # Atom / RDF under the small DOM of scripts/fake-dom.mjs), the guards
+                             # over the screen markup and over what one module borrows from another,
+                             # and the popup an automatic load shows: 169 tests
 node scripts/make_icons.mjs  # regenerate the icons (no dependencies)
 node scripts/check_icons.mjs # make sure the icons are correct
 ```
 
-The tests do not cover `chrome.*` code (alarms, action, messages) or XML parsing — the exceptions are
-the answer to a popup click, tested against a stood-in popup center and tab strip, and the life of the
-offscreen document, tested against a stood-in `chrome.offscreen`; the rest is checked in the browser
-after loading the extension. JSON Feed parsing needs no DOM, so its rules are covered by the tests.
+The tests do not cover `chrome.*` code (alarms, action, messages) — the exceptions are the answer to
+a popup click, tested against a stood-in popup center and tab strip, and the life of the offscreen
+document, tested against a stood-in `chrome.offscreen`; the rest is checked in the browser after
+loading the extension. JSON Feed parsing needs no DOM, so its rules are covered by the tests; RSS
+2.0, Atom and RDF are parsed under the small DOM of `scripts/fake-dom.mjs`. What only a real engine
+can answer is still checked in the browser: how Chrome reads a document whose root or closing tags
+are wrong, and the full text of an article, which is pulled with `querySelector`.
 
 ### What to check in the browser
 
