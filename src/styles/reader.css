@@ -167,6 +167,8 @@
 
 .panel-content {
   background: var(--bg-panel);
+  /* The anchor of the undo line: it lies along the bottom edge of this column, over its text. */
+  position: relative;
 }
 
 .panel-head {
@@ -658,18 +660,24 @@
 }
 
 /*
-  Строка отмены стоит между инструментами панели статьи и её текстом: она говорит, что читалка ещё
-  может вернуть, и забирается сама, как только её окно кончается.
+  Строка отмены лежит вдоль нижнего края колонки статьи: она называет, что читалка ещё может
+  вернуть, и забирается сама, как только её окно кончается. Она наложена на колонку, а не вставлена
+  в её ряд, — ни её появление, ни её уход не двигают текст статьи и её прокрутку.
 */
 .undo-line {
   align-items: center;
-  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  bottom: 0;
   color: var(--text-muted);
   display: flex;
-  flex: 0 0 auto;
   font-size: 0.92em;
   gap: 10px;
+  left: 0;
   padding: 8px 12px;
+  position: absolute;
+  right: 0;
+  z-index: 1;
 }
 
 /* `hidden` на элементе, у которого свой класс называет `display`, его не прячет (см. выше). */
@@ -715,7 +723,9 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 20px 40px;
+  /* The bottom room is the height the undo line takes over this column: scrolled to the end, the
+     last line of an article still stands above it. */
+  padding: 16px 20px 56px;
 }
 
 .content-body h1 {

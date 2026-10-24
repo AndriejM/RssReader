@@ -201,7 +201,8 @@ Three vertical panels:
    the deleted one read. The full text is fetched only on that click — never for every headline at once —
    and a page that will not answer within `ARTICLE_FETCH_TIMEOUT_MS` is named in the reader's own language.
    When the open headline is marked, a note above its text says what that means for the feeds, and a
-   delete leaves a line under the toolbar that names the headline it took and offers **Undo**.
+   delete leaves a line along the bottom edge of the column — laid over its text, so the text never
+   shifts — that names the headline it took and offers **Undo**.
 
 In the head of every panel there is its own font size switcher: four buttons drawn as the letter “A”,
 each at the size it stands for. A button scales only the column it sits in — the feed list, the
@@ -315,10 +316,10 @@ The mark `m` puts on is the very mark a delete leaves, only without the delete: 
 the shelf, its row takes the check glyph and goes quiet, and a note above its text says that no feed
 will bring this news back while the mark lives. The key again — or the check icon in the corner of the
 right panel — takes the mark off, and the feed is free to bring the news back. A delete keeps the mark
-it puts on, but not the headline: for 15 seconds a line under the toolbar names the headline it took
-and offers **Undo**, which the button itself, `u`, or `Esc` outside a field (a field being typed in
-keeps its own `Esc`) takes back — the headline returns to the shelf and its read mark goes with it,
-otherwise the next load would delete it a second time. Once the window closes, the way back is the
+it puts on, but not the headline: for 15 seconds a line along the bottom edge of the article column
+names the headline it took and offers **Undo**, which the button itself, `u`, or `Esc` outside a field
+(a field being typed in keeps its own `Esc`) takes back — the headline returns to the shelf and its
+read mark goes with it, otherwise the next load would delete it a second time. Once the window closes, the way back is the
 `read_ttl_days` horizon running out or the “Forget read items” button on the global settings screen.
 Clearing a whole selection with the trash icon is the one act no undo line covers, so it asks for a
 confirmation first.
@@ -1092,9 +1093,9 @@ are wrong, and the full text of an article, which is pulled with `querySelector`
 4. More than 99 headlines → the icon shows `*`.
 5. The delete icon in the corner of the right panel → the headline vanishes from both the list
    and storage, and the reader immediately opens the next headline of the same feed. Press the
-   **Undo** in the line that appeared under the toolbar (or `u`, or `Esc` with no field in the
-   focus) → the headline is back in its place, with the check glyph gone and its read mark taken
-   off; wait the 15 seconds out instead, and the line disappears with the way back.
+   **Undo** in the line that appeared along the bottom edge of the article column (or `u`, or `Esc`
+   with no field in the focus) → the headline is back in its place, with the check glyph gone and its
+   read mark taken off; wait the 15 seconds out instead, and the line disappears with the way back.
 6. Switch the theme on one screen → the other screen repaints without a reload.
 7. Hover the reader icon → a tooltip explains what it does.
 8. Click the trash icon in the head of the middle panel while «All feeds» is selected → the reader

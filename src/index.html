@@ -260,18 +260,6 @@
         </button>
         <div class="font-scale" data-font-scale="content"></div>
       </div>
-      <!--
-        Строка отмены: её ставит удаление заголовка, и она же возвращает его назад, пока её окно
-        стоит. Подпись кнопки названа словарём, сам текст строки называет удалённый заголовок
-        (см. `index.js` -> `renderUndo`).
-      -->
-      <p class="undo-line" id="undo-line" hidden>
-        <span class="undo-text" id="undo-text"></span>
-        <button id="btn-undo" class="undo-btn" type="button">
-          <svg class="icon" aria-hidden="true"><use href="#icon-undo"></use></svg>
-          <span data-i18n="reader.undo.button"></span>
-        </button>
-      </p>
       <article class="content-body" id="content-body">
         <!--
           Плейсхолдер правой панели стоит в разметке и остаётся на месте, когда панель показывает
@@ -283,6 +271,20 @@
         <p class="empty" id="content-empty" role="status" data-i18n="reader.content.empty"></p>
         <div class="article-body" id="article-body"></div>
       </article>
+      <!--
+        Строка отмены: её ставит удаление заголовка, и она же возвращает его назад, пока её окно
+        стоит. Подпись кнопки названа словарём, сам текст строки называет удалённый заголовок
+        (см. `index.js` -> `renderUndo`). Она идёт после текста и лежит вдоль его нижнего края —
+        наложенной на колонку, а не в её ряду: появление строки не двигает статью (см.
+        `.undo-line` в `styles/reader.css`).
+      -->
+      <p class="undo-line" id="undo-line" hidden>
+        <span class="undo-text" id="undo-text"></span>
+        <button id="btn-undo" class="undo-btn" type="button">
+          <svg class="icon" aria-hidden="true"><use href="#icon-undo"></use></svg>
+          <span data-i18n="reader.undo.button"></span>
+        </button>
+      </p>
     </section>
   </main>
 
