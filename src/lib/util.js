@@ -514,12 +514,10 @@ export function linkKey(link) {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return raw;
 
   url.protocol = 'https:';
-  if (
-    (url.protocol === 'https:' && url.port === '443') ||
-    (url.protocol === 'http:' && url.port === '80')
-  ) {
-    url.port = '';
-  }
+  /* Порт уже сброшен самим `URL`: адрес, названный портом своего же протокола, читается без порта
+   * ещё при разборе (`http://host:80` и `https://host:443` приходят с пустым `port`), а смена
+   * протокола дописывает оставшийся порт до implied. Поэтому здесь остаются только настоящие порты
+   * — `https://host:8080` это другой сайт. */
   url.username = '';
   url.password = '';
   url.hash = '';
