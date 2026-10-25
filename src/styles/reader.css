@@ -81,7 +81,8 @@
     animation: none;
   }
 
-  .col-resize::after {
+  .col-resize::after,
+  .row-resize::after {
     transition: none;
   }
 }
@@ -143,6 +144,63 @@
 }
 
 /*
+  The arrangement of a mail client: the feeds column stays where it was, and the column beside it is cut
+  across — the headlines of the feed chosen on the left above the news picked among them. A column of two
+  windows needs rows of its own: `--row-headlines` is the height the mouse gives the upper window exactly
+  as `--col-*` is its width, and the window below takes the height the first one leaves. Two borders can
+  be dragged here: the vertical one that ends the feeds column sizes a width, the horizontal one inside
+  the other column sizes a height.
+*/
+.panels[data-layout="split"] {
+  --row-gap: 8px;
+  --row-headlines: 340px;
+  /* The floor of each of the two windows of a cut column: the same number `lib/storage.js` refuses to
+     go below. */
+  --panel-row-min: 120px;
+  grid-template-columns:
+    minmax(var(--panel-min), var(--col-feeds))
+    var(--col-gap)
+    minmax(var(--panel-min), 1fr);
+  grid-template-rows:
+    minmax(var(--panel-row-min), var(--row-headlines))
+    var(--row-gap)
+    minmax(var(--panel-row-min), 1fr);
+}
+
+/*
+  The three windows of this arrangement are named to the grid instead of being left to auto-placement:
+  the markup holds the gaps in the order of the columns, and a column cut across means that order no
+  longer walks the grid. The feeds take the whole height of the first column, the headlines the top of
+  the second, the news its bottom.
+*/
+.panels[data-layout="split"] #panel-feeds {
+  grid-column: 1 / 2;
+  grid-row: 1 / -1;
+}
+
+.panels[data-layout="split"] #panel-headlines {
+  /* The two windows of a cut column are separated by an empty row, so the line the user aims at when
+     pulling that border is the bottom edge of the window above it — the line the gap's handle lies on. */
+  border-bottom: 1px solid var(--border);
+  grid-column: 3 / 4;
+  grid-row: 1 / 2;
+}
+
+.panels[data-layout="split"] #panel-content {
+  grid-column: 3 / 4;
+  grid-row: 3 / 4;
+}
+
+/*
+  The headlines of this arrangement have no column to their right: their border runs below them, not
+  beside them, so the vertical handle of that border leaves the grid. `lib/columns.js` hides a handle
+  the arrangement gives no cell for; this rule keeps it gone before that script runs.
+*/
+.panels[data-layout="split"] .col-resize[data-column-resize="headlines"] {
+  display: none;
+}
+
+/*
   The handle of a border: a grid item of the gap column, so it fills the gap cell — the full height
   of the row and the whole width of the gap — and is never laid over a column. It must stay a static
   grid item: positioning it absolutely would drop it out of the grid's stretching, and an empty div
@@ -179,11 +237,53 @@
   background: var(--accent);
 }
 
+/*
+  The handle of a border that runs across a column is the same thing turned a quarter turn: a grid item
+  of the gap row, filling it, with its cursor along the row instead of along the column. Only the
+  arrangement that cuts a column in two has such a border, so the grid of that arrangement is what
+  places the handle and gives it the gap to sit in.
+*/
+.row-resize {
+  cursor: row-resize;
+  position: relative;
+  touch-action: none;
+  z-index: 2;
+}
+
+/* The strip lies on the bottom border of the window above the gap, which is the line the user aims at. */
+.row-resize::after {
+  background: transparent;
+  bottom: auto;
+  content: "";
+  height: 3px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: -1px;
+  transition: background 0.12s ease;
+}
+
+.row-resize:hover::after,
+.row-resize:active::after,
+.resizing .row-resize:active::after {
+  background: var(--accent);
+}
+
 /* While a border is held the mouse must keep reporting moves even outside the window. */
 .resizing,
 .resizing * {
-  cursor: col-resize !important;
   user-select: none;
+}
+
+/* The cursor of the held border, so a pointer that strays off the handle still says what it is doing. */
+.resizing-col,
+.resizing-col * {
+  cursor: col-resize !important;
+}
+
+.resizing-row,
+.resizing-row * {
+  cursor: row-resize !important;
 }
 
 .panel {
@@ -922,6 +1022,28 @@
   .panels[data-layout="list"] .panel-content {
     grid-column: 3 / 4;
     grid-row: 1 / 2;
+  }
+
+  /*
+    A cut column does not survive a narrow window either: the news that sat under its headlines takes the
+    third row across the whole window, where the article of the arrangements that wrap stands, and the
+    feeds take their cell in the first row. The border across the second column has nothing left to cut:
+    the window under it is a whole row now, and no height is left for it to move, so it leaves the grid.
+    `lib/columns.js` hides a handle the grid gives no cell for; this rule keeps it gone before that
+    script runs.
+  */
+  .panels[data-layout="split"] #panel-feeds {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+  }
+
+  .panels[data-layout="split"] #panel-content {
+    grid-column: 1 / 4;
+    grid-row: 3 / 4;
+  }
+
+  .panels[data-layout="split"] .row-resize[data-row-resize="headlines"] {
+    display: none;
   }
 
   /* The article takes the whole third row, so the gap under the two lists is a row gap: its strip

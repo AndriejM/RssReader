@@ -7,7 +7,7 @@
 // The value is checked here exactly as `lib/storage.js` checks the stored one: a cache written by an
 // older build cannot give the reader an arrangement it does not have.
 const LAYOUT_CACHE_KEY = 'rss-reader:layout';
-const LAYOUTS = ['three', 'list'];
+const LAYOUTS = ['three', 'list', 'split'];
 const DEFAULT_LAYOUT = 'three';
 
 try {

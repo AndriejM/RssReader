@@ -53,6 +53,7 @@ export const SHOW_MESSAGE_KEY = 'show_message';
 export const LANGUAGE_KEY = 'language';
 export const FONT_SCALES_KEY = 'font_scales';
 export const COLUMN_WIDTHS_KEY = 'column_widths';
+export const ROW_HEIGHTS_KEY = 'row_heights';
 export const LAYOUT_KEY = 'layout';
 
 /** Marker of the first feed added — see `getFirstFeedDone`. */
@@ -1098,14 +1099,67 @@ export async function setColumnWidth(panel, width) {
   return widths;
 }
 
+/* ------------------------------------------------ height of the reader's stacked windows */
+
+/** Windows whose height is moved by mouse: a border pulls the window above it down, the one below gives the rest away. Only the arrangement that puts two windows in one column has such a border. */
+export const RESIZABLE_ROWS = ['headlines'];
+
+/** Below this height a window stops being a window: its head alone would fill it. */
+export const MIN_PANEL_HEIGHT = 120;
+
+/** Above this height we do not stretch a window: the reader must leave some text to the window below. */
+export const MAX_PANEL_HEIGHT = 900;
+
+/** A window's height until the user pulls its border. */
+export const DEFAULT_ROW_HEIGHTS = { headlines: 340 };
+
+/**
+ * The heights of the reader's stacked windows: the stored map is trusted exactly as the map of widths
+ * is - to an unknown window and to a number outside the bounds we give the default height.
+ */
+export function normalizeRowHeights(value) {
+  const heights = {};
+  for (const panel of RESIZABLE_ROWS) {
+    const fallback = DEFAULT_ROW_HEIGHTS[panel];
+    const height = Math.round(Number(value?.[panel]));
+    if (!Number.isFinite(height)) {
+      heights[panel] = fallback;
+      continue;
+    }
+    heights[panel] = Math.min(Math.max(height, MIN_PANEL_HEIGHT), MAX_PANEL_HEIGHT);
+  }
+  return heights;
+}
+
+/** Heights of the stacked windows - from `settings.row_heights`. */
+export async function getRowHeights() {
+  const settings = await getSettings();
+  return normalizeRowHeights(settings[ROW_HEIGHTS_KEY]);
+}
+
+/**
+ * Remember the height of one window: the others take what already lies in the storage, not what was in
+ * this page's memory - two open readers do not overwrite each other's border.
+ */
+export async function setRowHeight(panel, height) {
+  if (!RESIZABLE_ROWS.includes(panel)) return null;
+
+  const heights = normalizeRowHeights((await getSettings())[ROW_HEIGHTS_KEY]);
+  heights[panel] = normalizeRowHeights({ [panel]: height })[panel];
+  await updateSettings({ [ROW_HEIGHTS_KEY]: heights });
+  return heights;
+}
+
 /* ------------------------------------------------- arrangement of the reader's panels */
 
 /**
  * The arrangements the reader's panels can be put in:
  * `three` - feeds, headlines, article: the arrangement the reader has always had;
- * `list` - no feeds column: the headlines of every feed at once, and the open one beside them.
+ * `list` - no feeds column: the headlines of every feed at once, and the open one beside them;
+ * `split` - the feeds column kept, and the other column cut across: the headlines of one feed above
+ *           the news chosen among them, one above the other, as a mail client puts them.
  */
-export const LAYOUTS = ['three', 'list'];
+export const LAYOUTS = ['three', 'list', 'split'];
 
 /** The arrangement a reader opens with: the one that shows every panel the reader has.
  *  A name of an arrangement is also the value of `data-layout` on `.panels`. */
@@ -1120,6 +1174,20 @@ export const DEFAULT_LAYOUT = 'three';
 export const LAYOUT_PANELS = {
   three: ['feeds', 'headlines', 'content'],
   list: ['headlines', 'content'],
+  split: ['feeds', 'headlines', 'content'],
+};
+
+/**
+ * The same panels read column by column: one entry per column of the arrangement, and a column that
+ * holds two windows one above the other names both of them, upper one first. `lib/columns.js` derives
+ * from this the borders of the arrangement - the border that ends a column runs vertically, the border
+ * between the two windows of a column runs across it - so an arrangement that cuts a column in two does
+ * not have to describe its handles anywhere else.
+ */
+export const LAYOUT_COLUMNS = {
+  three: [['feeds'], ['headlines'], ['content']],
+  list: [['headlines'], ['content']],
+  split: [['feeds'], ['headlines', 'content']],
 };
 
 /** A stored arrangement is trusted only while it names one the reader really has. */

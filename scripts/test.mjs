@@ -2895,11 +2895,50 @@ test('normalizeColumnWidths keeps every draggable column inside its own limits',
 });
 
 /**
+ * The height of a window in a column that an arrangement cuts across is stored the same way its width
+ * is: one map for the whole reader, every window of it clamped, nothing kept for a window that has no
+ * border of its own.
+ */
+test('normalizeRowHeights keeps every draggable window inside its own limits', () => {
+  assert.deepEqual(store.RESIZABLE_ROWS, ['headlines'], 'the borders the mouse can drag across a column');
+  assert.deepEqual(
+    store.normalizeRowHeights(undefined),
+    { ...store.DEFAULT_ROW_HEIGHTS },
+    'a reader that was never resized opens at the heights of the stylesheet',
+  );
+
+  assert.deepEqual(
+    store.normalizeRowHeights({ headlines: 500 }),
+    { headlines: 500 },
+    'a stored map is taken as it is',
+  );
+  assert.equal(
+    store.normalizeRowHeights({ headlines: 10 }).headlines,
+    store.MIN_PANEL_HEIGHT,
+    'the minimum height is never crossed',
+  );
+  assert.equal(
+    store.normalizeRowHeights({ headlines: 1e6 }).headlines,
+    store.MAX_PANEL_HEIGHT,
+    'clamped to the ceiling',
+  );
+  assert.equal(store.normalizeRowHeights({ headlines: '260' }).headlines, 260, 'a height written as text is a height');
+  assert.equal(store.normalizeRowHeights({ headlines: 260.6 }).headlines, 261, 'a window is a whole number of pixels tall');
+  assert.equal(
+    store.normalizeRowHeights({ headlines: 'abc' }).headlines,
+    store.DEFAULT_ROW_HEIGHTS.headlines,
+    'not a height at all',
+  );
+  assert.equal(store.normalizeRowHeights({ side: 500 }).side, undefined, 'no window the reader has no border for');
+});
+
+/**
  * A border of the reader is a handle `src/lib/columns.js` builds out of the gap the markup declares,
- * so neither its caption nor the width limits it refuses to cross appear in the markup the guards
- * above read. What the page declares, what the script places and draws, and what the stylesheet
+ * so neither its caption nor the limits it refuses to cross appear in the markup the guards above
+ * read. A border runs along one of two axes: between two columns it sizes a width, across a column it
+ * sizes a height. What the page declares, what the script places and draws, and what the stylesheet
  * gives the handle are kept in step here: a gap with no handle drags nothing, and a handle the grid
- * does not place in a gap sits on top of a column.
+ * does not place in a gap sits on top of a window.
  */
 test('every reader border is a handle that can be grabbed, placed and clamped', () => {
   const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
@@ -2907,65 +2946,158 @@ test('every reader border is a handle that can be grabbed, placed and clamped', 
   const boot = fs.readFileSync(new URL('../src/columns-boot.js', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../src/styles/reader.css', import.meta.url), 'utf8');
 
-  const borders = [...html.matchAll(/data-column-resize="(\w+)"/g)].map((match) => match[1]);
-  assert.deepEqual(borders, store.RESIZABLE_PANELS, 'one handle per draggable border, in the order of the columns');
+  /* The two axes of `lib/columns.js`: the attribute the markup names a border by, the class of its
+   * handle, the custom property that carries the size, and the bounds of that size. */
+  const axes = [
+    {
+      attr: 'data-column-resize',
+      handle: 'col-resize',
+      prefix: '--col-',
+      floor: '--panel-min',
+      cursor: 'col-resize',
+      label: 'reader.column.resize',
+      strip: 'left: -1px',
+      minConst: 'MIN_PANEL_WIDTH',
+      maxConst: 'MAX_PANEL_WIDTH',
+      panels: store.RESIZABLE_PANELS,
+      defaults: store.DEFAULT_PANEL_WIDTHS,
+      min: store.MIN_PANEL_WIDTH,
+      max: store.MAX_PANEL_WIDTH,
+    },
+    {
+      attr: 'data-row-resize',
+      handle: 'row-resize',
+      prefix: '--row-',
+      floor: '--panel-row-min',
+      cursor: 'row-resize',
+      label: 'reader.row.resize',
+      strip: 'top: -1px',
+      minConst: 'MIN_PANEL_HEIGHT',
+      maxConst: 'MAX_PANEL_HEIGHT',
+      panels: store.RESIZABLE_ROWS,
+      defaults: store.DEFAULT_ROW_HEIGHTS,
+      min: store.MIN_PANEL_HEIGHT,
+      max: store.MAX_PANEL_HEIGHT,
+    },
+  ];
 
-  for (const panel of store.RESIZABLE_PANELS) {
-    assert.ok(
-      html.includes(`id="panel-${panel}"`),
-      `the ${panel} column has no id, so its handle has nothing to name in aria-controls`,
+  for (const axis of axes) {
+    const borders = [...html.matchAll(new RegExp(`${axis.attr}="(\\w+)"`, 'g'))].map((match) => match[1]);
+    assert.deepEqual(
+      borders,
+      axis.panels,
+      `one handle per draggable ${axis.attr} border, in the order of the windows`,
+    );
+
+    for (const panel of axis.panels) {
+      assert.ok(
+        html.includes(`id="panel-${panel}"`),
+        `the ${panel} window has no id, so its handle has nothing to name in aria-controls`,
+      );
+      assert.ok(
+        html.indexOf(`class="panel panel-${panel}"`) < html.indexOf(`${axis.attr}="${panel}"`),
+        `the handle of ${panel} stands before its window, so the grid puts them in each other's place`,
+      );
+      assert.ok(
+        css.includes(`${axis.prefix}${panel}:`) && script.includes(`\`${axis.prefix}\${panel}\``),
+        `nothing paints the ${axis.attr} size of the ${panel} window`,
+      );
+      assert.equal(
+        css.match(new RegExp(`${axis.prefix}${panel}: ([0-9]+)px`))?.[1],
+        String(axis.defaults[panel]),
+        `reader.css opens the ${panel} window along ${axis.attr} at a size lib/storage.js does not default to`,
+      );
+      assert.ok(
+        boot.includes(`${panel}: ${axis.defaults[panel]}`),
+        `columns-boot.js has no default ${axis.attr} size for the ${panel} window`,
+      );
+    }
+
+    for (const lang of i18n.LANGUAGES) {
+      assert.ok(
+        i18n.dictionaryKeys(lang).includes(axis.label),
+        `${lang} has no ${axis.label}, which every ${axis.attr} border asks to show`,
+      );
+    }
+
+    assert.match(
+      css,
+      new RegExp(`\\.${axis.handle}\\s*\\{[^}]*cursor: ${axis.cursor}`),
+      `reader.css draws the ${axis.handle} handle as a border you can grab`,
     );
     assert.ok(
-      html.indexOf(`class="panel panel-${panel}"`) < html.indexOf(`data-column-resize="${panel}"`),
-      `the handle of ${panel} stands before its column, so the grid puts them in each other's place`,
+      !new RegExp(`\\.${axis.handle}\\s*\\{[^}]*position:\\s*absolute`).test(css),
+      `the ${axis.handle} handle fills its gap cell as a grid item: absolutely positioned with only \`top\` given it is zero wide and zero tall, and no mouse can hit it`,
     );
     assert.ok(
-      css.includes(`--col-${panel}:`) && script.includes('`--col-${panel}`'),
-      `nothing paints the width of the ${panel} column`,
+      css.includes(axis.strip),
+      `the strip of the ${axis.handle} handle does not lie on the border the user aims at`,
     );
-  }
-
-  for (const lang of i18n.LANGUAGES) {
-    assert.ok(
-      i18n.dictionaryKeys(lang).includes('reader.column.resize'),
-      `${lang} has no reader.column.resize, which every border asks to show`,
+    assert.match(
+      css,
+      new RegExp(`${axis.floor}:\\s*\\d+px`),
+      `reader.css gives the windows along ${axis.attr} no floor of their own in their minmax`,
     );
-  }
-
-  assert.match(css, /\.col-resize\s*\{[^}]*cursor: col-resize/, 'reader.css draws the handle as a border you can grab');
-  assert.ok(
-    !/\.col-resize\s*\{[^}]*position:\s*absolute/.test(css),
-    'the handle fills its gap cell as a grid item: absolutely positioned with only `top` given it is zero wide and zero tall, and no mouse can hit it',
-  );
-  assert.ok(css.includes('left: -1px'), 'the strip of the handle lies on the column border the user aims at');
-  assert.match(css, /--panel-min:\s*\d+px/, 'reader.css gives every column a floor in its own minmax');
-  assert.equal(
-    Number(css.match(/--panel-min:\s*(\d+)px/)[1]),
-    store.MIN_PANEL_WIDTH,
-    'the floor of the grid and the floor of the stored width are the same number',
-  );
-
-  for (const panel of store.RESIZABLE_PANELS) {
     assert.equal(
-      css.match(new RegExp(`--col-${panel}: ([0-9]+)px`))?.[1],
-      String(store.DEFAULT_PANEL_WIDTHS[panel]),
-      `reader.css opens the ${panel} column at a width lib/storage.js does not default to`,
+      Number(css.match(new RegExp(`${axis.floor}:\\s*(\\d+)px`))[1]),
+      axis.min,
+      `the floor of the grid along ${axis.attr} and the floor of the stored size are not the same number`,
     );
     assert.ok(
-      boot.includes(`${panel}: ${store.DEFAULT_PANEL_WIDTHS[panel]}`),
-      `columns-boot.js has no default width for the ${panel} column`,
+      boot.includes(`${axis.minConst} = ${axis.min}`),
+      `columns-boot.js clamps ${axis.attr} to another minimum`,
+    );
+    assert.ok(
+      boot.includes(`${axis.maxConst} = ${axis.max}`),
+      `columns-boot.js clamps ${axis.attr} to another ceiling`,
+    );
+    assert.ok(
+      script.includes(`min: ${axis.minConst},`),
+      `lib/columns.js gives the ${axis.attr} axis no floor to stop a drag at`,
     );
   }
 
-  assert.ok(boot.includes(`MIN_PANEL_WIDTH = ${store.MIN_PANEL_WIDTH}`), 'columns-boot.js clamps to the same minimum');
-  assert.ok(boot.includes(`MAX_PANEL_WIDTH = ${store.MAX_PANEL_WIDTH}`), 'columns-boot.js clamps to the same ceiling');
-
-  // The width is written when the button is released, and the minimum is what the drag cannot cross.
-  assert.ok(script.includes("addEventListener('pointerup'"), 'releasing the border is what writes its width');
-  assert.ok(script.includes('MIN_PANEL_WIDTH),'), 'the drag stops at the minimum width instead of crossing it');
+  // The size is written when the button is released, and both floors are what the drag cannot cross.
+  assert.ok(script.includes("addEventListener('pointerup'"), 'releasing the border is what writes its size');
+  assert.ok(script.includes('MIN_PANEL_HEIGHT'), 'the drag stops at the minimum height instead of crossing it');
   assert.ok(
     script.includes('setPointerCapture'),
     'a border released outside the reader window still ends its drag instead of following the cursor',
+  );
+});
+
+/**
+ * The cell of a handle is written into the handle's own `style`, because which border an arrangement has
+ * is a fact about the arrangement, not about the gap the markup declares. The next arrangement asks the
+ * stylesheet what shape the grid has before it places the handles again — and a cell left written in a
+ * handle's style is not an empty cell: it adds a track of its own to the grid, the answer about the grid
+ * comes back saying the columns are wrapped when they are not, and the window that border used to end
+ * falls into the gap track. Hiding the handle is no answer either: `display: none` takes it out of the
+ * grid, so its cell is free for auto-placement again. The text is all this guard can read — the failure
+ * only shows in a browser.
+ */
+test('every handle gives back the grid cell it wrote before any handle is placed again', () => {
+  const script = fs.readFileSync(new URL('../src/lib/columns.js', import.meta.url), 'utf8');
+  const placement = script.slice(
+    script.indexOf('function paintAreas'),
+    script.indexOf('function maxPanelSize'),
+  );
+  assert.ok(placement.startsWith('function paintAreas'), 'lib/columns.js has no paintAreas to place');
+
+  for (const property of ['grid-column', 'grid-row']) {
+    assert.ok(
+      placement.includes(`handle.style.removeProperty('${property}')`),
+      `lib/columns.js leaves the ${property} it wrote in a handle's style, so the arrangement it leaves keeps a cell in the next one`,
+    );
+    assert.ok(
+      !placement.includes(`removeProperty(before`),
+      `lib/columns.js undoes the ${property} of a handle from a remembered value instead of by its name`,
+    );
+  }
+
+  assert.ok(
+    placement.indexOf(`removeProperty('grid-row')`) < placement.indexOf('areaFor('),
+    'lib/columns.js asks the grid how tall it is while a stale row of the last arrangement is still painted, so an arrangement reads itself as wrapped',
   );
 });
 
@@ -3028,12 +3160,39 @@ test("every arrangement of the reader's panels is offered, placed, named and rem
 
   /* A border that an arrangement hides is hidden by a rule naming that arrangement: only the
    * arrangement that wraps into rows in a narrow window loses the border above its article, and a rule
-   * naming no arrangement would take the same border from the ones that do not wrap. */
-  for (const [, before, panel, body] of css.matchAll(/([^{}]*)\.col-resize\[data-column-resize="(\w+)"\][^{}]*\{([^}]*)\}/g)) {
-    if (!body.includes('display: none')) continue;
+   * naming no arrangement would take the same border from the ones that do not wrap. The same holds for
+   * the border across a column, which only the arrangement that cuts a column in two can show. */
+  for (const handle of ['col-resize', 'row-resize']) {
+    const attr = handle === 'col-resize' ? 'data-column-resize' : 'data-row-resize';
+    for (const [, before, , body] of css.matchAll(
+      new RegExp(`([^{}]*)\\.${handle}\\[${attr}="(\\w+)"\\][^{}]*\\{([^}]*)\\}`, 'g'),
+    )) {
+      if (!body.includes('display: none')) continue;
+      assert.ok(
+        before.includes('data-layout'),
+        `the handle of the ${attr} border is hidden by a rule that names no arrangement, so the arrangements that keep that border lose it too`,
+      );
+    }
+  }
+
+  /* The columns of an arrangement are its panels read another way, and a column that holds two windows
+   * is the one place a height border exists: `lib/columns.js` derives every handle from `LAYOUT_COLUMNS`,
+   * so an arrangement that cuts a column must also be an arrangement whose grid gives that cut a row of
+   * its own. */
+  for (const layout of store.LAYOUTS) {
+    const columns = store.LAYOUT_COLUMNS[layout];
+    assert.ok(columns, `lib/storage.js names no columns for the ${layout} arrangement`);
+    assert.deepEqual(
+      columns.flat(),
+      store.LAYOUT_PANELS[layout],
+      `the ${layout} arrangement's columns are not its panels: a window would be placed twice or not at all`,
+    );
+    if (!columns.some((column) => column.length > 1)) continue;
+    const at = css.indexOf(`.panels[data-layout="${layout}"] {`);
+    const body = at < 0 ? '' : css.slice(at, css.indexOf('}', at));
     assert.ok(
-      before.includes('data-layout'),
-      `the handle of the ${panel} border is hidden by a rule that names no arrangement, so the arrangements that keep that border lose it too`,
+      body.includes('grid-template-rows:') && body.includes('--row-'),
+      `the ${layout} arrangement cuts a column in two, but its grid gives that cut no row of its own`,
     );
   }
 

@@ -14,6 +14,7 @@
 
 import { t } from './i18n.js';
 import {
+  LAYOUT_COLUMNS,
   LAYOUT_KEY,
   LAYOUT_PANELS,
   LAYOUTS,
@@ -43,6 +44,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const STEP_LABELS = {
   three: 'reader.layout.three',
   list: 'reader.layout.list',
+  split: 'reader.layout.split',
 };
 
 /** The name of the whole switcher: the tooltip of the group and its aria-label. */
@@ -88,6 +90,15 @@ export function currentLayout() {
 /** The panels of an arrangement, left to right — the same list the grid of `reader.css` lays out. */
 export function layoutPanels(layout = currentLayout()) {
   return LAYOUT_PANELS[normalizeLayout(layout)];
+}
+
+/**
+ * The same panels column by column: an entry per column, and a column that holds two windows one above
+ * the other names both. `lib/columns.js` reads the borders of the arrangement from this list rather
+ * than being told them again for every arrangement.
+ */
+export function layoutColumns(layout = currentLayout()) {
+  return LAYOUT_COLUMNS[normalizeLayout(layout)];
 }
 
 /** Does the arrangement show the feeds column, and with it the choice of a single feed? */

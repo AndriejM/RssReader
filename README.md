@@ -231,22 +231,28 @@ Three vertical panels:
    delete leaves a line along the bottom edge of the column — laid over its text, so the text never
    shifts — that names the headline it took and offers **Undo**.
 
-These three panels are one of two **arrangements**, chosen by the switcher of two icons in the top-left
-corner of the screen, right after the name of the app, and written to storage as `settings.layout`; the
-choice belongs to the reader, not to the tab:
+These three panels are one of three **arrangements**, chosen by the switcher of three icons in the
+top-left corner of the screen, right after the name of the app, and written to storage as
+`settings.layout`; the choice belongs to the reader, not to the tab:
 
 - **Three columns** (`three`, the default): feeds on the left, headlines in the middle, the open news
   on the right — what the three items above describe.
 - **Two columns** (`list`): the feeds column is gone. The left column holds the headlines of every
   feed at once — exactly the “All feeds” selection, which there is no longer a column to change — and
   the right column the news chosen among them.
+- **Two columns, one of them cut across** (`split`): the feeds column stays on the left, and the column
+  beside it is cut into two windows one above the other — the headlines of the feed chosen on the left
+  in the upper window, the news picked among them in the lower one, the way a mail client puts them.
+  The feeds column is there, so a single feed is still chosen and read on its own.
 
 A column an arrangement does not show leaves the grid entirely, and its border leaves with it: what
-remains is still draggable, and the border of the headline column sizes the same width in both
-arrangements (`settings.column_widths` holds one width per column, not per arrangement). A window
-narrower than 980 px wraps the three columns into two rows, while the two columns of the other
-arrangement stay side by side — there is no third column to move under them. An arrangement chosen in
-one reader tab repaints the other without a reload.
+remains is still draggable, and the border of the headline column sizes the same width in every
+arrangement that puts the headlines beside the news (`settings.column_widths` holds one width per
+column, not per arrangement). A window narrower than 980 px wraps the panels into two rows: the article
+takes the whole lower row, the two columns of `list` stay side by side — there is no third column to
+move under them — and the cut of `split` closes again, since the window under it is that article row
+and leaves no height to move. An arrangement chosen in one reader tab repaints the other without a
+reload.
 
 In the head of every panel there is its own font size switcher: four buttons drawn as the letter “A”,
 each at the size it stands for. A button scales only the column it sits in — the feed list, the
@@ -255,17 +261,20 @@ the article is read at a large size. The size of a column is written to storage 
 chosen (`settings.font_scales`) and is applied again when the reader opens; two reader tabs keep the
 same sizes, and a size chosen in one tab repaints the other without a reload.
 
-The border between two columns is a handle: hover it and a thin accent line lights up in the gap,
-press and hold the left mouse button and move the mouse left or right — the column to the left of
-the border takes the width and its neighbour gives the rest back. The article column is never
-dragged: it keeps whatever width the window leaves it. A column stops at 160 px and never grows
-past 900 px, and a drag cannot push a neighbouring column under 160 px either, so the border
-simply stops moving where a neighbour would start to vanish. The width is written to storage when
-the button is released (`settings.column_widths`), not while the border moves — a press that never
-moved writes nothing — and the reader opens at the remembered widths; two reader tabs keep the same
-widths, and a border moved in one tab repaints the other without a reload. In a window narrower
-than 980 px the panels wrap into two rows, and only the border between the two lists stays a
-handle.
+The border between two windows is a handle: hover it and a thin accent line lights up in the gap,
+press and hold the left mouse button and move the mouse — the window before the border takes the size
+and its neighbour gives the rest back. A border between two columns runs vertically and moves a width;
+the border that cuts a column of `split` into two windows runs horizontally and moves a height. The
+last window of a row or of a column is never dragged: the article column keeps whatever width the other
+two leave it, and the lower window of a cut column whatever height the upper one leaves it. A column
+stops at 160 px and never grows past 900 px; a window of a cut column stops at 120 px and never grows
+past 900 px. A drag cannot push a neighbouring window under its floor either, so the border simply
+stops moving where a neighbour would start to vanish. The size is written to storage when the button is
+released (`settings.column_widths` for a width, `settings.row_heights` for a height), not while the
+border moves — a press that never moved writes nothing — and the reader opens at the remembered sizes;
+two reader tabs keep the same sizes, and a border moved in one tab repaints the other without a reload.
+In a window narrower than 980 px the panels wrap into two rows, and only the borders that still have a
+size to move stay handles.
 
 When the reader opens, no cursor is left empty: the “All feeds” row is selected, the middle panel
 has the freshest headline of all the feeds, and its text is shown in the right panel right away. A
@@ -504,10 +513,12 @@ src/lib/theme.js              light/dark theme
 src/lib/fontsize.js           the size switcher in the head of a reader column: every column is sized
                               on its own, its size is written to the settings
 src/font-boot.js              paint the remembered sizes before the page is drawn by its module
-src/lib/columns.js            the draggable border between reader columns: it sizes the column on
-                              its left, keeps it inside its limits and writes the width to the
+src/lib/columns.js            the draggable borders between the reader's windows: a border between two
+                              columns sizes the window on its left, a border across a column sizes the
+                              window above it; each keeps the size inside its limits and writes it to the
                               settings when the button is released
-src/columns-boot.js           paint the remembered widths before the page is drawn by its module
+src/columns-boot.js           paint the remembered widths and heights before the page is drawn by its
+                              module
 src/lib/layout.js             the arrangement of the reader's panels: which columns the reader shows,
                               the switcher in the screen header that chooses it, its choice written to
                               the settings
@@ -705,7 +716,7 @@ A ticket whose `until` has passed belongs to a read that never came back (the wo
 the browser was closed), so it stops holding the feed: `store.tryLockFeed` drops such tickets and
 so does `store.cleanup` (see “Implementation notes”).
 
-**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "sound_file": "src/media/ceres.mp3", "sound_volume": 100, "show_message": false, "read_ttl_days": 7, "language": "ru", "first_feed_done": true, "font_scales": { "feeds": 1, "headlines": 1.2, "content": 1 }, "column_widths": { "feeds": 240, "headlines": 340 }, "layout": "three" }`. `sound` is the «Sound» checkbox: off, and an automatic load plays no signal. `font_scales` is the font size of every reader column: a multiplier from the ladder `0.85 / 1 / 1.2 / 1.45` (`store.FONT_SCALES`), chosen by the switcher in the head of that column. `column_widths` is the width in pixels of every column the mouse can size — the feed column and the headline column — each clamped to 160..900 px (`store.MIN_PANEL_WIDTH`, `store.MAX_PANEL_WIDTH`); the article column takes the width the other two leave in the window. `layout` is the arrangement of the reader's panels: `three` (feeds, headlines, the open news — the default) or `list` (no feeds column: the headlines of every feed and the news open among them). `store.LAYOUT_PANELS` names the panels of every arrangement, and the reader marks the one it paints with `data-layout` on `.panels`. `first_feed_done` is the feed screen's mark that a feed has already been added and its headlines have come: it is absent before the first successful add, is set once and never taken back (not even after the feeds are deleted), so the confirmation of a first add does not repeat on every saved row. A first run is an empty feed table with no such mark (`store.getFirstFeedDone` / `store.setFirstFeedDone`).
+**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "sound_file": "src/media/ceres.mp3", "sound_volume": 100, "show_message": false, "read_ttl_days": 7, "language": "ru", "first_feed_done": true, "font_scales": { "feeds": 1, "headlines": 1.2, "content": 1 }, "column_widths": { "feeds": 240, "headlines": 340 }, "row_heights": { "headlines": 340 }, "layout": "three" }`. `sound` is the «Sound» checkbox: off, and an automatic load plays no signal. `font_scales` is the font size of every reader column: a multiplier from the ladder `0.85 / 1 / 1.2 / 1.45` (`store.FONT_SCALES`), chosen by the switcher in the head of that column. `column_widths` is the width in pixels of every column the mouse can size — the feed column and the headline column — each clamped to 160..900 px (`store.MIN_PANEL_WIDTH`, `store.MAX_PANEL_WIDTH`); the article column takes the width the other two leave in the window. `row_heights` is the height in pixels of every window whose border runs across a column instead of between two columns — in `split` that is the upper window of the cut column — each clamped to 120..900 px (`store.MIN_PANEL_HEIGHT`, `store.MAX_PANEL_HEIGHT`); the window under it takes the height the upper one leaves, and `store.RESIZABLE_ROWS` names the rows the mouse can size this way. `layout` is the arrangement of the reader's panels: `three` (feeds, headlines, the open news — the default), `list` (no feeds column: the headlines of every feed and the news open among them) or `split` (the feeds column stays, and the column beside it is cut across: the headlines of the feed chosen on the left in the window above, the news picked among them in the window below). `store.LAYOUT_PANELS` names the panels of every arrangement, `store.LAYOUT_COLUMNS` groups those panels into the columns they stand in — the cut column of `split` is the only column that holds two panels — and the reader marks the one it paints with `data-layout` on `.panels`. `first_feed_done` is the feed screen's mark that a feed has already been added and its headlines have come: it is absent before the first successful add, is set once and never taken back (not even after the feeds are deleted), so the confirmation of a first add does not repeat on every saved row. A first run is an empty feed table with no such mark (`store.getFirstFeedDone` / `store.setFirstFeedDone`).
 
 Other storage properties:
 
@@ -726,9 +737,10 @@ Other storage properties:
   `chrome.storage.local`.
 - The sizes of the reader columns are cached the same way (`rss-reader:font-scales`): `src/font-boot.js`
   paints them before the page module runs, so a column never shows its text at another size first.
-- The widths of the reader columns are cached the same way (`rss-reader:column-widths`): on top of
-  `settings.column_widths`, so `src/columns-boot.js` can open every column at its remembered width
-  without waiting for the asynchronous read.
+- The widths of the reader columns are cached the same way (`rss-reader:column-widths`), and so are the
+  heights of the windows an arrangement cuts into one column (`rss-reader:row-heights`): on top of
+  `settings.column_widths` and `settings.row_heights`, so `src/columns-boot.js` can open every window at
+  its remembered size without waiting for the asynchronous read.
 - The arrangement of the panels is cached the same way (`rss-reader:layout`), a single word: on top of
   `settings.layout`, so `src/layout-boot.js` can put the remembered `data-layout` on `.panels` before
   the page module runs and the reader never draws three columns and then throws one away.
@@ -751,9 +763,9 @@ communicate like this:
 
 Additionally, pages and the background listen to `chrome.storage.onChanged`: a change in `feeds`
 rebuilds alarms, a change in `items` updates the badge and the lists, a change in `settings`
-(theme, `read_ttl_days`, the `sound` flag, the selected `sound_file`, `show_message`, `language`, the column sizes of `font_scales` or
-the column widths of `column_widths`) runs the cleanup under the new rules, and the pages switch the
-language of their labels — and the reader repaints the size or the width of the column that
+(theme, `read_ttl_days`, the `sound` flag, the selected `sound_file`, `show_message`, `language`, the column sizes of `font_scales`, the
+widths of `column_widths` or the heights of `row_heights`) runs the cleanup under the new rules, and
+the pages switch the language of their labels — and the reader repaints the size or the border that
 changed, wherever that change came from. This is why the screens never “drift apart” from the
 background.
 
@@ -1330,6 +1342,21 @@ are wrong, and the full text of an article, which is pulled with `querySelector`
     and back → the failure is dropped, the line speaks only about the load it knows now. With no
     article open, the right panel shows the failure itself: its placeholder (`#content-empty`) carries
     `role="alert"` for the time.
+
+38. Walk through the three arrangements with the icons after the name of the app → `three` stands in three
+    columns, `list` loses the feeds column and shows the headlines of every feed at once, `split` keeps
+    the feeds column and cuts the column beside it into an upper window with the headlines of the feed
+    chosen on the left and a lower window with the news picked among them. Drag the vertical border in
+    every arrangement that shows one → the column on its left takes the width, and an arrangement that
+    hides a column hides that border too. In `split` drag the horizontal border between its two windows →
+    the upper window takes the height and the lower gives the rest away; the border stops at 120 px and at
+    900 px, and it stops earlier where the lower window would start to vanish. Switch between the
+    arrangements in any order, `split` back into `list` included → every border goes back to the gap it
+    belongs to and stays grabbable there: no arrangement leaves a window of the next one squeezed into an
+    eight pixel gap. Close the reader and open
+    it again → the arrangement, the widths and the height come back as they were (`settings.layout`,
+    `settings.column_widths`, `settings.row_heights`). Narrow the window under 980 px → the panels wrap
+    into two rows, the cut closes and its horizontal border stops being a handle.
 
 ## Limitations
 
