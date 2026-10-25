@@ -9,6 +9,7 @@
 // The width is written when the button is released, not while the border moves.
 
 import { t } from './i18n.js';
+import { LAYOUT_EVENT, layoutPanels } from './layout.js';
 import {
   COLUMN_WIDTHS_KEY,
   MIN_PANEL_WIDTH,
@@ -29,33 +30,46 @@ const PANEL_ATTR = 'data-column-resize';
 const HANDLE_LABEL = 'reader.column.resize';
 
 /**
- * Where a handle sits. The grid of the wide layout is `column gap column gap column`, so a handle owns
- * the gap column that follows the column it sizes (see `reader.css`).
+ * Where a handle sits. The grid of an arrangement is `column gap column gap column`, so a handle owns
+ * the gap column that follows the column it sizes (see `reader.css`): the panel that stands `i`-th in
+ * the arrangement has its border in the grid column `2i + 2`.
  */
-const HANDLE_AREA = {
-  feeds: { gridColumn: '2 / 3', gridRow: '1 / 2' },
-  headlines: { gridColumn: '4 / 5', gridRow: '1 / 2' },
-};
-
-/**
- * The same handles in the narrow layout: the panels wrap into three rows, and the gap between the two
- * list rows is a row gap rather than a column one. Only the border between the lists stays a handle:
- * the article takes the whole last row, so the border above it has no column width left to drag.
- */
-const HANDLE_AREA_STACKED = {
-  feeds: { gridColumn: '2 / 3', gridRow: '1 / 2' },
-};
-
-/** The page is in the stacked layout from the `max-width` rule of `reader.css` at most this wide. */
-const STACKED_MAX_WIDTH = 980;
-
-function stacked() {
-  return window.innerWidth <= STACKED_MAX_WIDTH;
+function areaOf(index) {
+  return { gridColumn: `${2 * index + 2} / ${2 * index + 3}`, gridRow: '1 / 2' };
 }
 
-/** Where a handle belongs now, or nothing at all when this layout gives it no border to drag. */
+/** The panels the arrangement painted on the page shows, left to right. */
+function shownPanels() {
+  return layoutPanels();
+}
+
+/**
+ * Is the page in its stacked form now? The stylesheet decides when the panels wrap into rows, not this
+ * script, so the question is asked of the grid the stylesheet gave the panels: more than one row means
+ * the panels wrapped. Asking the width directly would repeat a number the stylesheet owns.
+ */
+function stacked(panels) {
+  if (!panels) return false;
+  return getComputedStyle(panels).gridTemplateRows.trim().split(/\s+/).length > 1;
+}
+
+/**
+ * The panels that share the first row: in the stacked form the last panel of the arrangement takes a row
+ * of its own (see the `max-width` rule of `reader.css`), so its border stops being a column border and
+ * stops being a handle.
+ */
+function rowPanels(panels) {
+  const shown = shownPanels();
+  return stacked(panels) ? shown.slice(0, -1) : shown;
+}
+
+/** Where a handle belongs now, or nothing at all when this arrangement gives that border no cell. */
 function areaFor(panel) {
-  return (stacked() ? HANDLE_AREA_STACKED : HANDLE_AREA)[panel];
+  const row = rowPanels(panelsSurface());
+  const index = row.indexOf(panel);
+  // The last panel of the row has no border to its right, and a panel the arrangement does not show
+  // has no column of its own at all.
+  return index < 0 || index === row.length - 1 ? null : areaOf(index);
 }
 
 function panelsSurface() {
@@ -94,7 +108,7 @@ function paint(widths) {
   }
 }
 
-/** Re-place every handle: the borders move when the layout switches between its two forms. */
+/** Re-place every handle: the borders move when the reader changes its arrangement or its shape. */
 function paintAreas() {
   for (const panel of RESIZABLE_PANELS) {
     const handle = document.querySelector(`[${PANEL_ATTR}="${panel}"]`);
@@ -112,8 +126,8 @@ function paintAreas() {
  * either side of the border.
  */
 function maxPanelWidth(panels) {
-  // Stacked, the article owns a row of its own: only the list next to the dragged one shares its row.
-  const neighbours = stacked() ? 1 : panels.querySelectorAll('.panel').length - 1;
+  // Only the panels of the same row can give width away: stacked, the article owns a row of its own.
+  const neighbours = rowPanels(panels).length - 1;
   const room = panels.clientWidth - (MIN_PANEL_WIDTH + columnGap(panels)) * neighbours;
   return Math.max(MIN_PANEL_WIDTH, room);
 }
@@ -234,10 +248,11 @@ export function mountColumnResizers() {
     });
   }
 
-  // A handle is placed by the grid area its border belongs to, and that area changes when the
-  // reader switches between its three-column form and its two-row form.
+  // A handle is placed by the grid area its border belongs to, and that area changes when the reader
+  // switches between its forms or between its arrangements: the panels the borders sit between differ.
   paintAreas();
   window.addEventListener('resize', paintAreas);
+  document.addEventListener(LAYOUT_EVENT, paintAreas);
 
   applyCachedColumnWidths();
 }

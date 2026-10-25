@@ -218,6 +218,12 @@ const DICTIONARIES = {
     // The boundary between columns: its tooltip and aria-label.
     'reader.column.resize': 'Потяните, чтобы изменить ширину колонки',
 
+    // The switcher of the arrangements of the panels: the name of the group and one caption per
+    // arrangement — the tooltip and aria-label of each button too.
+    'reader.layout.aria': 'Раскладка колонок читалки',
+    'reader.layout.three': 'Три колонки: ленты, заголовки, новость',
+    'reader.layout.list': 'Две колонки: заголовки всех лент и новость',
+
     'feeds.title': 'Настройки RSS лент',
     'feeds.caption': 'Таблица лент: название, ссылка, период загрузки заголовков, время хранения новости',
     'feeds.add': 'Добавить ленту',
@@ -500,6 +506,12 @@ const DICTIONARIES = {
     // The border between two columns: its tooltip and its aria-label.
     'reader.column.resize': 'Drag to change the width of this column',
 
+    // The switcher of the arrangements of the panels: the name of the group and one caption per
+    // arrangement — the tooltip and aria-label of each button too.
+    'reader.layout.aria': 'Layout of the reader columns',
+    'reader.layout.three': 'Three columns: feeds, headlines, news',
+    'reader.layout.list': 'Two columns: headlines of every feed, and the news',
+
     'feeds.title': 'RSS feed settings',
     'feeds.caption': 'Feed table: name, link, headline fetch period, news storage time',
     'feeds.add': 'Add feed',
@@ -774,6 +786,12 @@ const DICTIONARIES = {
     'reader.headlines.list.aria': 'Список заголовків вибраної стрічки',
 
     'reader.column.resize': 'Перетягніть, щоб змінити ширину колонки',
+
+    // The switcher of the arrangements of the panels: the name of the group and one caption per
+    // arrangement — the tooltip and aria-label of each button too.
+    'reader.layout.aria': 'Компоновка колонок читалки',
+    'reader.layout.three': 'Три колонки: стрічки, заголовки, новина',
+    'reader.layout.list': 'Дві колонки: заголовки усіх стрічок і новина',
 
     'feeds.title': 'Налаштування RSS-стрічок',
     'feeds.caption': 'Таблиця стрічок: назва, посилання, період завантаження заголовків, час зберігання новини',
@@ -1062,6 +1080,12 @@ const DICTIONARIES = {
 
     'reader.column.resize': 'Przeciągnij, aby zmienić szerokość tej kolumny',
 
+    // The switcher of the arrangements of the panels: the name of the group and one caption per
+    // arrangement — the tooltip and aria-label of each button too.
+    'reader.layout.aria': 'Układ kolumn czytnika',
+    'reader.layout.three': 'Trzy kolumny: kanały, nagłówki, wiadomość',
+    'reader.layout.list': 'Dwie kolumny: nagłówki wszystkich kanałów i wiadomość',
+
     'feeds.title': 'Ustawienia kanałów RSS',
     'feeds.caption': 'Tabela kanałów: nazwa, link, okres pobierania nagłówków, czas przechowywania wiadomości',
     'feeds.add': 'Dodaj kanał',
@@ -1345,6 +1369,12 @@ const DICTIONARIES = {
 
     'reader.column.resize': 'Ziehen, um die Breite dieser Spalte zu ändern',
 
+    // The switcher of the arrangements of the panels: the name of the group and one caption per
+    // arrangement — the tooltip and aria-label of each button too.
+    'reader.layout.aria': 'Anordnung der Reader-Spalten',
+    'reader.layout.three': 'Drei Spalten: Feeds, Schlagzeilen, Nachricht',
+    'reader.layout.list': 'Zwei Spalten: Schlagzeilen aller Feeds und die Nachricht',
+
     'feeds.title': 'Einstellungen der RSS-Feeds',
     'feeds.caption': 'Feedtabelle: Name, Link, Zeitraum des Schlagzeilenladens, Aufbewahrungszeit der Nachricht',
     'feeds.add': 'Feed hinzufügen',
@@ -1618,7 +1648,13 @@ const DICTIONARIES = {
     'reader.feeds.list.aria': 'Flux : choisissez un flux pour lire ses titres',
     'reader.headlines.list.aria': 'Liste des titres du flux choisi',
 
-    'reader.column.resize': 'Faites glisser pour modifier la largeur de cette colonne',
+    'reader.column.resize': 'Faites glisser pour changer la largeur de cette colonne',
+
+    // The switcher of the arrangements of the panels: the name of the group and one caption per
+    // arrangement — the tooltip and aria-label of each button too.
+    'reader.layout.aria': 'Disposition des colonnes du lecteur',
+    'reader.layout.three': 'Trois colonnes : flux, titres, actualité',
+    'reader.layout.list': 'Deux colonnes : les titres de tous les flux et l’actualité',
 
     'feeds.title': 'Réglages des flux RSS',
     'feeds.caption': 'Tableau des flux : nom du flux, lien, périodicité du chargement des titres, durée de conservation de l’actualité',
@@ -1894,6 +1930,12 @@ const DICTIONARIES = {
     'reader.headlines.list.aria': 'Lista de titulares de la fuente seleccionada',
 
     'reader.column.resize': 'Arrastre para cambiar el ancho de esta columna',
+
+    // The switcher of the arrangements of the panels: the name of the group and one caption per
+    // arrangement — the tooltip and aria-label of each button too.
+    'reader.layout.aria': 'Disposición de las columnas del lector',
+    'reader.layout.three': 'Tres columnas: fuentes, titulares, noticia',
+    'reader.layout.list': 'Dos columnas: titulares de todas las fuentes y la noticia',
 
     'feeds.title': 'Ajustes de fuentes RSS',
     'feeds.caption': 'Tabla de fuentes: nombre de la fuente, enlace, periodicidad de carga de titulares, tiempo de conservación de la noticia',

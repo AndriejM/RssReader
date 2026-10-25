@@ -113,11 +113,27 @@
       <line x1="16" y1="13" x2="8" y2="13"></line>
       <line x1="16" y1="17" x2="8" y2="17"></line>
     </symbol>
+    <!--
+      The arrangements of the reader's panels, drawn as the shape they put the columns in: the outline
+      of the window and the lines between its columns (`lib/layout.js` names one glyph per
+      arrangement, `icon-layout-<arrangement>`).
+    -->
+    <symbol id="icon-layout-three" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+      <line x1="9" y1="4" x2="9" y2="20"></line>
+      <line x1="15" y1="4" x2="15" y2="20"></line>
+    </symbol>
+    <symbol id="icon-layout-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+      <line x1="12" y1="4" x2="12" y2="20"></line>
+    </symbol>
   </svg>
 
   <header class="app-header">
     <div class="brand">
       <span data-i18n="app.name"></span>
+      <!-- The switcher `lib/layout.js` fills with one button per arrangement of the panels. -->
+      <div class="layout-switch" data-layout-switch data-i18n-title="reader.layout.aria" data-i18n-aria="reader.layout.aria"></div>
     </div>
     <div class="actions">
       <!-- The switcher `lib/nav.js` fills with the three screen icons, current screen marked. -->
@@ -133,7 +149,13 @@
     </div>
   </header>
 
-  <main class="panels">
+  <!--
+    The arrangement of the panels: `data-layout` names it, `reader.css` holds the grid of each one, and
+    `lib/layout.js` changes it when the switcher is pressed. The value written here is the arrangement
+    of `DEFAULT_LAYOUT` in `lib/storage.js`; `layout-boot.js` puts the remembered one in its place
+    before the page module runs.
+  -->
+  <main class="panels" data-layout="three">
     <section id="panel-feeds" class="panel panel-feeds" data-i18n-aria="reader.feeds.panelAria">
       <div class="panel-head">
         <h2 data-i18n="reader.feeds.title"></h2>
@@ -371,11 +393,12 @@
   <p class="sr-only" id="reader-announce" role="status" aria-live="polite" aria-atomic="true"></p>
 
   <!--
-    Read last in the markup on purpose: it paints every column at its remembered size and its
-    remembered width from the localStorage cache, and the panels it looks for have to exist already.
-    It runs before the page module, so a column never shows its text at the wrong size or the wrong
-    width first.
+    Read last in the markup on purpose: it paints the arrangement of the panels, every column at its
+    remembered size and every border at its remembered width from the localStorage cache, and the
+    panels it looks for have to exist already. It runs before the page module, so the reader never
+    shows a shape, a size or a width first and corrects them afterwards.
   -->
+  <script src="layout-boot.js"></script>
   <script src="font-boot.js"></script>
   <script src="columns-boot.js"></script>
 </body>

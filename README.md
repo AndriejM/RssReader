@@ -231,6 +231,23 @@ Three vertical panels:
    delete leaves a line along the bottom edge of the column — laid over its text, so the text never
    shifts — that names the headline it took and offers **Undo**.
 
+These three panels are one of two **arrangements**, chosen by the switcher of two icons in the top-left
+corner of the screen, right after the name of the app, and written to storage as `settings.layout`; the
+choice belongs to the reader, not to the tab:
+
+- **Three columns** (`three`, the default): feeds on the left, headlines in the middle, the open news
+  on the right — what the three items above describe.
+- **Two columns** (`list`): the feeds column is gone. The left column holds the headlines of every
+  feed at once — exactly the “All feeds” selection, which there is no longer a column to change — and
+  the right column the news chosen among them.
+
+A column an arrangement does not show leaves the grid entirely, and its border leaves with it: what
+remains is still draggable, and the border of the headline column sizes the same width in both
+arrangements (`settings.column_widths` holds one width per column, not per arrangement). A window
+narrower than 980 px wraps the three columns into two rows, while the two columns of the other
+arrangement stay side by side — there is no third column to move under them. An arrangement chosen in
+one reader tab repaints the other without a reload.
+
 In the head of every panel there is its own font size switcher: four buttons drawn as the letter “A”,
 each at the size it stands for. A button scales only the column it sits in — the feed list, the
 headline list and the article text are sized independently, so the middle column stays compact while
@@ -491,6 +508,10 @@ src/lib/columns.js            the draggable border between reader columns: it si
                               its left, keeps it inside its limits and writes the width to the
                               settings when the button is released
 src/columns-boot.js           paint the remembered widths before the page is drawn by its module
+src/lib/layout.js             the arrangement of the reader's panels: which columns the reader shows,
+                              the switcher in the screen header that chooses it, its choice written to
+                              the settings
+src/layout-boot.js            paint the remembered arrangement before the page is drawn by its module
 src/lib/keys.js               the names a pressed key answers to: what the current layout printed, plus
                               the letter of the physical key, so the keys of the reader work on any
                               keyboard layout
@@ -684,7 +705,7 @@ A ticket whose `until` has passed belongs to a read that never came back (the wo
 the browser was closed), so it stops holding the feed: `store.tryLockFeed` drops such tickets and
 so does `store.cleanup` (see “Implementation notes”).
 
-**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "sound_file": "src/media/ceres.mp3", "sound_volume": 100, "show_message": false, "read_ttl_days": 7, "language": "ru", "first_feed_done": true, "font_scales": { "feeds": 1, "headlines": 1.2, "content": 1 }, "column_widths": { "feeds": 240, "headlines": 340 } }`. `sound` is the «Sound» checkbox: off, and an automatic load plays no signal. `font_scales` is the font size of every reader column: a multiplier from the ladder `0.85 / 1 / 1.2 / 1.45` (`store.FONT_SCALES`), chosen by the switcher in the head of that column. `column_widths` is the width in pixels of every column the mouse can size — the feed column and the headline column — each clamped to 160..900 px (`store.MIN_PANEL_WIDTH`, `store.MAX_PANEL_WIDTH`); the article column takes the width the other two leave in the window. `first_feed_done` is the feed screen's mark that a feed has already been added and its headlines have come: it is absent before the first successful add, is set once and never taken back (not even after the feeds are deleted), so the confirmation of a first add does not repeat on every saved row. A first run is an empty feed table with no such mark (`store.getFirstFeedDone` / `store.setFirstFeedDone`).
+**`settings`** — `{ "theme": "dark" | "light", "sound": true | false, "sound_file": "src/media/ceres.mp3", "sound_volume": 100, "show_message": false, "read_ttl_days": 7, "language": "ru", "first_feed_done": true, "font_scales": { "feeds": 1, "headlines": 1.2, "content": 1 }, "column_widths": { "feeds": 240, "headlines": 340 }, "layout": "three" }`. `sound` is the «Sound» checkbox: off, and an automatic load plays no signal. `font_scales` is the font size of every reader column: a multiplier from the ladder `0.85 / 1 / 1.2 / 1.45` (`store.FONT_SCALES`), chosen by the switcher in the head of that column. `column_widths` is the width in pixels of every column the mouse can size — the feed column and the headline column — each clamped to 160..900 px (`store.MIN_PANEL_WIDTH`, `store.MAX_PANEL_WIDTH`); the article column takes the width the other two leave in the window. `layout` is the arrangement of the reader's panels: `three` (feeds, headlines, the open news — the default) or `list` (no feeds column: the headlines of every feed and the news open among them). `store.LAYOUT_PANELS` names the panels of every arrangement, and the reader marks the one it paints with `data-layout` on `.panels`. `first_feed_done` is the feed screen's mark that a feed has already been added and its headlines have come: it is absent before the first successful add, is set once and never taken back (not even after the feeds are deleted), so the confirmation of a first add does not repeat on every saved row. A first run is an empty feed table with no such mark (`store.getFirstFeedDone` / `store.setFirstFeedDone`).
 
 Other storage properties:
 
@@ -708,6 +729,9 @@ Other storage properties:
 - The widths of the reader columns are cached the same way (`rss-reader:column-widths`): on top of
   `settings.column_widths`, so `src/columns-boot.js` can open every column at its remembered width
   without waiting for the asynchronous read.
+- The arrangement of the panels is cached the same way (`rss-reader:layout`), a single word: on top of
+  `settings.layout`, so `src/layout-boot.js` can put the remembered `data-layout` on `.panels` before
+  the page module runs and the reader never draws three columns and then throws one away.
 - Deleting a feed also deletes its headlines (`store.deleteFeed`); they do not get into `read`:
   the feed was deleted wholesale, and on re-adding it the headlines are read anew.
 

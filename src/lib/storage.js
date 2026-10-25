@@ -53,6 +53,7 @@ export const SHOW_MESSAGE_KEY = 'show_message';
 export const LANGUAGE_KEY = 'language';
 export const FONT_SCALES_KEY = 'font_scales';
 export const COLUMN_WIDTHS_KEY = 'column_widths';
+export const LAYOUT_KEY = 'layout';
 
 /** Marker of the first feed added — see `getFirstFeedDone`. */
 export const FIRST_FEED_KEY = 'first_feed_done';
@@ -1095,6 +1096,48 @@ export async function setColumnWidth(panel, width) {
   widths[panel] = normalizeColumnWidths({ [panel]: width })[panel];
   await updateSettings({ [COLUMN_WIDTHS_KEY]: widths });
   return widths;
+}
+
+/* ------------------------------------------------- arrangement of the reader's panels */
+
+/**
+ * The arrangements the reader's panels can be put in:
+ * `three` - feeds, headlines, article: the arrangement the reader has always had;
+ * `list` - no feeds column: the headlines of every feed at once, and the open one beside them.
+ */
+export const LAYOUTS = ['three', 'list'];
+
+/** The arrangement a reader opens with: the one that shows every panel the reader has.
+ *  A name of an arrangement is also the value of `data-layout` on `.panels`. */
+export const DEFAULT_LAYOUT = 'three';
+
+/**
+ * Which panels an arrangement shows, left to right. This is the one place that knows it: the grid of
+ * `reader.css` lays these panels out, `lib/columns.js` derives from the order which border of them is
+ * draggable and where its handle sits, and `index.js` asks it whether the feeds column - and with it
+ * the choice of a single feed - exists at all.
+ */
+export const LAYOUT_PANELS = {
+  three: ['feeds', 'headlines', 'content'],
+  list: ['headlines', 'content'],
+};
+
+/** A stored arrangement is trusted only while it names one the reader really has. */
+export function normalizeLayout(value) {
+  return LAYOUTS.includes(value) ? value : DEFAULT_LAYOUT;
+}
+
+/** The arrangement of the panels - from `settings.layout`. */
+export async function getLayout() {
+  const settings = await getSettings();
+  return normalizeLayout(settings[LAYOUT_KEY]);
+}
+
+/** Remember the arrangement: every reader tab opens in the same shape next time. */
+export async function setLayout(layout) {
+  const next = normalizeLayout(layout);
+  await updateSettings({ [LAYOUT_KEY]: next });
+  return next;
 }
 
 /**

@@ -2970,6 +2970,126 @@ test('every reader border is a handle that can be grabbed, placed and clamped', 
 });
 
 /**
+ * The reader's panels can be arranged in more than one way, and an arrangement is a choice about the
+ * same panels, not a copy of the markup: the columns stay where they are, the grid of `reader.css`
+ * decides which of them an arrangement shows. A new arrangement only becomes real when all of its
+ * parts exist at once - the grid that places it, the glyph that offers it, the caption that names it in
+ * every language, the rule that takes the columns it hides out of the grid, and the choice remembered
+ * for the next opening - so they are kept in step here.
+ */
+test("every arrangement of the reader's panels is offered, placed, named and remembered", () => {
+  const html = fs.readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
+  const page = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+  const script = fs.readFileSync(new URL('../src/lib/layout.js', import.meta.url), 'utf8');
+  const boot = fs.readFileSync(new URL('../src/layout-boot.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../src/styles/reader.css', import.meta.url), 'utf8');
+
+  // The default arrangement is the one the reader had before arrangements existed: it shows every
+  // panel there is, and the markup opens with it, so a reader that never chose anything is complete.
+  assert.ok(store.LAYOUTS.includes(store.DEFAULT_LAYOUT), 'the arrangement a reader opens with is not one it has');
+  assert.deepEqual(
+    store.LAYOUT_PANELS[store.DEFAULT_LAYOUT],
+    store.FONT_PANELS,
+    'the default arrangement shows every column of the reader, in the order of the columns',
+  );
+  assert.ok(
+    html.includes(`class="panels" data-layout="${store.DEFAULT_LAYOUT}"`),
+    'the markup declares no arrangement, so a reader that never chose one has no shape at all',
+  );
+
+  for (const layout of store.LAYOUTS) {
+    /* The grid of the arrangement the markup opens with is the plain grid of `.panels`; every other
+     * arrangement adds a rule of its own, chosen by `data-layout`. */
+    const placed = layout === store.DEFAULT_LAYOUT
+      ? css.includes('.panels {')
+      : css.includes(`.panels[data-layout="${layout}"]`);
+    assert.ok(
+      placed,
+      `reader.css lays out no grid for the ${layout} arrangement, so its panels fall where another arrangement put them`,
+    );
+    assert.ok(
+      html.includes(`<symbol id="icon-layout-${layout}"`),
+      `the ${layout} arrangement is offered by a glyph that its own sprite does not draw`,
+    );
+
+    for (const panel of store.FONT_PANELS) {
+      if (store.LAYOUT_PANELS[layout].includes(panel)) continue;
+      /* The rule that takes a column out of the grid names both the arrangement and the column, and its
+       * body says `display: none`: a `hidden` attribute would not do, since `.panel` sets
+       * `display: flex` and that wins over the rule of the user agent stylesheet. */
+      const at = css.indexOf(`.panels[data-layout="${layout}"] #panel-${panel}`);
+      const body = at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+      assert.ok(
+        body.includes('display: none'),
+        `the ${layout} arrangement shows no ${panel} column, and no rule takes it out of the grid`,
+      );
+    }
+  }
+
+  /* A border that an arrangement hides is hidden by a rule naming that arrangement: only the
+   * arrangement that wraps into rows in a narrow window loses the border above its article, and a rule
+   * naming no arrangement would take the same border from the ones that do not wrap. */
+  for (const [, before, panel, body] of css.matchAll(/([^{}]*)\.col-resize\[data-column-resize="(\w+)"\][^{}]*\{([^}]*)\}/g)) {
+    if (!body.includes('display: none')) continue;
+    assert.ok(
+      before.includes('data-layout'),
+      `the handle of the ${panel} border is hidden by a rule that names no arrangement, so the arrangements that keep that border lose it too`,
+    );
+  }
+
+  // One caption per arrangement, plus the name of the switcher itself - in every language.
+  const captions = [...script.matchAll(/'(reader\.layout\.\w+)'/g)].map((match) => match[1]);
+  assert.equal(
+    new Set(captions).size,
+    store.LAYOUTS.length + 1,
+    'one caption per arrangement, plus the name of the switcher itself',
+  );
+  for (const lang of i18n.LANGUAGES) {
+    const keys = new Set(i18n.dictionaryKeys(lang));
+    for (const key of new Set(captions)) {
+      assert.ok(keys.has(key), `${lang} has no ${key}, which the arrangement switcher asks to show`);
+    }
+  }
+
+  /* The choice survives the closing of the reader: the page caches it, and the boot script reads that
+   * cache under the same key, refusing an arrangement the reader does not have. */
+  const cacheKeyOf = (source) => source.match(/CACHE_KEY = '([^']+)'/)?.[1];
+  assert.ok(cacheKeyOf(script), 'lib/layout.js caches the choice under no key of its own');
+  assert.equal(cacheKeyOf(boot), cacheKeyOf(script), 'layout-boot.js reads the choice under another key');
+  assert.ok(
+    boot.includes(`DEFAULT_LAYOUT = '${store.DEFAULT_LAYOUT}'`),
+    'layout-boot.js has no default arrangement to fall back on',
+  );
+  const known = boot.slice(boot.indexOf('LAYOUTS = ['), boot.indexOf(']', boot.indexOf('LAYOUTS = [')));
+  for (const layout of store.LAYOUTS) {
+    assert.ok(known.includes(`'${layout}'`), `layout-boot.js does not know the ${layout} arrangement, so it would refuse the choice the page just cached`);
+  }
+
+  // A reader whose arrangement hides the feeds column has nowhere to choose a single feed in.
+  assert.ok(
+    html.includes('data-layout-switch'),
+    'the reader declares no switcher of arrangements, so the arrangement cannot be changed',
+  );
+  // The switcher stands in the brand line, right after the name of the app: the actions row is shared
+  // with the other screens, the arrangement of the reader's columns belongs next to its own title.
+  const brand = html.indexOf('class="brand"');
+  const name = html.indexOf('data-i18n="app.name"', brand);
+  const switcher = html.indexOf('data-layout-switch');
+  const actions = html.indexOf('class="actions"');
+  assert.ok(
+    brand !== -1 && brand < name && name < switcher && (actions === -1 || switcher < actions),
+    'the switcher of arrangements is not in the brand line, after the name of the app',
+  );
+  assert.ok(page.includes('mountLayoutSwitcher()'), 'the page never builds the switcher the markup declares');
+  assert.ok(page.includes('await loadLayout()'), 'the page never loads the arrangement the reader was closed with');
+  assert.ok(
+    page.includes('document.addEventListener(LAYOUT_EVENT'),
+    'an arrangement chosen elsewhere is never answered by the open reader',
+  );
+  assert.ok(page.includes('showsFeedsPanel()'), 'the reader keeps a feed selection its columns cannot show');
+});
+
+/**
  * A page and the reader are edited apart as easily as a page and its sprite: a message a page sends
  * that no half of the reader answers hangs that page's `await` forever. A page cannot run in Node, so
  * the name it sends is still compared with what `lib/messages.js` exports — but whether the reader
@@ -3221,9 +3341,10 @@ test('the left column leads with all feeds, whose headlines are the whole stored
     'the all-selection is not the stored list of every feed',
   );
 
-  /* The reader opens on that row, not on whichever feed happens to be first. */
+  /* The reader opens on that row, not on whichever feed happens to be first: the two ways it opens and
+   * the arrangement that shows no feeds column at all. */
   const openings = [...fns].filter(([, body]) => body.includes(`${chooser}(${sentinelName}`));
-  assert.equal(openings.length, 2, 'the all-feeds row is chosen by only some of the ways the reader opens');
+  assert.equal(openings.length, 3, 'the all-feeds row is chosen by only some of the ways the reader opens');
   assert.ok(!page.includes(`${chooser}(state.feeds[0].id)`), 'the reader still opens on its first feed');
 
   assert.ok(css.includes('.list-all-feeds'), 'the row is drawn exactly like a feed row');

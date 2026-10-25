@@ -6,6 +6,7 @@ import { loadColumnWidths, mountColumnResizers, wireColumnWidthChanges } from '.
 import { loadFontScales, mountFontScales, wireFontScaleChanges } from './lib/fontsize.js';
 import { adoptLanguage, applyI18n, currentLanguage, t, unitLabels } from './lib/i18n.js';
 import { MSG_FEEDS_CHANGED, MSG_REFRESH_ALL_FEEDS, MSG_REFRESH_FEED } from './lib/messages.js';
+import { LAYOUT_EVENT, loadLayout, mountLayoutSwitcher, showsFeedsPanel, wireLayoutChanges } from './lib/layout.js';
 import { mountNav } from './lib/nav.js';
 import * as store from './lib/storage.js';
 import { SETTINGS_PAGE, pageUrl } from './lib/tabs.js';
@@ -1185,6 +1186,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // The same screen switcher every screen has: it fills the header `<nav>` and jumps within this tab,
 // so the reader icon on a settings screen brings the reader back to the same place.
 mountNav();
+// The arrangement of the panels: three columns, or two once the feeds column is dropped. Its switcher
+// is built before the first paint of the panels, so the button in use is marked from the start.
+mountLayoutSwitcher();
+wireLayoutChanges();
 // The per-column size switchers, one in the head of each panel; their labels follow the same
 // `data-i18n-*` rule as the switcher's, so a language change re-pastes them too.
 mountFontScales();
@@ -1193,6 +1198,15 @@ wireFontScaleChanges();
 // a drag leaves behind is remembered for the next time the reader opens.
 mountColumnResizers();
 wireColumnWidthChanges();
+/*
+ * A different arrangement adds or takes away the feeds column, and the selection follows what the
+ * columns can show: with no feeds column the list is the whole of the feeds (the reader has no place
+ * left to name one feed in), and coming back to three columns redraws the column that was hidden.
+ */
+document.addEventListener(LAYOUT_EVENT, () => {
+  if (showsFeedsPanel()) paintFeeds();
+  else if (!isAllFeeds()) chooseFeed(ALL_FEEDS_ID);
+});
 els.reload.addEventListener('click', () => void reloadSelection());
 els.clear.addEventListener('click', () => void clearSelectionHeadlines());
 els.contentDelete.addEventListener('click', () => void deleteItem());
@@ -1476,7 +1490,18 @@ async function init() {
   // The same for the widths: `columns-boot.js` has painted them, storage confirms them.
   await loadColumnWidths();
 
+  // The same for the arrangement of the panels: `layout-boot.js` has put its cached choice on
+  // `.panels`, storage confirms it.
+  await loadLayout();
+
   restoreSelection();
+  /*
+   * An arrangement with no feeds column has nowhere to choose a single feed in, so its list is always
+   * the headlines of every feed. The choice is forced after the tab's selection is restored and not
+   * through `chooseFeed()`: the headline the tab was left on keeps its place when it is still there.
+   */
+  if (!showsFeedsPanel()) state.feedId = ALL_FEEDS_ID;
+
   // Expired headlines should not linger in an open reader.
   await store.cleanup();
   // Ask the worker to re-sync the per-feed timers and the badge count after this read.

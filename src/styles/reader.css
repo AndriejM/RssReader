@@ -23,6 +23,35 @@
   gap: 10px;
 }
 
+/*
+  The switcher of the arrangements stands in the top-left corner, in the brand line right after the
+  name of the app: the outline of one arrangement per button, the one in use marked. The square is the
+  header's icon button, and the mark is the one the screen switcher gives the screen you stand on — one
+  look for "this is what the reader is doing now".
+*/
+.layout-switch {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.layout-step {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  width: 34px;
+}
+
+.layout-step[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 
 /* While a feed is being re-read the refresh glyph turns. The line the reader announces from lives in
    `theme.css`, where every screen's `.sr-only` line is described. */
@@ -85,6 +114,32 @@
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   position: relative;
+}
+
+/*
+  The arrangement without the feeds column: two panels where the reader had three. The headlines take
+  the width the mouse gives that border — `--col-headlines` is the width of the border between the
+  lists in either arrangement — and the article takes what the window leaves. The grid is written out
+  per arrangement instead of derived from the panels themselves: CSS has no way to count the children
+  of a grid.
+*/
+.panels[data-layout="list"] {
+  grid-template-columns:
+    minmax(var(--panel-min), var(--col-headlines))
+    var(--col-gap)
+    minmax(var(--panel-min), 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/*
+  A panel an arrangement does not show has to leave the grid, not merely look empty: `.panel` sets
+  `display: flex`, which wins over the `[hidden]` rule of the user agent stylesheet, so the rule that
+  takes a column away names `display` itself. The handle of its border goes with the column — a border
+  of a column that is not there has no width left to drag.
+*/
+.panels[data-layout="list"] #panel-feeds,
+.panels[data-layout="list"] .col-resize[data-column-resize="feeds"] {
+  display: none;
 }
 
 /*
@@ -862,6 +917,13 @@
     grid-row: 3 / 4;
   }
 
+  /* Two panels fit side by side even where three had to stack: there is no third column to move under
+     the lists, so the article keeps its cell in the only row the arrangement has. */
+  .panels[data-layout="list"] .panel-content {
+    grid-column: 3 / 4;
+    grid-row: 1 / 2;
+  }
+
   /* The article takes the whole third row, so the gap under the two lists is a row gap: its strip
      lies across that row, on the bottom border of the column above it. */
   .col-resize[data-column-resize="feeds"]::after {
@@ -873,8 +935,9 @@
   }
 
   /* Here the article takes the whole third row: the border between the lists and the article has no
-     column width left to drag, so only the border between the two lists stays a handle. */
-  .col-resize[data-column-resize="headlines"] {
+     column width left to drag, so only the border between the two lists stays a handle. Only the
+     arrangement of three columns wraps into rows — an arrangement of two keeps both its borders. */
+  .panels[data-layout="three"] .col-resize[data-column-resize="headlines"] {
     display: none;
   }
 
