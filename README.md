@@ -266,9 +266,9 @@ take the focus to a field that is not there. The right panel says the same about
 an article would stand: “select a headline” with no feeds would advise choosing something that does
 not exist. The card stands exactly where the future list begins and disappears once a feed is saved.
 
-At the top of the reader there is a counter: the total number of headlines of all feeds in
-storage; in the top-right corner sit the screen-switcher icons and the theme toggle (the reader
-icon is the highlighted one).
+In the top-left corner stands the reader's name; in the top-right corner sit the screen-switcher
+icons and the theme toggle (the reader icon is the highlighted one). There is no total counter in
+the header: the number of headlines already stands by the «Все ленты» row of the left column.
 
 The head of the middle column holds two icons to the right of the feed's name, and both follow
 whatever the left column has selected. An RSS-icon button loads headlines: with one feed selected

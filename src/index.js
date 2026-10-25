@@ -18,7 +18,6 @@ import { feedNextCheckAt, formatSince, formatUntil, humanDuration, itemTime } fr
 applyI18n();
 
 const els = {
-  totalCount: document.getElementById('total-count'),
   theme: document.getElementById('btn-theme'),
   reload: document.getElementById('btn-load'),
   clear: document.getElementById('btn-clear'),
@@ -209,9 +208,6 @@ function reportRefreshFailure(key, error) {
   else sayEmpty(refreshFailureText(state.refreshError), { alert: true });
 }
 
-function renderTotal() {
-  els.totalCount.textContent = String(state.items.length);
-}
 
 /**
  * Postpones a call of `fn` until the caller falls quiet for `wait` ms: fast events coming one after
@@ -1130,7 +1126,6 @@ async function renderAll() {
     message = t('reader.placeholder.expired');
   }
 
-  renderTotal();
   paintFeeds();
   paintHeadlines();
   /* The right panel speaks either of the open headline having gone, or of the first feed there is not yet:
@@ -1145,7 +1140,6 @@ async function renderAll() {
  * index.html, so the feed rows, the headline rows and the open article are rebuilt from `state`.
  */
 function redraw() {
-  renderTotal();
   paintFeeds();
   paintHeadlines();
 
@@ -1484,14 +1478,13 @@ async function init() {
 
   restoreSelection();
   // Expired headlines should not linger in an open reader.
-  const { removed } = await store.cleanup();
+  await store.cleanup();
   // Ask the worker to re-sync the per-feed timers and the badge count after this read.
   try {
     await chrome.runtime.sendMessage({ type: MSG_FEEDS_CHANGED });
   } catch {
     // The worker might be asleep; its own alarm sweep covers it.
   }
-  if (removed > 0) renderTotal();
   const lostHeadline = await renderAll();
 
   // renderAll() has already dropped a feed or a headline that no longer exists. With nothing
