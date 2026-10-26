@@ -3102,6 +3102,54 @@ test('every handle gives back the grid cell it wrote before any handle is placed
 });
 
 /**
+ * A handle an arrangement has no border for has to leave the grid before `lib/columns.js` places the
+ * handles, not merely stop being drawn. An auto-placed grid item still takes a cell: the handle of a
+ * border across a column takes the last cell of the first row in an arrangement that cuts no column, the
+ * window that follows it in the markup is placed after that row ends and adds a row of its own to the
+ * grid, and `stacked()` counts the rows of the grid, reads that row as a wrapped panel, hides the last
+ * border the arrangement really has, and drops the window that border ended into a gap track — a window
+ * as wide as the gap and a border no mouse can grab. A row of the grid has to be a row an arrangement
+ * asked for.
+ */
+test('a handle of a border an arrangement does not have is kept out of the grid', () => {
+  const css = fs.readFileSync(new URL('../src/styles/reader.css', import.meta.url), 'utf8');
+  const script = fs.readFileSync(new URL('../src/lib/columns.js', import.meta.url), 'utf8');
+
+  const cut = store.LAYOUTS.filter((layout) =>
+    store.LAYOUT_COLUMNS[layout].some((column) => column.length > 1),
+  );
+  assert.equal(cut.length, 1, 'this guard names the rule by the one arrangement that cuts a column in two');
+
+  const at = css.indexOf(`.panels:not([data-layout="${cut[0]}"]) .row-resize`);
+  const body = at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  assert.ok(
+    body.includes('display: none'),
+    'the arrangements that show no border across a column leave its handle in the grid, where it takes the cell of a window and adds a row to the grid',
+  );
+  assert.ok(
+    script.includes('handle.hidden = !area'),
+    'lib/columns.js leaves a handle the arrangement gives no cell for standing in the grid, where it takes a cell and adds a row',
+  );
+
+  /* The rows of the narrow form are named by the rule every arrangement shares, so an arrangement whose
+   * article keeps its cell in the first row has to take its single row back: the empty row under it is a
+   * row the grid counts as a wrapped panel, and half the height of the columns standing over it. */
+  const narrow = css.slice(css.indexOf('@media (max-width: 980px)'));
+  for (const layout of store.LAYOUTS) {
+    const placed = narrow.indexOf(`.panels[data-layout="${layout}"] .panel-content`);
+    if (placed < 0 || !narrow.slice(placed, narrow.indexOf('}', placed)).includes('grid-row: 1 / 2')) {
+      continue; // Its article really does take a row of its own here.
+    }
+    const sized = narrow.indexOf(`.panels[data-layout="${layout}"] {`);
+    const sizedBody = sized < 0 ? '' : narrow.slice(sized, narrow.indexOf('}', sized));
+    assert.ok(
+      sizedBody.includes('grid-template-rows: minmax(0, 1fr);'),
+      `the narrow form keeps the rows of the wrapped arrangements under the ${layout} arrangement, whose article never wraps`,
+    );
+  }
+});
+
+/**
  * The reader's panels can be arranged in more than one way, and an arrangement is a choice about the
  * same panels, not a copy of the markup: the columns stay where they are, the grid of `reader.css`
  * decides which of them an arrangement shows. A new arrangement only becomes real when all of its

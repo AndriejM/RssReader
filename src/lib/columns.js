@@ -109,6 +109,11 @@ function cssNumber(panels, property) {
  * `grid-template-rows` counts more than one track as soon as the panels are wrapped, and an arrangement
  * that cuts one of its columns in two is the exception — its second row belongs to the same column, not
  * to a wrapped panel. Asking the width directly would repeat a number the stylesheet owns.
+ *
+ * The answer is only as clean as the grid it comes from, so nothing here may add a track of its own: a
+ * handle of an arrangement that has no such border stands in the grid until `paintAreas()` hides it, the
+ * window that follows it in the markup is placed after the row ends, and the row that adds itself to the
+ * grid is read here as a wrapped panel.
  */
 function stacked(panels) {
   if (!panels) return false;
@@ -165,11 +170,10 @@ function areaFor(axis, panel, panels) {
  * Re-place every handle: the borders move when the reader changes its arrangement or its shape.
  *
  * The cells are given back in a pass of their own, before any handle is asked where it belongs. A cell the
- * script wrote into a handle's `style` stays there, and a handle that spans a row the new arrangement does
- * not have adds that row to the grid: `stacked()` counts the rows of the grid, answers that the columns are
- * wrapped when they are not, and the arrangement loses the handle of its last border — the window that
- * border used to end is then auto-placed into the gap track beside it. Hiding the handle gives the cell
- * back no better: `display: none` takes it out of the grid, which leaves the cell free again.
+ * script wrote into a handle's `style` stays there: a handle of the previous arrangement keeps a track of
+ * the grid for itself, stands where the new arrangement has no border, and takes the cell the next window
+ * of the markup would have auto-placed into. Hiding the handle gives the cell back no better: `display:
+ * none` takes it out of the grid, which leaves the cell free again.
  */
 function paintAreas() {
   const panels = panelsSurface();

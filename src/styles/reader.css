@@ -201,6 +201,20 @@
 }
 
 /*
+  A handle of a border an arrangement does not have has to leave the grid before `lib/columns.js` runs,
+  not merely stop being drawn: an auto-placed grid item still takes a cell. The border across a column
+  exists only in an arrangement that cuts one in two, so in the two that do not, its handle would take
+  the last track of the first row — and the article that follows it in the markup would be placed after
+  the row ends, adding a row of its own to the grid. `lib/columns.js` asks that grid how tall it is
+  before it places the handles, reads the row the handle itself caused as a wrapped panel, and hides the
+  border of the article column, which that arrangement really does have: the article falls into a gap
+  track and the border stops being a handle.
+*/
+.panels:not([data-layout="split"]) .row-resize {
+  display: none;
+}
+
+/*
   The handle of a border: a grid item of the gap column, so it fills the gap cell — the full height
   of the row and the whole width of the gap — and is never laid over a column. It must stay a static
   grid item: positioning it absolutely would drop it out of the grid's stretching, and an empty div
@@ -1018,7 +1032,13 @@
   }
 
   /* Two panels fit side by side even where three had to stack: there is no third column to move under
-     the lists, so the article keeps its cell in the only row the arrangement has. */
+     the lists, so the article keeps its cell in the only row the arrangement has — and the rows the rule
+     above names for the panels that wrap are taken back, because the second of them would stand under
+     both columns empty and cut their height in two. */
+  .panels[data-layout="list"] {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
   .panels[data-layout="list"] .panel-content {
     grid-column: 3 / 4;
     grid-row: 1 / 2;
