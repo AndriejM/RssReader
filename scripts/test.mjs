@@ -1855,6 +1855,137 @@ test('the XML declaration states the encoding the text really arrived in', () =>
   );
 });
 
+/**
+ * The page of a headline is decoded by `lib/encoding.js` before `extract.fetchArticle` hands its text
+ * to `DOMParser` (see the test further below that reads a Windows-1251 page through it). What this
+ * test holds is the second half of that trip: the `charset` the page declares for itself has to name
+ * the encoding its text really arrived in, or the HTML processor would decode a string that is no
+ * longer bytes a second time, in an encoding it is not in.
+ */
+test('the charset a page declares follows the encoding its bytes were read in', () => {
+  assert.equal(
+    encoding.retargetMetaCharset('<html><head><meta charset="windows-1251"></head><body></body></html>', 'utf-8'),
+    '<html><head><meta charset="utf-8"></head><body></body></html>',
+    'the declaration follows the decode',
+  );
+  assert.equal(
+    encoding.retargetMetaCharset(
+      '<meta http-equiv="Content-Type" content="text/html; charset=cp1251">',
+      'utf-8',
+    ),
+    '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">',
+    'the spelling an older page writes',
+  );
+  assert.equal(
+    encoding.retargetMetaCharset('<meta charset=windows-1251>', 'utf-8'),
+    '<meta charset=utf-8>',
+    'a value written without quotes is rewritten too',
+  );
+  assert.equal(
+    encoding.retargetMetaCharset('<meta charset="UTF-8"><meta charset="windows-1251">', 'utf-8'),
+    '<meta charset="utf-8"><meta charset="utf-8">',
+    'every declaration at the head of the page names the same encoding'
+  );
+  assert.equal(
+    encoding.retargetMetaCharset('<html><head><title>Новости</title></head></html>', 'utf-8'),
+    '<html><head><title>Новости</title></head></html>',
+    'a page that declares nothing is returned as it is',
+  );
+  assert.equal(
+    encoding.retargetMetaCharset('<p data-charset="windows-1251">text</p>', 'utf-8'),
+    '<p data-charset="windows-1251">text</p>',
+    'only a `<meta>` tag states the encoding of a document'
+  );
+
+  // A charset written past the head of the document describes an embedded fragment, not the bytes the
+  // response arrived in; the text behind the head is left exactly as the page wrote it.
+  const deep = `<head>${'<i> </i>'.repeat(2000)}<meta charset="windows-1251"></head>`;
+  assert.equal(
+    encoding.retargetMetaCharset(deep, 'utf-8'),
+    deep,
+    'a declaration deeper inside the page is not the page\'s own',
+  );
+});
+
+/**
+ * The bytes a Windows-1251 server really sends for a text. Node's `Buffer` knows no Windows-1251, so
+ * the byte of every character above ASCII is found by asking the decoder which byte spells it — the
+ * same table the decoder reads, walked the other way.
+ */
+function toWindows1251(text) {
+  const decoder = new TextDecoder('windows-1251', { fatal: true, ignoreBOM: true });
+  const bytes = [];
+  for (const character of text) {
+    const code = character.codePointAt(0);
+    if (code < 0x80) {
+      bytes.push(code);
+      continue;
+    }
+    let found = -1;
+    for (let byte = 0x80; byte <= 0xff; byte += 1) {
+      try {
+        if (decoder.decode(new Uint8Array([byte])) === character) {
+          found = byte;
+          break;
+        }
+      } catch {
+        // A byte this decoder refuses spells no character.
+      }
+    }
+    if (found < 0) throw new Error(`no byte of Windows-1251 spells ${character}`);
+    bytes.push(found);
+  }
+  return new Uint8Array(bytes);
+}
+
+/**
+ * The full-text button of the reader reaches the page of a headline through `extract.fetchArticle`.
+ * A site written in Windows-1251 — the encoding the sample feed of `examples/` is served in — used to
+ * arrive through `response.text()`, which reads UTF-8, and the article panel showed the noise UTF-8
+ * makes of those bytes. What is held here is the decoding that read now does: the bytes of a page as
+ * a Windows-1251 site really sends them, and the text the reader has to extract out of them.
+ */
+test('the full text of a headline is read in the encoding its page arrived in', () => {
+  // A page as a Russian site writes it, then as the bytes a Windows-1251 server sends for it.
+  const pageText =
+    '<html><head><meta charset="windows-1251"><title>Новости сайта</title></head><body><article>' +
+    `<p>${'Привет. '.repeat(20)}</p><p>${'Это новость сайта. '.repeat(20)}</p>` +
+    '</article></body></html>';
+  const bytes = toWindows1251(pageText);
+
+  const read = encoding.decodeResponseBytes(bytes, 'text/html; charset=windows-1251');
+
+  assert.equal(read.encoding, 'windows-1251');
+  assert.ok(!read.text.includes('\ufffd'), 'no byte was lost to a replacement character');
+  assert.ok(read.text.includes('Привет'), 'the text of the page reads in Cyrillic');
+  assert.ok(
+    encoding.retargetMetaCharset(read.text, read.encoding).includes('<meta charset="windows-1251">'),
+    'a page read in the encoding it declared keeps its declaration',
+  );
+
+  // The failure this fix is about: the same bytes taken for UTF-8, which is what `response.text()` did.
+  const asUtf8 = new TextDecoder('utf-8').decode(bytes);
+  assert.ok(asUtf8.includes('\ufffd'), 'read as UTF-8 the page does bring the noise the reader showed');
+  assert.ok(!asUtf8.includes('Привет'), 'and its text is no longer there to extract');
+
+  /* The read itself: `fetchArticle` must ask for the bytes of its answer and decode them, not take
+   * the UTF-8 `response.text()` hands out. */
+  const source = fs.readFileSync(new URL('../src/lib/extract.js', import.meta.url), 'utf8');
+  assert.ok(
+    /import \{[^}]*\bdecodeResponseBytes\b[^}]*\} from '\.\/encoding\.js'/.test(source),
+    'the article read decodes its answer by no rule of the feed reader',
+  );
+  assert.ok(source.includes('await response.arrayBuffer()'), 'the article read takes no bytes from its answer');
+  assert.ok(
+    !/await response\.text\(\)/.test(source),
+    'the article read takes the UTF-8 `response.text()` hands out instead of the bytes',
+  );
+  assert.ok(
+    source.includes('retargetMetaCharset('),
+    'the page is handed to the HTML processor still declaring the encoding its bytes are no longer in',
+  );
+});
+
 test('a JSON body is not read as a page that declares a charset inside it', () => {
   // Cyrillic spelled the way UTF-8 spells it, inside a JSON string that talks about a Windows-1251 page.
   const json = `{"title":"${CYRILLIC_HEADLINE}","content_html":"<meta charset=\"windows-1251\">"}`;

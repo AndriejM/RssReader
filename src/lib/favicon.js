@@ -11,6 +11,7 @@
 // site readable — and a failure there is not worth a translated message: the feed simply gets no icon.
 
 import { ARTICLE_FETCH_TIMEOUT_MS, absoluteUrl, isValidHttpUrl } from './util.js';
+import { decodeResponseBytes } from './encoding.js';
 
 /**
  * A `<link>` names the site icon through its `rel`. `icon` and `shortcut icon` are the favicon
@@ -142,7 +143,13 @@ async function readPage(url) {
     const type = response.headers.get('content-type') ?? '';
     // Only read a page that could carry an icon reference; an image or a binary is not one.
     if (type && !/html|xml|text/i.test(type)) return null;
-    return { text: await response.text(), url: response.url || url };
+    /* The bytes are read the way a feed is (see `lib/encoding.js`): a page served in Windows-1251
+     * would otherwise reach the icon regexes as noise, and an `href` spelled in its own alphabet
+     * would be read as no address at all. */
+    return {
+      text: decodeResponseBytes(new Uint8Array(await response.arrayBuffer()), type).text,
+      url: response.url || url,
+    };
   } catch {
     return null;
   } finally {

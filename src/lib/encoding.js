@@ -280,3 +280,29 @@ export function retargetXmlDeclaration(xml, encoding) {
     (_match, head, quote) => `${head}${quote}${encoding}${quote}`,
   );
 }
+
+/**
+ * The same rule for an HTML page: a `<meta charset>` in a string that is already text would invite
+ * the HTML processor to decode it again, in an encoding its bytes are no longer in. Only the tags at
+ * the beginning of the document are rewritten — a `charset` deeper inside describes some embedded
+ * fragment, not the page, and an HTML processor only honours a declaration that early anyway — and
+ * only inside a `<meta>` tag, so no other attribute that happens to name a charset is touched. The
+ * region read is the one `headAsLatin1` looked at for the declaration, so nothing is rewritten that
+ * was not the evidence the decode was made from.
+ */
+export function retargetMetaCharset(html, encoding, limit = 8192) {
+  const text = String(html ?? '');
+  const head = text.slice(0, Math.min(text.length, limit));
+  const rewritten = head.replace(
+    /<meta\b[^>]*>/gi,
+    (tag) =>
+      tag.replace(
+        /(\bcharset\s*=\s*)(["'])[^"']*\2|(\bcharset\s*=\s*)([\w][\w.+-]*)/gi,
+        (_match, quotedOpen, quotedClose, bareOpen, bareValue) =>
+          quotedOpen
+            ? `${quotedOpen}${quotedClose}${encoding}${quotedClose}`
+            : `${bareOpen}${encoding}`,
+      ),
+  );
+  return rewritten + text.slice(head.length);
+}

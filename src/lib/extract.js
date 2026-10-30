@@ -3,6 +3,7 @@
 // third-party markup, script or style ever reaches the extension's DOM.
 
 import { ARTICLE_FETCH_TIMEOUT_MS, PREVIEW_IMAGE_HEIGHT, PREVIEW_IMAGE_WIDTH, cleanTitle } from './util.js';
+import { decodeResponseBytes, retargetMetaCharset } from './encoding.js';
 
 const MAX_PARAGRAPHS = 60;
 const MAX_CHARACTERS = 16000;
@@ -98,7 +99,20 @@ export async function fetchArticle(url, { timeoutMs = ARTICLE_FETCH_TIMEOUT_MS }
       });
     }
 
-    html = await response.text();
+    /* The page of a headline is read the way a feed is (see `lib/encoding.js`): `response.text()`
+     * reads UTF-8, and a site written in Windows-1251 — still common for Russian sites — would
+     * arrive as unreadable noise no extraction could read back into sense. The bytes are decoded by
+     * the encoding they actually are in, and the `charset` the document declares is rewritten to
+     * name that encoding, so the HTML processor parsing the string does not decode it a second time
+     * in an encoding its bytes are no longer in. */
+    const decoded = decodeResponseBytes(
+      new Uint8Array(await response.arrayBuffer()),
+      type,
+    );
+    if (decoded.declared && decoded.declared !== decoded.encoding) {
+      console.warn(`page declared ${decoded.declared}, its bytes read as ${decoded.encoding}: ${response.url || url}`);
+    }
+    html = retargetMetaCharset(decoded.text, decoded.encoding);
   } catch (error) {
     if (error instanceof ArticleError) throw error;
 
